@@ -1,4 +1,4 @@
-# Bellepper-gadgets
+# Bellpepper Gadgets
 
 This is intended to be a gadget library for
 [bellpepper](https://github.com/lurk-lab/bellpepper).
