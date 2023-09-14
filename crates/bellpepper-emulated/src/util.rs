@@ -64,7 +64,7 @@ where
 
     // Last bit
     cs.enforce(
-        || format!("last bit of variable is a bit"),
+        || "last bit of variable is a bit".to_string(),
         |mut lc| {
             let mut f = F::ONE;
             lc = lc + lc_input;
@@ -159,7 +159,7 @@ where
     assert!(!value.is_negative());
 
     let mut base = F::from(u64::MAX);
-    base = base + F::ONE; // 2^64 in the field
+    base += F::ONE; // 2^64 in the field
     let mut coeff = F::ONE;
     let mut res = F::ZERO;
 
@@ -167,14 +167,14 @@ where
     for d in digits.into_iter() {
         let d_f = F::from(d);
         res += d_f * coeff;
-        coeff = coeff * base;
+        coeff *= base;
     }
     res
 }
 
 /// Construct a [BigInt] from a vector of [BigInt] limbs with base equal to 2^num_bits_per_limb
 pub fn recompose(limbs: &Vec<BigInt>, num_bits_per_limb: usize) -> Result<BigInt, SynthesisError> {
-    if limbs.len() == 0 {
+    if limbs.is_empty() {
         eprintln!("Empty input");
         return Err(SynthesisError::Unsatisfiable);
     }
@@ -201,8 +201,8 @@ pub fn decompose(
     let mut res = vec![BigInt::zero(); num_limbs];
     let base = BigInt::one() << num_bits_per_limb;
     let mut tmp = input.clone();
-    for i in 0..num_limbs {
-        res[i] = tmp.clone().rem(&base);
+    for r in res.iter_mut() {
+        *r = tmp.clone().rem(&base);
         tmp >>= num_bits_per_limb;
     }
     Ok(res)

@@ -1,6 +1,5 @@
 [workspace]
 resolver = "2"
-name = "bellpepper-gadgets"
 members = [
     "crates/bellpepper-emulated",
     "crates/bellpepper-ed25519",

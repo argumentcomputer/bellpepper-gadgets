@@ -23,7 +23,7 @@ impl Add<&AffinePoint> for AffinePoint {
     type Output = AffinePoint;
 
     fn add(self, rhs: &AffinePoint) -> Self::Output {
-        Ed25519Curve::add_points(&self, &rhs)
+        Ed25519Curve::add_points(&self, rhs)
     }
 }
 
@@ -31,7 +31,7 @@ impl Add<&AffinePoint> for &AffinePoint {
     type Output = AffinePoint;
 
     fn add(self, rhs: &AffinePoint) -> Self::Output {
-        Ed25519Curve::add_points(self, &rhs)
+        Ed25519Curve::add_points(self, rhs)
     }
 }
 
@@ -94,7 +94,7 @@ impl AffinePoint {
     }
 
     pub fn double(&self) -> Self {
-        Ed25519Curve::add_points(&self, &self)
+        Ed25519Curve::add_points(self, self)
     }
 }
 
@@ -135,7 +135,7 @@ impl Ed25519Curve {
         let x = x_sq.sqrt();
         assert!(x.is_some()); // y must correspond to a curve point
         let x = x.unwrap();
-        if x.is_even().into() {
+        if x.is_even() {
             x
         } else {
             -x
@@ -181,7 +181,7 @@ impl Ed25519Curve {
                 output = output + &step_point;
             }
             step_point = step_point.double();
-            scaled_scalar = scaled_scalar >> 1;
+            scaled_scalar >>= 1;
         }
         output
     }

@@ -229,7 +229,7 @@ impl Fe25519 {
         let is_sq_root = (&beta_sq - self).is_zero() | (&beta_sq + self).is_zero();
 
         let neg_not_required = (&beta_sq - self).is_zero();
-        let sq_root = if bool::from(neg_not_required) {
+        let sq_root = if neg_not_required {
             beta
         } else {
             beta * Self::sqrt_minus_one()

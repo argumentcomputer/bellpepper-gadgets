@@ -287,12 +287,12 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedAffinePoint<F> {
 
         let x = EmulatedFieldElement::mux_tree(
             &mut cs.namespace(|| "allocate value of output x coordinate"),
-            selector_bits.into_iter().rev(), // mux_tree requires MSB first
+            selector_bits.iter().rev(), // mux_tree requires MSB first
             &inputs_x,
         )?;
         let y = EmulatedFieldElement::mux_tree(
             &mut cs.namespace(|| "allocate value of output y coordinate"),
-            selector_bits.into_iter().rev(), // mux_tree requires MSB first
+            selector_bits.iter().rev(), // mux_tree requires MSB first
             &inputs_y,
         )?;
 
@@ -316,7 +316,7 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedAffinePoint<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        if !(window_size > 0) {
+        if window_size <= 0 {
             eprintln!("Window size must be positive");
             return Err(SynthesisError::Unsatisfiable);
         };
@@ -400,7 +400,7 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedAffinePoint<F> {
                 &tmp,
             )?;
 
-            i = i - window_size;
+            i -= window_size;
         }
 
         let num_remaining_bits = scalar.len() % (window_size as usize);
@@ -415,13 +415,14 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedAffinePoint<F> {
             let tmp = Self::ed25519_point_addition(
                 &mut cs.namespace(|| format!("sum of {}*output and base", 1 << num_remaining_bits)),
                 &output,
-                &self,
+                self,
             )?;
 
             let mut final_lookup_table = vec![];
             final_lookup_table.push(output.clone());
             final_lookup_table.push(tmp);
 
+            #[allow(clippy::needless_range_loop)]
             for j in 2..(1usize << num_remaining_bits) {
                 let tmp = Self::ed25519_point_addition(
                     &mut cs.namespace(|| {
@@ -434,9 +435,7 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedAffinePoint<F> {
             }
 
             window_bits.clear();
-            for j in 0..num_remaining_bits {
-                window_bits.push(scalar[j].clone())
-            }
+            window_bits = scalar[..num_remaining_bits].to_vec();
 
             output = Self::conditionally_select(
                 &mut cs.namespace(|| "final doubling of output"),
@@ -457,7 +456,7 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedAffinePoint<F> {
         CS: ConstraintSystem<F>,
     {
         Self::ed25519_scalar_multiplication_windowed(
-            &self,
+            self,
             &mut cs.namespace(|| {
                 format!("scalar multiplication with window {DEFAULT_SCALAR_MULT_WINDOW_SIZE}")
             }),

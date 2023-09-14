@@ -49,16 +49,13 @@ impl<F> EmulatedLimbs<F>
 where
     F: PrimeField + PrimeFieldBits,
 {
-    pub(crate) fn allocate_limbs<CS>(
-        cs: &mut CS,
-        limb_values: &Vec<F>,
-    ) -> Result<Self, SynthesisError>
+    pub(crate) fn allocate_limbs<CS>(cs: &mut CS, limb_values: &[F]) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
         let mut num_vec: Vec<Num<F>> = vec![];
 
-        for (i, v) in limb_values.into_iter().enumerate() {
+        for (i, v) in limb_values.iter().enumerate() {
             let allocated_limb =
                 AllocatedNum::alloc(cs.namespace(|| format!("allocating limb {i}")), || Ok(*v))?;
             num_vec.push(Num::<F>::from(allocated_limb));
@@ -90,6 +87,7 @@ pub trait EmulatedFieldParams {
     }
 }
 
+#[allow(clippy::len_without_is_empty)]
 pub struct EmulatedFieldElement<F: PrimeField + PrimeFieldBits, P: EmulatedFieldParams> {
     pub(crate) limbs: EmulatedLimbs<F>,
     pub(crate) overflow: usize,
@@ -105,9 +103,9 @@ where
     fn clone(&self) -> Self {
         Self {
             limbs: self.limbs.clone(),
-            overflow: self.overflow.clone(),
-            internal: self.internal.clone(),
-            marker: self.marker.clone(),
+            overflow: self.overflow,
+            internal: self.internal,
+            marker: self.marker,
         }
     }
 }
@@ -133,7 +131,7 @@ where
         assert!(v.bits() <= (P::num_limbs() * P::bits_per_limb()) as u64);
         let mut v_bits: Vec<bool> = vec![false; P::num_limbs() * P::bits_per_limb()];
 
-        let v_bytes = v.to_biguint().and_then(|w| Some(w.to_bytes_le())).unwrap();
+        let v_bytes = v.to_biguint().map(|w| w.to_bytes_le()).unwrap();
         for (i, b) in v_bytes.into_iter().enumerate() {
             for j in 0..8usize {
                 if b & (1u8 << j) != 0 {
@@ -178,9 +176,9 @@ where
                 .collect(),
             EmulatedLimbs::Constant(x) => x,
         };
-        for i in 0..limbs.len() {
-            res += base.clone() * BigUint::from_bytes_le(limbs[i].to_repr().as_ref());
-            base = base * (one << P::bits_per_limb())
+        for limb in limbs {
+            res += base.clone() * BigUint::from_bytes_le(limb.to_repr().as_ref());
+            base *= one << P::bits_per_limb();
         }
         BigInt::from(res)
     }
@@ -224,11 +222,7 @@ where
     }
 
     pub fn is_constant(&self) -> bool {
-        if let EmulatedLimbs::Constant(_) = self.limbs {
-            true
-        } else {
-            false
-        }
+        matches!(self.limbs, EmulatedLimbs::Constant(_))
     }
 
     pub fn allocate_limbs<CS>(&self, cs: &mut CS) -> Result<EmulatedLimbs<F>, SynthesisError>
@@ -294,13 +288,13 @@ where
                 return Err(SynthesisError::Unsatisfiable);
             }
 
-            for i in 0..P::num_limbs() {
+            for (i, limb) in limb_values.iter().enumerate() {
                 let mut required_bit_width = P::bits_per_limb();
                 if modulus_width && i == P::num_limbs() - 1 {
                     required_bit_width =
                         (P::modulus().bits() as usize - 1) % P::bits_per_limb() + 1;
                 }
-                range_check_constant(limb_values[i], required_bit_width)?;
+                range_check_constant(*limb, required_bit_width)?;
             }
         }
         if let EmulatedLimbs::Allocated(allocated_limbs) = &self.limbs {
@@ -309,7 +303,7 @@ where
                 return Err(SynthesisError::Unsatisfiable);
             }
 
-            for i in 0..allocated_limbs.len() {
+            for (i, limb) in allocated_limbs.iter().enumerate() {
                 let mut required_bit_width = P::bits_per_limb();
                 if modulus_width && i == P::num_limbs() - 1 {
                     required_bit_width =
@@ -318,7 +312,7 @@ where
 
                 range_check_num(
                     &mut cs.namespace(|| format!("range check limb {i}")),
-                    &allocated_limbs[i],
+                    limb,
                     required_bit_width,
                 )?;
             }
@@ -380,9 +374,11 @@ where
         }
 
         if let EmulatedLimbs::<F>::Allocated(allocated_limbs) = &self.limbs {
-            let mut coeffs = vec![F::ZERO; group_size];
+            let mut coeffs = vec![];
             for i in 0..group_size {
-                coeffs[i] = bigint_to_scalar(&(BigInt::one() << P::bits_per_limb() * i));
+                coeffs.push(bigint_to_scalar(
+                    &(BigInt::one() << (P::bits_per_limb() * i)),
+                ));
             }
 
             let new_num_limbs = (P::num_limbs() + group_size - 1) / group_size;
@@ -401,7 +397,7 @@ where
             return Ok(EmulatedLimbs::Allocated(res));
         }
         // Should not reach this line
-        return Err(SynthesisError::Unsatisfiable);
+        Err(SynthesisError::Unsatisfiable)
     }
 
     pub fn check_field_membership<CS>(&self, cs: &mut CS) -> Result<(), SynthesisError>
@@ -427,7 +423,7 @@ where
                 let num_mod_bits_in_msl =
                     (P::modulus().bits() as usize - 1) % P::bits_per_limb() + 1;
 
-                for i in 0..P::num_limbs() {
+                for (i, limb) in allocated_limbs.iter().enumerate() {
                     let num_bits = if i == P::num_limbs() - 1 {
                         num_mod_bits_in_msl
                     } else {
@@ -436,7 +432,7 @@ where
 
                     range_check_num(
                         &mut cs.namespace(|| format!("range check limb {i}")),
-                        &allocated_limbs[i],
+                        limb,
                         num_bits,
                     )?;
                 }
@@ -466,6 +462,7 @@ where
                         .collect();
 
                     let mut kary_and = equality_bits[0].clone();
+                    #[allow(clippy::needless_range_loop)]
                     for i in 1..P::num_limbs() - 1 {
                         kary_and = AllocatedBit::and(
                             cs.namespace(|| format!("and of bits {} and {}", i - 1, i)),
@@ -487,7 +484,7 @@ where
                     );
                     range_check_num(
                         &mut cs.namespace(|| {
-                            format!("range check limb least significant limb + possibly c")
+                            "range check limb least significant limb + possibly c".to_string()
                         }),
                         &lsl_num,
                         P::bits_per_limb(),
@@ -536,7 +533,7 @@ where
         } else {
             match &a0.limbs {
                 EmulatedLimbs::Allocated(a0_var) => a0_var
-                    .into_iter()
+                    .iter()
                     .map(|x| x.get_value().unwrap_or_default())
                     .collect::<Vec<_>>(),
                 EmulatedLimbs::Constant(a0_const) => a0_const.clone(),

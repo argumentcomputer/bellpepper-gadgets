@@ -61,7 +61,7 @@ where
         let a_compact = a.compact_limbs(group_size, new_bits_per_limb)?;
         let b_compact = b.compact_limbs(group_size, new_bits_per_limb)?;
 
-        return Ok((a_compact, b_compact, new_bits_per_limb));
+        Ok((a_compact, b_compact, new_bits_per_limb))
     }
 
     /// Asserts that two allocated limbs vectors represent the same integer value.
@@ -412,7 +412,7 @@ where
     /// If d is a multiple of P::modulus() that is greater than b, then
     /// (a[0]+d[0]-b[0], a[1]+d[1]-b[1],...) will not underflow
     fn sub_padding(overflow: usize, limb_count: usize) -> Result<Vec<F>, SynthesisError> {
-        let tmp = BigInt::one() << overflow + P::bits_per_limb();
+        let tmp = BigInt::one() << (overflow + P::bits_per_limb());
         let upper_bound_limbs = vec![tmp; limb_count];
 
         let p = P::modulus();
@@ -445,11 +445,11 @@ where
         let num_res_limbs = a.len().max(b.len());
         let mut res: Vec<Num<F>> = vec![];
         let pad_limbs = Self::sub_padding(b.overflow, num_res_limbs)?;
-        for i in 0..num_res_limbs {
+        for limb in pad_limbs.into_iter() {
             res.push(Num::<F>::zero().add_bool_with_coeff(
                 CS::one(),
                 &Boolean::Constant(true),
-                pad_limbs[i],
+                limb,
             ));
         }
 
@@ -604,10 +604,7 @@ where
                     })
                     .collect::<Result<Vec<_>, _>>()?;
 
-                prod = prod_allocated_nums
-                    .into_iter()
-                    .map(|a| Num::from(a))
-                    .collect();
+                prod = prod_allocated_nums.into_iter().map(Num::from).collect();
 
                 let mut c = F::ZERO;
                 for _ in 0..num_prod_limbs {
@@ -690,7 +687,7 @@ where
         let elem = if next_overflow > Self::max_overflow() {
             next_overflow = constant.bits() as usize;
             self.reduce(
-                &mut cs.namespace(|| format!("reduce element to accommodate mul with const")),
+                &mut cs.namespace(|| "reduce element to accommodate mul with const".to_string()),
             )?
         } else {
             self.clone()
@@ -701,8 +698,8 @@ where
 
         match elem.limbs {
             EmulatedLimbs::Allocated(allocated_limbs) => {
-                for i in 0..allocated_limbs.len() {
-                    prod.push(allocated_limbs[i].clone().scale(constant_scalar));
+                for limb in &allocated_limbs {
+                    prod.push(limb.clone().scale(constant_scalar));
                 }
             }
             EmulatedLimbs::Constant(_) => {
@@ -738,7 +735,7 @@ where
         let ratio = self.compute_ratio(&mut cs.namespace(|| "ratio"), denom)?;
         let prod = ratio.mul(
             &mut cs.namespace(|| "product of ratio and denominator"),
-            &denom,
+            denom,
         )?;
         Self::assert_is_equal(
             &mut cs.namespace(|| "product equals numerator"),
@@ -802,13 +799,13 @@ where
 
         let mut acc = chunks[0].clone();
 
-        for i in 1..num_chunks {
+        for (i, chunk) in chunks.iter().enumerate().skip(1) {
             let bitwidth = (i * P::num_limbs() * P::bits_per_limb()) as u32;
             let q = bitwidth / pseudo_mersenne_params.e;
             let r = bitwidth % pseudo_mersenne_params.e;
             let mut scale = pseudo_mersenne_params.c.pow(q);
-            scale = scale * (BigInt::one() << r);
-            let scaled_chunk = chunks[i].mul_const(
+            scale *= BigInt::one() << r;
+            let scaled_chunk = chunk.mul_const(
                 &mut cs.namespace(|| format!("multiplying chunk {i} with {scale}")),
                 &scale,
             )?;
@@ -846,8 +843,7 @@ where
         let mut loop_iteration = 0u32; // Used to prevent namespace collisions in below loop
         let next_overflow: usize = loop {
             let res = precondition(&a_r, &b_r);
-            if res.is_ok() {
-                let res_next_overflow = res.unwrap();
+            if let Ok(res_next_overflow) = res {
                 break res_next_overflow;
             } else {
                 let err = res.err().unwrap();
