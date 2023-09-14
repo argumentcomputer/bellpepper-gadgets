@@ -1,8 +1,16 @@
-[package]
+[workspace]
+resolver = "2"
 name = "bellpepper-gadgets"
-version = "0.1.0"
-edition = "2021"
+members = [
+    "crates/bellpepper-emulated",
+    "crates/bellpepper-ed25519",
+]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[workspace.package]
+homepage = "https://github.com/lurk-lab/bellpepper-gadgets"
+repository = "https://github.com/lurk-lab/bellpepper-gadgets"
 
-[dependencies]
+[workspace.dependencies]
+bellpepper-core = { version="0.2.0", default-features = false }
+bellpepper = { version="0.2.0", default-features = false }
+ff = "0.13.0"

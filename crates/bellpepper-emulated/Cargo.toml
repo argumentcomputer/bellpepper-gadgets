@@ -1,0 +1,21 @@
+[package]
+name = "bellpepper-emulated"
+version = "0.2.0"
+edition = "2021"
+authors = ["Saravanan Vijayakumaran <sarva@ee.iitb.ac.in>"]
+license = "MIT OR Apache-2.0"
+description = "Nonnative arithmetic library using bellpepper inspired by the emulated package in Gnark"
+documentation = "https://docs.rs/bellpepper-emulated"
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+bellpepper-core = { workspace = true }
+bellpepper = { workspace = true }
+ff = { workspace = true }
+num-bigint = { version = "0.4.3", features = ["rand"] }
+num-traits = "0.2.15"
+
+[dev-dependencies]
+pasta_curves = "0.5.1"
+rand = "0.8.5"
