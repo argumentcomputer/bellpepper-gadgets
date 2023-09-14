@@ -309,7 +309,7 @@ mod tests {
         let y_ref = &y;
         assert_eq!(&x + &y, &x + y_ref);
         x += y_ref;
-        assert_eq!(&x - &y, &x - &y_ref);
+        assert_eq!(&x - &y, &x - y_ref);
         x -= y_ref;
         assert_eq!(&x + &y, &x + y_ref);
     }

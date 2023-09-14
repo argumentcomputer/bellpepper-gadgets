@@ -424,7 +424,7 @@ where
 
         let padding_limbs = upper_bound_limbs
             .into_iter()
-            .zip(padding_delta.into_iter())
+            .zip(padding_delta)
             .map(|(a, b)| bigint_to_scalar(&(a + b)))
             .collect::<Vec<F>>();
 

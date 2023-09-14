@@ -851,7 +851,7 @@ mod tests {
         let p = Ed25519Fp::modulus();
         let p_minus_2 = &p - BigInt::from(2);
         // b^(p-1) = 1 mod p for non-zero b. So b^(-1) = b^(p-2)
-        let b_inv_int = (&b_int).modpow(&p_minus_2, &p);
+        let b_inv_int = b_int.modpow(&p_minus_2, &p);
 
         let b_const = EmulatedFieldElement::<Fp, Ed25519Fp>::from(&b_int);
         let b_inv_const = EmulatedFieldElement::<Fp, Ed25519Fp>::from(&b_inv_int);
@@ -994,7 +994,7 @@ mod tests {
             } else {
                 // Execution should not reach this line
                 eprintln!("res should have allocated limbs");
-                assert!(false);
+                unreachable!();
             }
 
             if !cs.is_satisfied() {
@@ -1054,7 +1054,7 @@ mod tests {
             } else {
                 // Execution should not reach this line
                 eprintln!("res should have allocated limbs");
-                assert!(false);
+                unreachable!();
             }
 
             if !cs.is_satisfied() {
@@ -1083,7 +1083,7 @@ mod tests {
 
         let a_consts = a_ints
             .iter()
-            .map(|i| EmulatedFieldElement::<Fp, Ed25519Fp>::from(i))
+            .map(EmulatedFieldElement::<Fp, Ed25519Fp>::from)
             .collect::<Vec<_>>();
         let one = TestConstraintSystem::<Fp>::one();
 
@@ -1091,7 +1091,7 @@ mod tests {
         for i in 0..num_inputs {
             let mut bool_vec = vec![];
             for j in 0..num_selector_bits {
-                let bit = if (i >> j) & 1 == 1 { true } else { false };
+                let bit = (i >> j) & 1 == 1;
                 bool_vec.push(bit);
             }
             conditions.push(bool_vec); // little-endian
@@ -1100,7 +1100,7 @@ mod tests {
         for i in 0..num_inputs {
             let condition_bools = &conditions[i];
             let condition_booleans = condition_bools
-                .into_iter()
+                .iter()
                 .rev() // mux_tree takes slice with MSB first
                 .map(|b| Boolean::constant(*b))
                 .collect::<Vec<_>>();
@@ -1117,7 +1117,7 @@ mod tests {
                 &a_consts,
             );
             assert!(res.is_ok());
-            if condition_bools.iter().all(|&x| x == false) {
+            if condition_bools.iter().all(|&x| !x) {
                 println!("Number of constraints for window size {num_selector_bits} = {:?}. Constant inputs",
                     cs.num_constraints()
                 );
@@ -1152,7 +1152,7 @@ mod tests {
             } else {
                 // Execution should not reach this line
                 eprintln!("res should have allocated limbs");
-                assert!(false);
+                unreachable!();
             }
 
             if !cs.is_satisfied() {
@@ -1177,7 +1177,7 @@ mod tests {
         for i in 0..num_inputs {
             let condition_bools = &conditions[i];
             let condition_booleans = condition_bools
-                .into_iter()
+                .iter()
                 .rev() // mux_tree takes slice with MSB first
                 .map(|b| Boolean::constant(*b))
                 .collect::<Vec<_>>();
@@ -1194,7 +1194,7 @@ mod tests {
                 &a_vars,
             );
             assert!(res.is_ok());
-            if condition_bools.iter().all(|&x| x == false) {
+            if condition_bools.iter().all(|&x| !x) {
                 println!("Number of constraints for window size {num_selector_bits} = {:?}. Variable inputs",
                     cs.num_constraints() - num_constraints_here
                 );
@@ -1229,7 +1229,7 @@ mod tests {
             } else {
                 // Execution should not reach this line
                 eprintln!("res should have allocated limbs");
-                assert!(false);
+                unreachable!();
             }
 
             if !cs.is_satisfied() {

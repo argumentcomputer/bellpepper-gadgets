@@ -203,8 +203,8 @@ mod tests {
                     .unwrap();
 
             let x = x_sq.sqrt();
-            if bool::from(x.is_some()) {
-                point.x = x.unwrap();
+            if let Some(x) = x {
+                point.x = x;
                 point.y = y;
                 break;
             }
@@ -236,7 +236,7 @@ mod tests {
         let b = &Ed25519Curve::basepoint();
         assert!(Ed25519Curve::is_on_curve(b));
         let scalar = BigUint::from(6u8);
-        let p = Ed25519Curve::scalar_multiplication(&b, &scalar);
+        let p = Ed25519Curve::scalar_multiplication(b, &scalar);
         assert_eq!(p, b + b + b + b + b + b);
     }
 

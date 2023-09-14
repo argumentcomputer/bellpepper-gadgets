@@ -553,7 +553,7 @@ mod tests {
         let mut rng = rand::thread_rng();
 
         let mut scalar = rng.gen_biguint(256u64);
-        scalar = scalar >> 3; // scalar now has 253 significant bits
+        scalar >>= 3; // scalar now has 253 significant bits
         let p = Ed25519Curve::scalar_multiplication(&b, &scalar);
 
         let mut scalar_vec: Vec<Boolean> = vec![];
@@ -563,7 +563,7 @@ mod tests {
             } else {
                 scalar_vec.push(Boolean::constant(false))
             };
-            scalar = scalar >> 1;
+            scalar >>= 1;
         }
 
         let mut cs = TestConstraintSystem::<Fp>::new();
@@ -603,7 +603,7 @@ mod tests {
         let mut rng = rand::thread_rng();
 
         let mut scalar = rng.gen_biguint(256u64);
-        scalar = scalar >> 3; // scalar now has 253 significant bits
+        scalar >>= 3; // scalar now has 253 significant bits
         let p = Ed25519Curve::scalar_multiplication(&b, &scalar);
 
         let mut scalar_vec: Vec<Boolean> = vec![];
@@ -613,7 +613,7 @@ mod tests {
             } else {
                 scalar_vec.push(Boolean::constant(false))
             };
-            scalar = scalar >> 1;
+            scalar >>= 1;
         }
 
         let mut cs = TestConstraintSystem::<Fp>::new();
