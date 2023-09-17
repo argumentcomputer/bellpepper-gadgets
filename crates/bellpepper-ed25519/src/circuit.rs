@@ -513,8 +513,8 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        println!("Num constraints = {:?}", cs.num_constraints());
-        println!("Num inputs = {:?}", cs.num_inputs());
+        assert_eq!(cs.num_constraints(), 3689);
+        assert_eq!(cs.num_inputs(), 1);
     }
 
     #[test]
@@ -543,8 +543,8 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        println!("Num constraints = {:?}", cs.num_constraints());
-        println!("Num inputs = {:?}", cs.num_inputs());
+        assert_eq!(cs.num_constraints(), 1749);
+        assert_eq!(cs.num_inputs(), 1);
     }
 
     #[test]
@@ -585,20 +585,20 @@ mod tests {
         assert_eq!(p, p_al.value);
 
         assert!(cs.is_satisfied());
-        println!("Num constraints = {:?}", cs.num_constraints());
-        println!("Num inputs = {:?}", cs.num_inputs());
+        assert_eq!(cs.num_constraints(), 716_086);
+        assert_eq!(cs.num_inputs(), 1);
     }
 
     #[test]
     fn alloc_affine_scalar_multiplication_window_range() {
-        scalar_multiplication_helper(1);
-        scalar_multiplication_helper(2);
-        scalar_multiplication_helper(3);
-        scalar_multiplication_helper(4);
-        scalar_multiplication_helper(5);
+        assert_eq!(scalar_multiplication_helper(1), 1_373_558);
+        assert_eq!(scalar_multiplication_helper(2), 913_693);
+        assert_eq!(scalar_multiplication_helper(3), 769_982);
+        assert_eq!(scalar_multiplication_helper(4), 716_086);
+        assert_eq!(scalar_multiplication_helper(5), 738_128);
     }
 
-    fn scalar_multiplication_helper(window_size: i32) {
+    fn scalar_multiplication_helper(window_size: i32) -> usize {
         let b = Ed25519Curve::basepoint();
         let mut rng = rand::thread_rng();
 
@@ -636,9 +636,6 @@ mod tests {
         assert_eq!(p, p_al.value);
 
         assert!(cs.is_satisfied());
-        println!(
-            "Num constraints for window_size {window_size} = {:?}",
-            cs.num_constraints()
-        );
+        cs.num_constraints()
     }
 }

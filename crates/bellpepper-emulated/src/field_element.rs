@@ -663,7 +663,7 @@ mod tests {
             println!("{:?}", cs.which_is_unsatisfied());
         }
         assert!(cs.is_satisfied());
-        println!("Number of constraints = {:?}", cs.num_constraints());
+        assert_eq!(cs.num_constraints(), 5);
     }
 
     #[test]
@@ -703,7 +703,7 @@ mod tests {
             println!("{:?}", cs.which_is_unsatisfied());
         }
         assert!(cs.is_satisfied());
-        println!("Number of constraints = {:?}", cs.num_constraints());
+        assert_eq!(cs.num_constraints(), 157);
     }
 
     #[test]
@@ -745,7 +745,7 @@ mod tests {
             println!("{:?}", cs.which_is_unsatisfied());
         }
         assert!(cs.is_satisfied());
-        println!("Number of constraints = {:?}", cs.num_constraints());
+        assert_eq!(cs.num_constraints(), 157);
     }
 
     #[test]
@@ -785,7 +785,7 @@ mod tests {
             println!("{:?}", cs.which_is_unsatisfied());
         }
         assert!(cs.is_satisfied());
-        println!("Number of constraints = {:?}", cs.num_constraints());
+        assert_eq!(cs.num_constraints(), 235);
     }
 
     #[test]
@@ -840,7 +840,7 @@ mod tests {
             println!("{:?}", cs.which_is_unsatisfied());
         }
         assert!(cs.is_satisfied());
-        println!("Number of constraints = {:?}", cs.num_constraints());
+        assert_eq!(cs.num_constraints(), 882);
     }
 
     #[test]
@@ -889,7 +889,7 @@ mod tests {
             println!("{:?}", cs.which_is_unsatisfied());
         }
         assert!(cs.is_satisfied());
-        println!("Number of constraints = {:?}", cs.num_constraints());
+        assert_eq!(cs.num_constraints(), 882);
     }
 
     #[test]
@@ -900,10 +900,8 @@ mod tests {
         let a_int = rng.gen_bigint_range(&BigInt::zero(), &Ed25519Fp::modulus());
         let a_const = EmulatedFieldElement::<Fp, Ed25519Fp>::from(&a_int);
         let a = a_const.allocate_field_element_unchecked(&mut cs.namespace(|| "a"));
-        println!(
-            "Num constraints before field membership check = {:?}",
-            cs.num_constraints()
-        );
+        // Num constraints before field membership check = 0
+        assert_eq!(cs.num_constraints(), 0);
         assert!(a.is_ok());
         let a = a.unwrap();
 
@@ -912,10 +910,8 @@ mod tests {
         assert!(res.is_ok());
 
         assert!(cs.is_satisfied());
-        println!(
-            "Num constraints after field membership check = {:?}",
-            cs.num_constraints()
-        );
+        // Num constraints after field membership check = 321
+        assert_eq!(cs.num_constraints(), 321);
 
         let b_int = &Ed25519Fp::modulus() - BigInt::one();
         let b_const = EmulatedFieldElement::<Fp, Ed25519Fp>::from(&b_int);
@@ -964,7 +960,7 @@ mod tests {
             );
             assert!(res.is_ok());
             if !c {
-                println!("Number of constraints = {:?}", cs.num_constraints());
+                assert_eq!(cs.num_constraints(), 5);
             }
             let res = res.unwrap();
 
@@ -1024,10 +1020,7 @@ mod tests {
             );
             assert!(res.is_ok());
             if !c {
-                println!(
-                    "Number of constraints = {:?}",
-                    cs.num_constraints() - num_constraints_here
-                );
+                assert_eq!(cs.num_constraints() - num_constraints_here, 5);
             }
             let res = res.unwrap();
 
@@ -1066,13 +1059,13 @@ mod tests {
 
     #[test]
     fn test_mux_tree() {
-        test_mux_tree_helper(1);
-        test_mux_tree_helper(2);
-        test_mux_tree_helper(3);
-        test_mux_tree_helper(4);
+        test_mux_tree_helper(1, 5);
+        test_mux_tree_helper(2, 15);
+        test_mux_tree_helper(3, 35);
+        test_mux_tree_helper(4, 75);
     }
 
-    fn test_mux_tree_helper(num_selector_bits: usize) {
+    fn test_mux_tree_helper(num_selector_bits: usize, expected_num_constraints: usize) {
         let mut cs = TestConstraintSystem::<Fp>::new();
         let num_inputs = 1usize << num_selector_bits;
         let mut rng = rand::thread_rng();
@@ -1118,9 +1111,8 @@ mod tests {
             );
             assert!(res.is_ok());
             if condition_bools.iter().all(|&x| !x) {
-                println!("Number of constraints for window size {num_selector_bits} = {:?}. Constant inputs",
-                    cs.num_constraints()
-                );
+                // Number of constraints for a window size and constant inputs
+                assert_eq!(cs.num_constraints(), expected_num_constraints);
             }
             let res = res.unwrap();
 
@@ -1195,8 +1187,10 @@ mod tests {
             );
             assert!(res.is_ok());
             if condition_bools.iter().all(|&x| !x) {
-                println!("Number of constraints for window size {num_selector_bits} = {:?}. Variable inputs",
-                    cs.num_constraints() - num_constraints_here
+                // Number of constraints for a window size and variable inputs
+                assert_eq!(
+                    cs.num_constraints() - num_constraints_here,
+                    expected_num_constraints
                 );
             }
             let res = res.unwrap();
