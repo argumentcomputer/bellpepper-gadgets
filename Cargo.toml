@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/bellpepper-emulated",
     "crates/bellpepper-ed25519",
+    "crates/bellpepper-sha512",
 ]
 
 [workspace.package]
