@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/sha1",
     "crates/bellpepper-emulated",
     "crates/bellpepper-ed25519",
 ]
@@ -13,3 +14,4 @@ repository = "https://github.com/lurk-lab/bellpepper-gadgets"
 bellpepper-core = { version="0.2.0", default-features = false }
 bellpepper = { version="0.2.0", default-features = false }
 ff = "0.13.0"
+pasta_curves = { version = "0.5", features = ["repr-c", "serde"] }
