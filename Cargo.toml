@@ -1,8 +1,8 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/bellpepper-emulated",
-    "crates/bellpepper-ed25519",
+    "crates/emulated",
+    "crates/ed25519",
     "crates/bellpepper-sha512",
 ]
 
@@ -14,3 +14,11 @@ repository = "https://github.com/lurk-lab/bellpepper-gadgets"
 bellpepper-core = { version="0.2.0", default-features = false }
 bellpepper = { version="0.2.0", default-features = false }
 ff = "0.13.0"
+
+[profile.dev-ci]
+inherits = "dev"
+# By compiling dependencies with optimizations, performing tests gets much faster.
+opt-level = 3
+lto = "thin"
+incremental = false
+codegen-units = 16

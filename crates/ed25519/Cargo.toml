@@ -14,7 +14,7 @@ repository.workspace = true
 bellpepper-core = { workspace = true }
 bellpepper = { workspace = true }
 ff = { workspace = true }
-bellpepper-emulated = { version = "0.2.0", path = "../bellpepper-emulated" }
+bellpepper-emulated = { version = "0.2.0", path = "../emulated" }
 num-bigint = { version = "0.4.3", features = ["rand"] }
 num-integer = "0.1.45"
 num-traits = "0.2.15"
