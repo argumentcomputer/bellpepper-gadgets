@@ -1,8 +1,8 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/bellpepper-emulated",
-    "crates/bellpepper-ed25519",
+    "crates/emulated",
+    "crates/ed25519",
 ]
 
 [workspace.package]
