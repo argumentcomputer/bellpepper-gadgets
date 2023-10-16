@@ -290,13 +290,11 @@ where
     where
         CS: ConstraintSystem<F>,
     {
-        if self.overflow + 2 > Self::max_overflow() {
-            panic!(
+        assert!(self.overflow + 2 <= Self::max_overflow(),
                 "Not enough bits in native field to accomodate a subtraction operation which is performed during reduce: {} > {}",
                 self.overflow + 2,
                 Self::max_overflow(),
             );
-        }
 
         self.enforce_width_conditional(&mut cs.namespace(|| "ensure bitwidths in input"))?;
         if self.overflow == 0 {
@@ -528,13 +526,12 @@ where
     }
 
     fn mul_precondition(a: &Self, b: &Self) -> Result<usize, OverflowError> {
-        if 2 * P::bits_per_limb() > F::CAPACITY as usize {
-            panic!(
-                "Not enough bits in native field to accomodate a product of limbs: {} < {}",
-                F::CAPACITY,
-                2 * P::bits_per_limb(),
-            );
-        }
+        assert!(
+            2 * P::bits_per_limb() <= F::CAPACITY as usize,
+            "Not enough bits in native field to accomodate a product of limbs: {} < {}",
+            F::CAPACITY,
+            2 * P::bits_per_limb(),
+        );
         let reduce_right = a.overflow < b.overflow;
         let max_carry_bits = (a.len().min(b.len()) as f32).log2().ceil() as usize;
         let next_overflow = P::bits_per_limb() + a.overflow + b.overflow + max_carry_bits;
@@ -793,9 +790,7 @@ where
         }
 
         let pseudo_mersenne_params = P::pseudo_mersenne_params().unwrap();
-        if P::num_limbs() * P::bits_per_limb() < pseudo_mersenne_params.e as usize {
-            panic!("The number of bits available is too small to accommodate the non-native field elements");
-        }
+        assert!(P::num_limbs() * P::bits_per_limb() >= pseudo_mersenne_params.e as usize, "The number of bits available is too small to accommodate the non-native field elements");
 
         let mut acc = chunks[0].clone();
 
