@@ -306,7 +306,11 @@ impl UInt64 {
     }
 
     /// Perform modular addition of several `UInt64` objects.
-    pub fn addmany<Scalar, CS, M>(mut cs: M, operands: &[Self]) -> Result<Self, SynthesisError>
+    /// # Panics
+    /// 
+    /// This function will panic if Scalar::NUM_BITS < 64 or number of operands are less than 2 or number of operands are greater than 10
+    ///  
+    pub(crate) fn addmany<Scalar, CS, M>(mut cs: M, operands: &[Self]) -> Result<Self, SynthesisError>
     where
         Scalar: PrimeField,
         CS: ConstraintSystem<Scalar>,
@@ -314,9 +318,9 @@ impl UInt64 {
     {
         // Make some arbitrary bounds for ourselves to avoid overflows
         // in the scalar field
-        assert!(Scalar::NUM_BITS >= 64);
-        assert!(operands.len() >= 2); // Weird trivial cases that should never happen
-        assert!(operands.len() <= 10);
+        assert!(Scalar::NUM_BITS >= 64, "Assertion failed: Number of bits required to represent a field element should not be less than 64");
+        assert!(operands.len() >= 2, "Assertion failed: Operands length should not be less than 2"); // Weird trivial cases that should never happen
+        assert!(operands.len() <= 10, "Assertion failed: Operands length should not be greater than 10");
 
         // Compute the maximum value of the sum so we allocate enough bits for
         // the result
