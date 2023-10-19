@@ -453,8 +453,7 @@ mod test {
 
             for x in v.iter().zip(expected_to_be_same.iter()) {
                 match x {
-                    (&Boolean::Constant(true), &Boolean::Constant(true)) => {}
-                    (&Boolean::Constant(false), &Boolean::Constant(false)) => {}
+                    (&Boolean::Constant(true), &Boolean::Constant(true)) | (&Boolean::Constant(false), &Boolean::Constant(false)) => {}
                     _ => unreachable!(),
                 }
             }
@@ -488,8 +487,7 @@ mod test {
 
             for x in v.iter().zip(expected_to_be_same.iter()) {
                 match x {
-                    (&Boolean::Constant(true), &Boolean::Constant(true)) => {}
-                    (&Boolean::Constant(false), &Boolean::Constant(false)) => {}
+                    (&Boolean::Constant(true), &Boolean::Constant(true)) | (&Boolean::Constant(false), &Boolean::Constant(false)) => {}
                     _ => unreachable!(),
                 }
             }
@@ -572,8 +570,7 @@ mod test {
 
             for b in r.bits.iter() {
                 match *b {
-                    Boolean::Is(_) => panic!(),
-                    Boolean::Not(_) => panic!(),
+                    Boolean::Is(_) | Boolean::Not(_) => panic!(),
                     Boolean::Constant(b) => {
                         assert!(b == (expected & 1 == 1));
                     }
