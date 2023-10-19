@@ -648,27 +648,30 @@ mod test {
         let mut num = rng.next_u64();
 
         let a = UInt64::constant(num);
-
-        for i in 0..64 {
-            let b = a.rotr(i);
-            assert_eq!(a.bits.len(), b.bits.len());
-
-            assert!(b.value.unwrap() == num);
-
-            let mut tmp = num;
-            for b in &b.bits {
-                match *b {
-                    Boolean::Constant(b) => {
-                        assert_eq!(b, tmp & 1 == 1);
+        
+        for _ in 0..50 {
+            for i in 0..64 {
+                let b = a.rotr(i);
+                assert_eq!(a.bits.len(), b.bits.len());
+    
+                assert!(b.value.unwrap() == num);
+    
+                let mut tmp = num;
+                for b in &b.bits {
+                    match *b {
+                        Boolean::Constant(b) => {
+                            assert_eq!(b, tmp & 1 == 1);
+                        }
+                        _ => unreachable!(),
                     }
-                    _ => unreachable!(),
+    
+                    tmp >>= 1;
                 }
-
-                tmp >>= 1;
+    
+                num = num.rotate_right(1);
             }
-
-            num = num.rotate_right(1);
         }
+        
     }
 
     #[test]

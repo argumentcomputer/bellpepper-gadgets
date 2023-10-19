@@ -362,38 +362,40 @@ mod test {
     #[test]
     #[allow(clippy::needless_collect)]
     fn test_hash() {
-        let length: u8 = rand::thread_rng().gen();
-        let mut h = Sha512::new();
-        let data: Vec<u8> = (0..length).map(|_| rand::thread_rng().gen()).collect();
-        h.update(&data);
-        let hash_result = h.finalize();
+        for _ in 0..50 {
+            let length: u8 = rand::thread_rng().gen();
+            let mut h = Sha512::new();
+            let data: Vec<u8> = (0..length).map(|_| rand::thread_rng().gen()).collect();
+            h.update(&data);
+            let hash_result = h.finalize();
 
-        let mut cs = TestConstraintSystem::<Fr>::new();
-        let mut input_bits = vec![];
+            let mut cs = TestConstraintSystem::<Fr>::new();
+            let mut input_bits = vec![];
 
-        for (byte_i, input_byte) in data.into_iter().enumerate() {
-            for bit_i in (0..8).rev() {
-                input_bits.push(
-                    AllocatedBit::alloc(
-                        cs.namespace(|| format!("input bit {} {}", byte_i, bit_i)),
-                        Some((input_byte >> bit_i) & 1u8 == 1u8),
-                    )
-                    .unwrap()
-                    .into(),
-                );
+            for (byte_i, input_byte) in data.into_iter().enumerate() {
+                for bit_i in (0..8).rev() {
+                    input_bits.push(
+                        AllocatedBit::alloc(
+                            cs.namespace(|| format!("input bit {} {}", byte_i, bit_i)),
+                            Some((input_byte >> bit_i) & 1u8 == 1u8),
+                        )
+                        .unwrap()
+                        .into(),
+                    );
+                }
             }
-        }
 
-        let r = sha512(&mut cs, &input_bits).unwrap();
+            let r = sha512(&mut cs, &input_bits).unwrap();
 
-        assert!(cs.is_satisfied());
+            assert!(cs.is_satisfied());
 
-        let s = hash_result
-            .iter()
-            .flat_map(|&byte| (0..8).rev().map(move |i| (byte >> i) & 1u8 == 1u8));
+            let s = hash_result
+                .iter()
+                .flat_map(|&byte| (0..8).rev().map(move |i| (byte >> i) & 1u8 == 1u8));
 
-        for (i, j) in r.into_iter().zip(s) {
-            assert_eq!(i.get_value(), Some(j));
+            for (i, j) in r.into_iter().zip(s) {
+                assert_eq!(i.get_value(), Some(j));
+            }
         }
     }
 
@@ -405,24 +407,26 @@ mod test {
         ]);
 
         let iv = get_sha512_iv();
-
-        let mut cs = TestConstraintSystem::<Fr>::new();
-        let input_bits: Vec<_> = (0..1024)
-            .map(|i| {
-                Boolean::from(
-                    AllocatedBit::alloc(
-                        cs.namespace(|| format!("input bit {}", i)),
-                        Some(rng.next_u64() % 2 != 0),
+        
+        for _ in 0..50 {
+            let mut cs = TestConstraintSystem::<Fr>::new();
+            let input_bits: Vec<_> = (0..1024)
+                .map(|i| {
+                    Boolean::from(
+                        AllocatedBit::alloc(
+                            cs.namespace(|| format!("input bit {}", i)),
+                            Some(rng.next_u64() % 2 != 0),
+                        )
+                        .unwrap(),
                     )
-                    .unwrap(),
-                )
-            })
-            .collect();
+                })
+                .collect();
 
-        sha512_compression_function(cs.namespace(|| "sha512"), &input_bits, &iv).unwrap();
+            sha512_compression_function(cs.namespace(|| "sha512"), &input_bits, &iv).unwrap();
 
-        assert!(cs.is_satisfied());
-        assert_eq!(67123, cs.num_constraints());
+            assert!(cs.is_satisfied());
+            assert_eq!(67123, cs.num_constraints());
+        }
     }
 
     #[test]
@@ -431,24 +435,26 @@ mod test {
             0x59, 0x62, 0xbe, 0x3d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
             0xbc, 0xe5,
         ]);
-
-        let mut cs = TestConstraintSystem::<Fr>::new();
-        let input_bits: Vec<_> = (0..1024)
-            .map(|i| {
-                Boolean::from(
-                    AllocatedBit::alloc(
-                        cs.namespace(|| format!("input bit {}", i)),
-                        Some(rng.next_u64() % 2 != 0),
+        
+        for _ in 0..50 {
+            let mut cs = TestConstraintSystem::<Fr>::new();
+            let input_bits: Vec<_> = (0..1024)
+                .map(|i| {
+                    Boolean::from(
+                        AllocatedBit::alloc(
+                            cs.namespace(|| format!("input bit {}", i)),
+                            Some(rng.next_u64() % 2 != 0),
+                        )
+                        .unwrap(),
                     )
-                    .unwrap(),
-                )
-            })
-            .collect();
+                })
+                .collect();
 
-        sha512(cs.namespace(|| "sha512"), &input_bits).unwrap();
+            sha512(cs.namespace(|| "sha512"), &input_bits).unwrap();
 
-        assert!(cs.is_satisfied());
-        assert_eq!(114129, cs.num_constraints());
+            assert!(cs.is_satisfied());
+            assert_eq!(114129, cs.num_constraints());
+        }
     }
 
     #[test]
