@@ -306,7 +306,6 @@ impl UInt64 {
     }
 
     /// Perform modular addition of several `UInt64` objects.
-    #[allow(clippy::unnecessary_unwrap)]
     pub fn addmany<Scalar, CS, M>(mut cs: M, operands: &[Self]) -> Result<Self, SynthesisError>
     where
         Scalar: PrimeField,
@@ -367,7 +366,9 @@ impl UInt64 {
             // We can just return a constant, rather than
             // unpacking the result into allocated bits.
 
-            return Ok(UInt64::constant(modular_value.unwrap()));
+            if let Some(mv) = modular_value {
+                return Ok(UInt64::constant(mv));
+            }
         }
 
         // Storage area for the resulting bits
