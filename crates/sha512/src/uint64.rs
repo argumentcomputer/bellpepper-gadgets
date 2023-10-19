@@ -307,10 +307,13 @@ impl UInt64 {
 
     /// Perform modular addition of several `UInt64` objects.
     /// # Panics
-    /// 
+    ///
     /// This function will panic if Scalar::NUM_BITS < 64 or number of operands are less than 2 or number of operands are greater than 10
     ///  
-    pub(crate) fn addmany<Scalar, CS, M>(mut cs: M, operands: &[Self]) -> Result<Self, SynthesisError>
+    pub(crate) fn addmany<Scalar, CS, M>(
+        mut cs: M,
+        operands: &[Self],
+    ) -> Result<Self, SynthesisError>
     where
         Scalar: PrimeField,
         CS: ConstraintSystem<Scalar>,
@@ -319,8 +322,14 @@ impl UInt64 {
         // Make some arbitrary bounds for ourselves to avoid overflows
         // in the scalar field
         assert!(Scalar::NUM_BITS >= 64, "Assertion failed: Number of bits required to represent a field element should not be less than 64");
-        assert!(operands.len() >= 2, "Assertion failed: Operands length should not be less than 2"); // Weird trivial cases that should never happen
-        assert!(operands.len() <= 10, "Assertion failed: Operands length should not be greater than 10");
+        assert!(
+            operands.len() >= 2,
+            "Assertion failed: Operands length should not be less than 2"
+        ); // Weird trivial cases that should never happen
+        assert!(
+            operands.len() <= 10,
+            "Assertion failed: Operands length should not be greater than 10"
+        );
 
         // Compute the maximum value of the sum so we allocate enough bits for
         // the result
@@ -453,7 +462,8 @@ mod test {
 
             for x in v.iter().zip(expected_to_be_same.iter()) {
                 match x {
-                    (&Boolean::Constant(true), &Boolean::Constant(true)) | (&Boolean::Constant(false), &Boolean::Constant(false)) => {}
+                    (&Boolean::Constant(true), &Boolean::Constant(true))
+                    | (&Boolean::Constant(false), &Boolean::Constant(false)) => {}
                     _ => unreachable!(),
                 }
             }
@@ -487,7 +497,8 @@ mod test {
 
             for x in v.iter().zip(expected_to_be_same.iter()) {
                 match x {
-                    (&Boolean::Constant(true), &Boolean::Constant(true)) | (&Boolean::Constant(false), &Boolean::Constant(false)) => {}
+                    (&Boolean::Constant(true), &Boolean::Constant(true))
+                    | (&Boolean::Constant(false), &Boolean::Constant(false)) => {}
                     _ => unreachable!(),
                 }
             }
@@ -649,14 +660,14 @@ mod test {
         let mut num = rng.next_u64();
 
         let a = UInt64::constant(num);
-        
+
         for _ in 0..50 {
             for i in 0..64 {
                 let b = a.rotr(i);
                 assert_eq!(a.bits.len(), b.bits.len());
-    
+
                 assert!(b.value.unwrap() == num);
-    
+
                 let mut tmp = num;
                 for b in &b.bits {
                     match *b {
@@ -665,14 +676,13 @@ mod test {
                         }
                         _ => unreachable!(),
                     }
-    
+
                     tmp >>= 1;
                 }
-    
+
                 num = num.rotate_right(1);
             }
         }
-        
     }
 
     #[test]
