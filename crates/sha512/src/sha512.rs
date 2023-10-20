@@ -3,8 +3,6 @@
 //!
 //! [SHA-512]: https://tools.ietf.org/html/rfc6234
 
-// #![allow(clippy::many_single_char_names)]
-
 use super::uint64::UInt64;
 use bellpepper::gadgets::multieq::MultiEq;
 use bellpepper_core::{boolean::Boolean, ConstraintSystem, SynthesisError};
