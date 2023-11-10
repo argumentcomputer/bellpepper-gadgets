@@ -29,7 +29,7 @@ where
         .collect())
 }
 
-pub fn sha1<Scalar, CS>(mut cs: CS, input: &[Boolean]) -> Result<Vec<Boolean>, SynthesisError>
+pub fn sha1<Scalar, CS>(mut cs: CS, input: &[Boolean]) -> Result<[Boolean; 160], SynthesisError>
 where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
@@ -55,18 +55,23 @@ where
         cur = sha1_compression_function(cs.namespace(|| format!("block {}", i)), block, &cur)?;
     }
 
-    Ok(cur.into_iter().flat_map(|e| e.into_bits_be()).collect())
+    Ok(cur
+        .into_iter()
+        .flat_map(|e| e.into_bits_be())
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap())
 }
 
-fn get_sha1_iv() -> Vec<UInt32> {
-    IV.iter().map(|&v| UInt32::constant(v)).collect()
+fn get_sha1_iv() -> [UInt32; 5] {
+    IV.map(UInt32::constant)
 }
 
 pub fn sha1_compression_function<Scalar, CS>(
     cs: CS,
     input: &[Boolean],
     current_hash_value: &[UInt32],
-) -> Result<Vec<UInt32>, SynthesisError>
+) -> Result<[UInt32; 5], SynthesisError>
 where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
@@ -83,20 +88,39 @@ where
     // the constraints in different u32 additions
     let mut cs = MultiEq::new(cs);
 
-    for i in 16..80 {
-        let cs = &mut cs.namespace(|| format!("w extension {}", i));
+    // For 16 <= t <= 79, w[t] := (w[t-3] xor w[t-8] xor w[t-14] xor w[t-16]) leftrotate 1
+    for t in 16..80 {
+        let cs = &mut cs.namespace(|| format!("w extension {}", t));
 
-        // w[i] := (w[i-3] xor w[i-8] xor w[i-14] xor w[i-16]) leftrotate 1
-        let mut wi = w[i - 3].xor(cs.namespace(|| format!("first xor for w[{i}]")), &w[i - 8])?;
-        wi = wi.xor(
-            cs.namespace(|| format!("second xor for w[{i}]")),
-            &w[i - 14],
+        // w[t-3] xor w[t-8]
+        let mut wt = w[t - 3].xor(
+            cs.namespace(|| format!("w[{}] xor w[{}]", t - 3, t - 8)),
+            &w[t - 8],
         )?;
-        wi = wi.xor(cs.namespace(|| format!("third xor for w[{i}]")), &w[i - 16])?;
+
+        // w[t-3] xor w[t-8] xor w[t-14]
+        wt = wt.xor(
+            cs.namespace(|| format!("w[{}] xor w[{}] xor w[{}]", t - 3, t - 8, t - 14)),
+            &w[t - 14],
+        )?;
+
+        // w[t-3] xor w[t-8] xor w[t-14] xor w[t-16]
+        wt = wt.xor(
+            cs.namespace(|| {
+                format!(
+                    "w[{}] xor w[{}] xor w[{}] xor w[{}]",
+                    t - 3,
+                    t - 8,
+                    t - 14,
+                    t - 16
+                )
+            }),
+            &w[t - 16],
+        )?;
 
         // rotr(31) is equivalent to leftrotate 1
-        wi = wi.rotr(31);
-        w.push(wi);
+        wt = wt.rotr(31);
+        w.push(wt);
     }
 
     assert_eq!(w.len(), 80);
@@ -107,34 +131,40 @@ where
     let mut d = current_hash_value[3].clone();
     let mut e = current_hash_value[4].clone();
 
-    for i in 0..80 {
-        let cs = &mut cs.namespace(|| format!("compression round {}", i));
+    for t in 0..80 {
+        let cs = &mut cs.namespace(|| format!("compression round {}", t));
 
-        let f = if i < 20 {
-            // f = (b and c) or ((not b) and d)
-            UInt32::sha256_ch(cs.namespace(|| "ch"), &b, &c, &d)?
-        } else if !(40..60).contains(&i) {
-            // b xor c xor d
+        // Computing f(t; b, c, d)
+        let f = if t < 20 {
+            // for 0 <= t <= 19, f(t; b, c, d) = (b and c) or ((not b) and d)
+            UInt32::sha256_ch(cs.namespace(|| "(b and c) or ((not b) and d)"), &b, &c, &d)?
+        } else if !(40..60).contains(&t) {
+            // for 20 <= t <= 39 AND 60 <= t <= 79, f(t; b, c, d) = b xor c xor d
             b.xor(cs.namespace(|| "b xor c"), &c)?
                 .xor(cs.namespace(|| "b xor c xor d"), &d)?
         } else {
-            let a1 = and_uint32(cs.namespace(|| "1st and"), &b, &c)?;
-            let a2 = and_uint32(cs.namespace(|| "2nd and"), &b, &d)?;
-            let a3 = and_uint32(cs.namespace(|| "3rd and"), &c, &d)?;
+            // for 40 <= t <= 59, f(t; b, c, d) = (b and c) or (b and d) or (c and d)
+            let a1 = and_uint32(cs.namespace(|| "b and c"), &b, &c)?;
+            let a2 = and_uint32(cs.namespace(|| "b and d"), &b, &d)?;
+            let a3 = and_uint32(cs.namespace(|| "c and d"), &c, &d)?;
 
-            let tmp = or_uint32(cs.namespace(|| "1st or"), &a1, &a2)?;
-            or_uint32(cs.namespace(|| "2nd or"), &tmp, &a3)?
+            let tmp = or_uint32(cs.namespace(|| "(b and c) or (b and d)"), &a1, &a2)?;
+            or_uint32(
+                cs.namespace(|| "(b and c) or (b and d) or (c and d)"),
+                &tmp,
+                &a3,
+            )?
         };
 
-        // temp = (a leftrotate 5) + f + e + k + w[i]
+        // temp = (a leftrotate 5) + f(t; b, c, d) + e + w[t] + k[t]
         let temp = UInt32::addmany(
             cs.namespace(|| "temp"),
             &[
                 a.rotr(27),
                 f,
                 e,
-                UInt32::constant(ROUND_CONSTANTS[i / 20]),
-                w[i].clone(),
+                w[t].clone(),
+                UInt32::constant(ROUND_CONSTANTS[t / 20]),
             ],
         )?;
 
@@ -187,7 +217,7 @@ where
         &[current_hash_value[4].clone(), e],
     )?;
 
-    Ok(vec![h0, h1, h2, h3, h4])
+    Ok([h0, h1, h2, h3, h4])
 }
 
 #[cfg(test)]
