@@ -4,6 +4,7 @@ members = [
     "crates/emulated",
     "crates/ed25519",
     "crates/sha512",
+    "crates/sha1",
 ]
 
 [workspace.package]
@@ -11,9 +12,10 @@ homepage = "https://github.com/lurk-lab/bellpepper-gadgets"
 repository = "https://github.com/lurk-lab/bellpepper-gadgets"
 
 [workspace.dependencies]
-bellpepper-core = { version="0.2.0", default-features = false }
-bellpepper = { version="0.2.0", default-features = false }
+bellpepper-core = { version="0.3.0", default-features = false }
+bellpepper = { version="0.3.0", default-features = false }
 ff = "0.13.0"
+pasta_curves = { version = "0.5", features = ["repr-c", "serde"] }
 
 [profile.dev-ci]
 inherits = "dev"
