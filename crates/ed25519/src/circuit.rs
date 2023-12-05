@@ -107,6 +107,23 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedAffinePoint<F> {
         Ok(identity)
     }
 
+    pub fn assert_equality<CS>(cs: &mut CS, p: &Self, q: &Self) -> Result<(), SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        let x1 = &p.x;
+        let y1 = &p.y;
+
+        let x2 = &q.x;
+        let y2 = &q.y;
+
+        Ed25519Fp::<F>::assert_is_equal(&mut cs.namespace(|| "x1 == x2"), x1, x2)?;
+
+        Ed25519Fp::<F>::assert_is_equal(&mut cs.namespace(|| "y1 == y2"), y1, y2)?;
+
+        Ok(())
+    }
+
     fn verify_point_addition<CS>(
         cs: &mut CS,
         p: &Self,
@@ -476,6 +493,33 @@ mod tests {
     use num_integer::Integer;
     use num_traits::Zero;
     use pasta_curves::Fp;
+
+    #[test]
+    fn alloc_affine_point_equality() {
+        for _ in 0..100 {
+            let b = Ed25519Curve::basepoint();
+            let mut rng = rand::thread_rng();
+            let scalar = rng.gen_biguint_range(&BigUint::zero(), &Ed25519Curve::order());
+            let p = Ed25519Curve::scalar_multiplication(&b, &scalar);
+
+            let mut cs = TestConstraintSystem::<Fp>::new();
+
+            let p_alloc =
+                AllocatedAffinePoint::alloc_affine_point(&mut cs.namespace(|| "alloc point p"), &p);
+            assert!(p_alloc.is_ok());
+            let p_al = p_alloc.unwrap();
+
+            let _ =
+                AllocatedAffinePoint::assert_equality(&mut cs.namespace(|| "p == p"), &p_al, &p_al);
+
+            if !cs.is_satisfied() {
+                eprintln!("{:?}", cs.which_is_unsatisfied())
+            }
+            assert!(cs.is_satisfied());
+            assert_eq!(cs.num_constraints(), 314);
+            assert_eq!(cs.num_inputs(), 1);
+        }
+    }
 
     #[test]
     fn alloc_affine_point_addition() {
