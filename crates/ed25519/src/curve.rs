@@ -157,6 +157,18 @@ impl Ed25519Curve {
         tmp == Fe25519::zero()
     }
 
+    pub fn check_equality(p: &AffinePoint, q: &AffinePoint) -> bool {
+        let x1 = &p.x;
+        let y1 = &p.y;
+        let x2 = &q.x;
+        let y2 = &q.y;
+
+        let x_eq = x1 == x2;
+        let y_eq = y1 == y2;
+
+        x_eq & y_eq
+    }
+
     pub fn add_points(p: &AffinePoint, q: &AffinePoint) -> AffinePoint {
         let x1 = &p.x;
         let y1 = &p.y;
@@ -219,6 +231,17 @@ mod tests {
         let neg_p = -&p;
         let sum = p + &neg_p;
         assert!(sum.is_zero());
+    }
+
+    #[test]
+    fn check_equality() {
+        let p = random_point();
+        assert!(Ed25519Curve::is_on_curve(&p));
+        let q = random_point();
+        assert!(Ed25519Curve::is_on_curve(&q));
+        assert!(Ed25519Curve::check_equality(&p, &p));
+        assert!(!Ed25519Curve::check_equality(&p, &q));
+        assert!(Ed25519Curve::check_equality(&q, &q));
     }
 
     #[test]
