@@ -12,8 +12,8 @@ homepage = "https://github.com/lurk-lab/bellpepper-gadgets"
 repository = "https://github.com/lurk-lab/bellpepper-gadgets"
 
 [workspace.dependencies]
-bellpepper-core = { version="0.3.0", default-features = false }
-bellpepper = { version="0.3.0", default-features = false }
+bellpepper-core = { version="0.4.0", default-features = false }
+bellpepper = { version="0.4.0", default-features = false }
 ff = "0.13.0"
 pasta_curves = { version = "0.5", features = ["repr-c", "serde"] }
 
