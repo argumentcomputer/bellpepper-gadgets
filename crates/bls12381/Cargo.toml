@@ -1,0 +1,25 @@
+[package]
+name = "bellpepper-bls12381"
+version = "0.2.0"
+edition = "2021"
+authors = [""]
+license = "MIT OR Apache-2.0"
+description = ""
+documentation = ""
+homepage.workspace = true
+repository.workspace = true
+
+
+[dependencies]
+bellpepper-core = { workspace = true }
+bellpepper = { workspace = true }
+ff = { workspace = true }
+bellpepper-emulated = { version = "0.2.0", path = "../emulated" }
+num-bigint = { version = "0.4.3", features = ["rand"] }
+num-integer = "0.1.45"
+num-traits = "0.2.15"
+rand = "0.8.5"
+bls12_381 = "0.8.0" # FIXME: use blst instead of exposing the internals of this crate? the benefit of this one is no dependencies
+
+[dev-dependencies]
+pasta_curves = "0.5.1"
