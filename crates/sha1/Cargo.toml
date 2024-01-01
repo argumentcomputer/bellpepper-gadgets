@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Saravanan Vijayakumaran <sarva@ee.iitb.ac.in>"]
 license = "MIT OR Apache-2.0"
+rust-version = "1.66"
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 bellpepper-core = { workspace = true }
@@ -13,6 +16,6 @@ ff = { workspace = true }
 [dev-dependencies]
 pasta_curves = { workspace = true }
 hex-literal = "0.4.1"
-rand_core = "0.6.4"
-rand_xorshift = "0.3.0"
+rand_core = { workspace = true }
+rand_xorshift = { workspace = true }
 sha1 = "0.10.5"

@@ -52,12 +52,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # make sure benches don't bit-rot
       - name: build benches
-        # TODO: --all-features
-        run: cargo build --benches --release
+        run: cargo build --benches --release --all-features
       - name: cargo test
-        # TODO: --all-features
         run: |
-          cargo nextest run --profile ci --cargo-profile dev-ci
+          cargo nextest run --profile ci --cargo-profile dev-ci --all-features
       - name: Doctests
         run: |
           cargo test --doc
@@ -78,3 +76,37 @@ jobs:
           args: --all --check
       - name: cargo clippy
         run: cargo xclippy -D warnings
+
+  msrv:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package:
+          - "emulated"
+          - "sha1"
+          - "sha512"
+          - "ed25519"
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install rustup
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+    - uses: Swatinem/rust-cache@v2
+    - name: Install cargo-msrv
+      run: cargo install cargo-msrv
+    - name: Check Rust MSRV
+      run: cargo msrv verify
+      working-directory: crates/${{ matrix.package }}
+        
+
+  # Check documentation links aren't broken
+  link-checker:
+    uses: lurk-lab/ci-workflows/.github/workflows/links-check.yml@main
+    with: 
+      fail-fast: true
+
+  # Lint dependencies for licensing and auditing issues as per https://github.com/lurk-lab/bellpepper-gadgets/blob/main/deny.toml
+  licenses-audits:
+    uses: lurk-lab/ci-workflows/.github/workflows/licenses-audits.yml@main
