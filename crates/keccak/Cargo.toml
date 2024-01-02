@@ -8,16 +8,16 @@ description = "Keccak  using bellpepper"
 documentation = "https://docs.rs/bellpepper-keccak"
 homepage.workspace = true
 repository.workspace = true
+rust-version = "1.66.1"
 
 [dependencies]
 ff = { workspace = true }
 bellpepper-core = { workspace = true }
-bellpepper = { workspace = true }
 
 [dev-dependencies]
 bitvec = "0.17.4"
 bls12_381 = "0.8.0"
-libsecp256k1 = "0.3.5"
+libsecp256k1 = "0.7"
 pairing = "0.23.0"
 proptest = "0.9.6"
 tiny-keccak = { version = "2.0", features = ["keccak","sha3"] }

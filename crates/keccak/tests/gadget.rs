@@ -5,12 +5,12 @@ use bls12_381::Bls12;
 
 use bitvec::prelude::*;
 use pairing::Engine;
-use tiny_keccak::{Keccak, Hasher};
+use tiny_keccak::{Hasher, Keccak};
 
 use proptest::prelude::*;
 
-use secp256k1::{PublicKey, SecretKey};
 use bellpepper_keccak::keccak256 as keccak_gadget;
+use libsecp256k1::{PublicKey, SecretKey};
 
 fn keccak256(preimage: &[u8]) -> [u8; 32] {
     let mut keccak = Keccak::v256();
@@ -34,7 +34,7 @@ fn bits_to_bytevec(bits: &[Boolean]) -> Vec<u8> {
     for bit in result {
         bv.push(bit);
     }
-    bv.as_slice().iter().copied().collect()
+    bv.as_slice().to_vec()
 }
 
 proptest! {
@@ -64,17 +64,24 @@ fn test_ethereum_addresses() {
     // private key:	d6840b79c2eb1f5ff97a41590df3e04d7d4b0965073ff2a9fbb7ff003799dc71
     // address:	    0x604a95C9165Bc95aE016a5299dd7d400dDDBEa9A
     let skey = SecretKey::parse_slice(
-        &hex::decode("d6840b79c2eb1f5ff97a41590df3e04d7d4b0965073ff2a9fbb7ff003799dc71").unwrap()
-    ).unwrap();
+        &hex::decode("d6840b79c2eb1f5ff97a41590df3e04d7d4b0965073ff2a9fbb7ff003799dc71").unwrap(),
+    )
+    .unwrap();
     let pkey = PublicKey::from_secret_key(&skey);
     let full_public_key = pkey.serialize();
     let address = keccak256(&full_public_key[1..]);
-    assert_eq!(hex::encode(&address[12..]), "604a95c9165bc95ae016a5299dd7d400dddbea9a");
+    assert_eq!(
+        hex::encode(&address[12..]),
+        "604a95c9165bc95ae016a5299dd7d400dddbea9a"
+    );
 
     let raw_public_key = bytes_to_bitvec(&full_public_key[1..]);
     let address = keccak_gadget(cs.namespace(|| "addr 1"), &raw_public_key).unwrap();
     let address = bits_to_bytevec(&address);
-    assert_eq!(hex::encode(&address[12..]), "604a95c9165bc95ae016a5299dd7d400dddbea9a");
+    assert_eq!(
+        hex::encode(&address[12..]),
+        "604a95c9165bc95ae016a5299dd7d400dddbea9a"
+    );
 
     // mnemonic:	"finish oppose decorate face calm tragic certain desk hour urge dinosaur mango"
     // seed:		7d34eb533ad9fea340cd93d82b8baead0c00a81380caa682aca06631fe851a63
@@ -82,15 +89,22 @@ fn test_ethereum_addresses() {
     // private key:	d3cc16948a02a91b9fcf83735653bf3dfd82c86543fdd1e9a828bd25e8a7b68d
     // address:	    0x1c96099350f13D558464eC79B9bE4445AA0eF579
     let skey = SecretKey::parse_slice(
-        &hex::decode("d3cc16948a02a91b9fcf83735653bf3dfd82c86543fdd1e9a828bd25e8a7b68d").unwrap()
-    ).unwrap();
+        &hex::decode("d3cc16948a02a91b9fcf83735653bf3dfd82c86543fdd1e9a828bd25e8a7b68d").unwrap(),
+    )
+    .unwrap();
     let pkey = PublicKey::from_secret_key(&skey);
     let full_public_key = pkey.serialize();
     let address = keccak256(&full_public_key[1..]);
-    assert_eq!(hex::encode(&address[12..]), "1c96099350f13d558464ec79b9be4445aa0ef579");
+    assert_eq!(
+        hex::encode(&address[12..]),
+        "1c96099350f13d558464ec79b9be4445aa0ef579"
+    );
 
     let raw_public_key = bytes_to_bitvec(&full_public_key[1..]);
     let address = keccak_gadget(cs.namespace(|| "addr 2"), &raw_public_key).unwrap();
     let address = bits_to_bytevec(&address);
-    assert_eq!(hex::encode(&address[12..]), "1c96099350f13d558464ec79b9be4445aa0ef579");
+    assert_eq!(
+        hex::encode(&address[12..]),
+        "1c96099350f13d558464ec79b9be4445aa0ef579"
+    );
 }

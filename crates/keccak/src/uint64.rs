@@ -5,8 +5,8 @@
 
 use bellpepper_core::boolean::{AllocatedBit, Boolean};
 use bellpepper_core::{ConstraintSystem, SynthesisError};
-use ff::PrimeField;
 use core::fmt;
+use ff::PrimeField;
 
 /// Represents an interpretation of 64 `Boolean` objects as an
 /// unsigned integer.
@@ -87,11 +87,15 @@ impl UInt64 {
 
         let mut value = Some(0u64);
         for b in bits {
-            value.as_mut().map(|v| *v <<= 1);
+            if let Some(v) = value.as_mut() {
+                *v <<= 1;
+            }
 
             match b.get_value() {
                 Some(true) => {
-                    value.as_mut().map(|v| *v |= 1);
+                    if let Some(v) = value.as_mut() {
+                        *v |= 1;
+                    }
                 }
                 Some(false) => {}
                 None => {
@@ -120,24 +124,32 @@ impl UInt64 {
 
         let mut value = Some(0u64);
         for b in new_bits.iter().rev() {
-            value.as_mut().map(|v| *v <<= 1);
+            if let Some(v) = value.as_mut() {
+                *v <<= 1;
+            }
 
             match *b {
                 Boolean::Constant(b) => {
                     if b {
-                        value.as_mut().map(|v| *v |= 1);
+                        if let Some(v) = value.as_mut() {
+                            *v |= 1;
+                        }
                     }
                 }
                 Boolean::Is(ref b) => match b.get_value() {
                     Some(true) => {
-                        value.as_mut().map(|v| *v |= 1);
+                        if let Some(v) = value.as_mut() {
+                            *v |= 1;
+                        }
                     }
                     Some(false) => {}
                     None => value = None,
                 },
                 Boolean::Not(ref b) => match b.get_value() {
                     Some(false) => {
-                        value.as_mut().map(|v| *v |= 1);
+                        if let Some(v) = value.as_mut() {
+                            *v |= 1;
+                        }
                     }
                     Some(true) => {}
                     None => value = None,
@@ -253,7 +265,7 @@ impl UInt64 {
 }
 
 impl fmt::Display for UInt64 {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let tmp = format!("{:#x}", self.value.unwrap());
 
         formatter.pad_integral(true, "UInt64 ", &tmp)
@@ -261,7 +273,7 @@ impl fmt::Display for UInt64 {
 }
 
 impl fmt::Debug for UInt64 {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let tmp = format!("{:#x}", self.value.unwrap());
 
         formatter.pad_integral(true, "UInt64 ", &tmp)
@@ -271,14 +283,14 @@ impl fmt::Debug for UInt64 {
 #[cfg(test)]
 mod test {
     use super::UInt64;
-    use bellpepper_core::ConstraintSystem;
     use bellpepper_core::boolean::Boolean;
     use bellpepper_core::test_cs::TestConstraintSystem;
+    use bellpepper_core::ConstraintSystem;
     use bls12_381::Bls12;
 
-    use std::convert::TryInto;
     use bitvec::prelude::*;
     use proptest::prelude::*;
+    use std::convert::TryInto;
 
     proptest! {
         #[test]

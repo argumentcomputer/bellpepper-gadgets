@@ -1,6 +1,6 @@
 use bellpepper_core::boolean::Boolean;
-use bellpepper_core::SynthesisError;
 use bellpepper_core::ConstraintSystem;
+use bellpepper_core::SynthesisError;
 
 mod uint64;
 use ff::PrimeField;
@@ -152,15 +152,12 @@ where
 {
     assert_eq!(input.len(), 1600);
 
-    let mut a = input
-        .chunks(64)
-        .map(UInt64::from_bits)
-        .collect::<Vec<_>>();
+    let mut a = input.chunks(64).map(UInt64::from_bits).collect::<Vec<_>>();
 
-    for i in 0..24 {
+    for (i, round_constant) in ROUND_CONSTANTS.iter().enumerate() {
         let cs = &mut cs.namespace(|| format!("keccack round {}", i));
 
-        a = round_1600(cs, a, ROUND_CONSTANTS[i])?;
+        a = round_1600(cs, a, *round_constant)?;
     }
 
     let a_new = a.into_iter().flat_map(|e| e.into_bits()).collect();
@@ -176,6 +173,7 @@ where
     assert_eq!(input.len(), 512);
 
     let mut m = Vec::new();
+    #[allow(clippy::needless_range_loop)]
     for i in 0..1600 {
         if i < 512 {
             m.push(input[i].clone());
@@ -209,8 +207,8 @@ where
     // while output is requested
     //   Z = Z || S[x,y],                        for (x,y) such that x+5*y < r/w
     //   S = Keccak-f[r+c](S)
-    for i in 0..256 {
-        z.push(m[i].clone());
+    for item in m[..256].iter() {
+        z.push(item.clone());
     }
 
     Ok(z)
