@@ -6,6 +6,7 @@ authors = ["Saravanan Vijayakumaran <sarva@ee.iitb.ac.in>"]
 license = "MIT OR Apache-2.0"
 description = "Nonnative arithmetic library using bellpepper inspired by the emulated package in Gnark"
 documentation = "https://docs.rs/bellpepper-emulated"
+rust-version = "1.66"
 homepage.workspace = true
 repository.workspace = true
 
@@ -17,5 +18,5 @@ num-bigint = { version = "0.4.3", features = ["rand"] }
 num-traits = "0.2.15"
 
 [dev-dependencies]
-pasta_curves = "0.5.1"
-rand = "0.8.5"
+pasta_curves = { workspace = true }
+rand = { workspace = true }

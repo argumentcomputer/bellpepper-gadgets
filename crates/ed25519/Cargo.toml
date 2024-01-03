@@ -8,7 +8,7 @@ description = "Ed25519 curve operations using the bellperson-emulated library"
 documentation = "https://docs.rs/bellpepper-ed25519"
 homepage.workspace = true
 repository.workspace = true
-
+rust-version = "1.66"
 
 [dependencies]
 bellpepper-core = { workspace = true }
@@ -18,7 +18,11 @@ bellpepper-emulated = { version = "0.2.0", path = "../emulated" }
 num-bigint = { version = "0.4.3", features = ["rand"] }
 num-integer = "0.1.45"
 num-traits = "0.2.15"
-rand = "0.8.5"
+rand = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# see https://github.com/rust-random/rand/pull/948
+getrandom = { version = "0.2.0", default-features = false, features = ["js"] }
 
 [dev-dependencies]
-pasta_curves = "0.5.1"
+pasta_curves = { workspace = true }
