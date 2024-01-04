@@ -86,6 +86,27 @@ where
     }
 }
 
+/// FIXME: gross function, CLEANUP
+pub fn bigint_to_fpelem(val: &BigInt) -> Option<BlsFp> {
+    use num_traits::Zero;
+    if val >= &Bls12381FpParams::modulus() {
+        return None;
+    }
+    let res = BigInt::to_bytes_be(val);
+    // eprintln!("{:#?}", res);
+    // eprintln!("{:#?}", res.1.len());
+    if res.0 != Sign::Plus {
+        assert!(val == &BigInt::zero());
+    }
+    let mut bytes: Vec<u8> = res.1;
+    assert!(bytes.len() <= 48);
+    while bytes.len() < 48 {
+        bytes.insert(0, 0);
+    }
+    let bytes: [u8; 48] = bytes.try_into().unwrap();
+    Some(BlsFp::from_bytes(&bytes).unwrap())
+}
+
 pub fn emulated_to_native<F>(value: &Bls12381Fp<F>) -> BlsFp
 where
     F: PrimeField + PrimeFieldBits,
@@ -93,17 +114,7 @@ where
     use std::ops::Rem;
     let p = &Bls12381FpParams::modulus();
     let val = BigInt::from(value).rem(p);
-    let res = BigInt::to_bytes_be(&val);
-    // eprintln!("{:#?}", res);
-    // eprintln!("{:#?}", res.1.len());
-    assert_eq!(res.0, Sign::Plus);
-    let mut bytes: Vec<u8> = res.1;
-    assert!(bytes.len() <= 48);
-    while bytes.len() < 48 {
-        bytes.insert(0, 0);
-    }
-    let bytes: [u8; 48] = bytes.try_into().unwrap();
-    BlsFp::from_bytes(&bytes).unwrap() // FIXME: gross
+    bigint_to_fpelem(&val).unwrap()
 }
 
 impl<F> From<&AllocatedFieldElement<F>> for BlsFp
@@ -116,6 +127,12 @@ where
 }
 
 impl<F: PrimeField + PrimeFieldBits> AllocatedFieldElement<F> {
+    pub fn from_dec(val: &str) -> Result<Self, SynthesisError> {
+        let bigint = BigInt::parse_bytes(val.as_bytes(), 10).unwrap(); // FIXME: no unwraps
+        let elm = bigint_to_fpelem(&bigint).unwrap();
+        Ok(Self::from(&elm))
+    }
+
     pub fn zero() -> Self {
         Self(Bls12381Fp::zero())
     }
@@ -369,7 +386,7 @@ mod tests {
     fn test_random_mul_const() {
         let mut rng = rand::thread_rng();
         let a = BlsFp::random(&mut rng);
-        // the product can't overflow -- FIXME: can technically fail if the random is unlucky enough?
+        // the product can't overflow so use a small constant -- FIXME: could theoretically fail if the random is unlucky enough?
         let b = BlsFp::from_bytes(&[
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x7f,

@@ -4,7 +4,7 @@ use bls12_381::fp2::Fp2 as BlsFp2;
 use bls12_381::fp6::Fp6 as BlsFp6;
 use ff::{PrimeField, PrimeFieldBits};
 
-use crate::e2::AllocatedE2Element;
+use super::e2::AllocatedE2Element;
 
 #[derive(Clone)]
 pub struct AllocatedE6Element<F: PrimeField + PrimeFieldBits> {
