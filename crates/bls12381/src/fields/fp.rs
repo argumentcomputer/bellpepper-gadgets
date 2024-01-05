@@ -219,6 +219,30 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedFieldElement<F> {
         Ok(Self(res))
     }
 
+    pub fn div_unchecked<CS>(&self, cs: &mut CS, value: &Self) -> Result<Self, SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        let res = self
+            .0
+            .divide(&mut cs.namespace(|| "compute a div b"), &value.0)?;
+        Ok(Self(res))
+    }
+
+    pub fn square<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        self.mul(&mut cs.namespace(|| "x.square()"), &self)
+    }
+
+    pub fn double<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        self.add(&mut cs.namespace(|| "x.double()"), &self)
+    }
+
     pub fn mul_const<CS>(&self, cs: &mut CS, value: &BigInt) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,

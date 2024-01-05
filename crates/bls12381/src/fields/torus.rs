@@ -81,11 +81,11 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
 
     fn decompress_native(val: &BlsFp6) -> Result<BlsFp12, SynthesisError> {
         let n = BlsFp12 {
-            c0: val.clone(),
+            c0: *val,
             c1: BlsFp6::one(),
         };
         let d = BlsFp12 {
-            c0: val.clone(),
+            c0: *val,
             c1: -BlsFp6::one(),
         };
         if d.is_zero().into() {
@@ -95,10 +95,6 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
         let div = d.invert().unwrap();
 
         let x = n * div;
-        eprintln!(
-            "====\nn = {:?}\nd = {:?}\ndiv = {:?}\nx = {:?}\n====",
-            &n, &d, &div, &x
-        );
         Ok(x)
     }
 
@@ -234,7 +230,7 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
         // CLEANUP: this is kinda gross, can we remove this option usage in the loop?
         let mut x = Some(self);
         let mut tmp = None;
-        let mut cs = cs.namespace(|| format!("compute x.n_square({n}"));
+        let mut cs = cs.namespace(|| format!("compute x.n_square({n})"));
         for _ in 0..n {
             tmp = Some(x.unwrap().square(&mut cs.namespace(|| "x <- x.square()"))?);
             x = tmp.as_ref();
