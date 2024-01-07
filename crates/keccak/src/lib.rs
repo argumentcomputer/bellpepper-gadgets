@@ -213,3 +213,53 @@ where
 
     Ok(z)
 }
+
+pub fn sha3<E, CS>(cs: CS, input: &[Boolean]) -> Result<Vec<Boolean>, SynthesisError>
+where
+    E: PrimeField,
+    CS: ConstraintSystem<E>,
+{
+    assert_eq!(input.len(), 512);
+
+    let mut m = Vec::new();
+    #[allow(clippy::needless_range_loop)]
+    for i in 0..1600 {
+        if i < 512 {
+            m.push(input[i].clone());
+        } else {
+            m.push(Boolean::Constant(false));
+        }
+    }
+
+    // # Padding
+    // d = 0x06
+    // P = Mbytes || d || 0x00 || … || 0x00
+    // P = P xor (0x00 || … || 0x00 || 0x80)
+    //0x0600 ... 0080
+    m[513] = Boolean::Constant(true);
+    m[514] = Boolean::Constant(true);
+    m[1087] = Boolean::Constant(true);
+
+    // # Initialization
+    // S[x,y] = 0,                               for (x,y) in (0…4,0…4)
+
+    // # Absorbing phase
+    // for each block Pi in P
+    //   S[x,y] = S[x,y] xor Pi[x+5*y],          for (x,y) such that x+5*y < r/w
+    //   S = Keccak-f[r+c](S)
+
+    let m = keccak_f_1600(cs, m)?;
+
+    // # Squeezing phase
+    // Z = empty string
+    let mut z = Vec::new();
+
+    // while output is requested
+    //   Z = Z || S[x,y],                        for (x,y) such that x+5*y < r/w
+    //   S = Keccak-f[r+c](S)
+    for item in m[..256].iter() {
+        z.push(item.clone());
+    }
+
+    Ok(z)
+}

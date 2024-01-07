@@ -5,11 +5,12 @@ use bls12_381::Bls12;
 
 use bitvec::prelude::*;
 use pairing::Engine;
-use tiny_keccak::{Hasher, Keccak};
+use tiny_keccak::{Hasher, Keccak, Sha3};
 
 use proptest::prelude::*;
 
 use bellpepper_keccak::keccak256 as keccak_gadget;
+use bellpepper_keccak::sha3 as sha3_gadget;
 use libsecp256k1::{PublicKey, SecretKey};
 
 fn keccak256(preimage: &[u8]) -> [u8; 32] {
@@ -19,6 +20,16 @@ fn keccak256(preimage: &[u8]) -> [u8; 32] {
 
     let mut hash = [0u8; 32];
     keccak.finalize(&mut hash);
+    hash
+}
+
+fn sha3(preimage: &[u8]) -> [u8; 32] {
+    let mut sha3 = Sha3::v256();
+
+    sha3.update(preimage);
+
+    let mut hash = [0u8; 32];
+    sha3.finalize(&mut hash);
     hash
 }
 
@@ -47,6 +58,23 @@ proptest! {
 
         let cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
         let result = keccak_gadget(cs, &preimage).unwrap();
+
+        let result = bits_to_bytevec(&result);
+
+        assert_eq!(hex::encode(result), hex::encode(expected));
+    }
+}
+
+proptest! {
+    #[test]
+    fn test_sha3(preimage in "[0-9a-f]{128}") {
+        let preimage = hex::decode(preimage).unwrap();
+        let expected = sha3(&preimage);
+
+        let preimage = bytes_to_bitvec(&preimage);
+
+        let cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
+        let result = sha3_gadget(cs, &preimage).unwrap();
 
         let result = bits_to_bytevec(&result);
 
