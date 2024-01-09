@@ -219,6 +219,14 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedFieldElement<F> {
         Ok(Self(res))
     }
 
+    pub fn inverse<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        let res = self.0.inverse(&mut cs.namespace(|| "x.inverse()"))?;
+        Ok(Self(res))
+    }
+
     pub fn div_unchecked<CS>(&self, cs: &mut CS, value: &Self) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -522,7 +530,7 @@ mod tests {
         let z_alloc = z_alloc.unwrap();
 
         let eq_alloc = AllocatedFieldElement::assert_is_equal(
-            &mut cs.namespace(|| "a-a = z"),
+            &mut cs.namespace(|| "a-a = 0"),
             &res_alloc,
             &z_alloc,
         );

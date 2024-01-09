@@ -231,8 +231,11 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
         let mut x = Some(self);
         let mut tmp = None;
         let mut cs = cs.namespace(|| format!("compute x.n_square({n})"));
-        for _ in 0..n {
-            tmp = Some(x.unwrap().square(&mut cs.namespace(|| "x <- x.square()"))?);
+        for i in 0..n {
+            tmp = Some(
+                x.unwrap()
+                    .square(&mut cs.namespace(|| format!("x <- x.square() ({i})")))?,
+            );
             x = tmp.as_ref();
         }
 

@@ -9,8 +9,8 @@ use crate::fields::fp::AllocatedFieldElement;
 
 #[derive(Clone)]
 pub struct AllocatedG1Point<F: PrimeField + PrimeFieldBits> {
-    x: AllocatedFieldElement<F>,
-    y: AllocatedFieldElement<F>,
+    pub x: AllocatedFieldElement<F>,
+    pub y: AllocatedFieldElement<F>,
 }
 
 impl<F> From<&G1Affine> for AllocatedG1Point<F>
@@ -23,6 +23,14 @@ where
         Self { x, y }
     }
 }
+
+// TODO: missing
+// assert_is_on_curve
+// mul_scalar (generic, glv, both?) glv uses eigenvalue and thirdroot
+// add_unified (also comment on add preconditions)
+// base_mul_scalar (uses the gm values)
+// joint_scalar_mul (and base variant)
+// multi_scalar_mul
 
 impl<F> From<&AllocatedG1Point<F>> for G1Affine
 where

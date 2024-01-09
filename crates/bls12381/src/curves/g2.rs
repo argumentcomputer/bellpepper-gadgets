@@ -10,8 +10,8 @@ use crate::fields::e2::AllocatedE2Element;
 
 #[derive(Clone)]
 pub struct AllocatedG2Point<F: PrimeField + PrimeFieldBits> {
-    x: AllocatedE2Element<F>,
-    y: AllocatedE2Element<F>,
+    pub x: AllocatedE2Element<F>,
+    pub y: AllocatedE2Element<F>,
 }
 
 impl<F> From<&G2Affine> for AllocatedG2Point<F>

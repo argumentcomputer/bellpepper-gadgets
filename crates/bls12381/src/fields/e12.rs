@@ -1,6 +1,7 @@
 use bellpepper_core::boolean::{AllocatedBit, Boolean};
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use bls12_381::fp12::Fp12 as BlsFp12;
+use bls12_381::fp2::Fp2 as BlsFp2;
 use bls12_381::fp6::Fp6 as BlsFp6;
 use ff::{PrimeField, PrimeFieldBits};
 
@@ -254,7 +255,11 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedE12Element<F> {
         let zc0b0 = AllocatedE2Element::<F>::non_residue();
         let zc0b0 = zc0b0.add(&mut cs.namespace(|| "zc0b0 <- non_residue() + x0"), &x0)?;
 
-        // TODO: is this usage without calling alloc_element correct?
+        // FIXME: is this usage ith calling alloc_element necessary?
+        let c1b0 = AllocatedE2Element::<F>::alloc_element(
+            &mut cs.namespace(|| "c1b0 <- 0"),
+            &BlsFp2::zero(),
+        )?;
         Ok(AllocatedE12Element {
             c0: AllocatedE6Element {
                 b0: zc0b0,
@@ -262,7 +267,7 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedE12Element<F> {
                 b2: x1,
             },
             c1: AllocatedE6Element {
-                b0: AllocatedE2Element::<F>::zero(),
+                b0: c1b0,
                 b1: x04,
                 b2: x14,
             },
