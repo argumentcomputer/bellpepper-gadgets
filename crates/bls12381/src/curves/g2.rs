@@ -560,6 +560,7 @@ mod tests {
 
     #[test]
     fn test_random_mul_by_seed() {
+        // NOTE: this test currently takes a few minutes to run, might be good to disable by default
         use pasta_curves::group::Group;
 
         let mut rng = rand::thread_rng();

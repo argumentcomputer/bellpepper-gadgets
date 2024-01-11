@@ -107,6 +107,7 @@ impl<F: PrimeField + PrimeFieldBits> EmulatedBls12381Pairing<F> {
         res.v0[n - 2] = tmp0;
         res.v1[n - 2] = tmp1;
         let mut i = n - 3;
+        let mut j = 1;
         while i >= 1 {
             if LOOP_COUNTER[i] == 0 {
                 let (tmpq, tmp0) = Self::double_step(
@@ -127,10 +128,15 @@ impl<F: PrimeField + PrimeFieldBits> EmulatedBls12381Pairing<F> {
                 res.v0[i] = tmp0;
                 res.v1[i] = tmp1;
             }
-            // FIXME: do we need to do it in every loop iter?
-            q_acc = q_acc.reduce(&mut cs.namespace(|| format!("q_acc <- q_acc.reduce() ({i})")))?;
+
+            // FIXME: is this *really* necessary? it's very gross
+            if j % 16 == 0 {
+                q_acc =
+                    q_acc.reduce(&mut cs.namespace(|| format!("q_acc <- q_acc.reduce() ({i})")))?;
+            }
 
             i -= 1;
+            j += 1;
         }
         let tmp0 = Self::tangent_compute(cs, &q_acc)?;
         res.v0[0] = tmp0;
@@ -637,6 +643,7 @@ mod tests {
 
     #[test]
     fn test_random_pairing() {
+        // NOTE: this test currently takes ~100GB of ram and a few minutes to run, might be good to disable by default
         use pasta_curves::group::Group;
 
         let mut rng = rand::thread_rng();

@@ -195,7 +195,7 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedFieldElement<F> {
     {
         let res = self
             .0
-            .add(&mut cs.namespace(|| "compute a + b"), &value.0)?;
+            .add(&mut cs.namespace(|| "compute a add b"), &value.0)?;
         Ok(Self(res))
     }
 
@@ -205,7 +205,7 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedFieldElement<F> {
     {
         let res = self
             .0
-            .sub(&mut cs.namespace(|| "compute a - b"), &value.0)?;
+            .sub(&mut cs.namespace(|| "compute a sub b"), &value.0)?;
         Ok(Self(res))
     }
 
@@ -215,7 +215,7 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedFieldElement<F> {
     {
         let res = self
             .0
-            .mul(&mut cs.namespace(|| "compute a * b"), &value.0)?;
+            .mul(&mut cs.namespace(|| "compute a mul b"), &value.0)?;
         Ok(Self(res))
     }
 

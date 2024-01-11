@@ -2,9 +2,9 @@
 name = "bellpepper-bls12381"
 version = "0.2.0"
 edition = "2021"
-authors = [""]
+authors = ["Gustavo <gustavo@wrinqle.xyz>"]
 license = "MIT OR Apache-2.0"
-description = ""
+description = "Bellpepper circuit implementation of BLS12-381 pairing and curve operations"
 documentation = ""
 homepage.workspace = true
 repository.workspace = true
@@ -19,7 +19,7 @@ num-bigint = { version = "0.4.3", features = ["rand"] }
 num-integer = "0.1.45"
 num-traits = "0.2.15"
 rand = "0.8.5"
-bls12_381 = "0.8.0" # FIXME: use slightly patched crate here instead of patching in the workspace's Cargo.toml
+bls12_381 = { git = "https://github.com/wrinqle/bls12_381" }
 
 [dev-dependencies]
 pasta_curves = "0.5.1"
