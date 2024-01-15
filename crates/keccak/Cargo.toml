@@ -15,10 +15,10 @@ ff = { workspace = true }
 bellpepper-core = { workspace = true }
 
 [dev-dependencies]
-bitvec = "0.17.4"
+bitvec = "1.0.1"
 bls12_381 = "0.8.0"
 libsecp256k1 = "0.7"
 pairing = "0.23.0"
-proptest = "0.9.6"
+proptest = "1.4.0"
 tiny-keccak = { version = "2.0", features = ["keccak","sha3"] }
 hex = "0.4.3"
