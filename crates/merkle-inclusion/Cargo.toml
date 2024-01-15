@@ -12,3 +12,11 @@ ff = { workspace = true }
 bellpepper-core = { workspace = true }
 bellpepper = { workspace = true }
 bellpepper-keccak = { path="../keccak", version = "0.1.0" }
+
+[dev-dependencies]
+bitvec = "0.17.4"
+bls12_381 = "0.8.0"
+hex = "0.4.3"
+pairing = "0.23.0"
+proptest = "0.9.6"
+tiny-keccak = { version = "2.0", features = ["sha3"] }

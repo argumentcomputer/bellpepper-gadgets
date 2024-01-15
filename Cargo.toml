@@ -7,7 +7,7 @@ members = [
     "crates/sha512",
     "crates/sha1",
     "crates/keccak",
-    "crates/merkle-aptos"
+    "crates/merkle-inclusion"
 ]
 
 [workspace.package]
