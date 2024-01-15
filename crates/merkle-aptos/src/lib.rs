@@ -1,6 +1,6 @@
-use bellpepper::gadgets::sha256::sha256;
 use bellpepper_core::boolean::Boolean;
 use bellpepper_core::{ConstraintSystem, SynthesisError};
+use bellpepper_keccak::sha3;
 use ff::PrimeField;
 
 // HashValue represents the digest type output from the hash function
@@ -149,7 +149,7 @@ where
     E: PrimeField,
     CS: ConstraintSystem<E>,
 {
-    sha256(cs.namespace(|| "hash combine"), &[hash1, hash2].concat())
+    sha3(cs.namespace(|| "hash combine"), &[hash1, hash2].concat())
 }
 
 fn hash_equality<E, CS>(

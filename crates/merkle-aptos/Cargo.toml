@@ -11,3 +11,4 @@ repository.workspace = true
 ff = { workspace = true }
 bellpepper-core = { workspace = true }
 bellpepper = { workspace = true }
+bellpepper-keccak = { path="../keccak", version = "0.1.0" }
