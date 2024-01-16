@@ -4,12 +4,13 @@ use bellpepper_keccak::sha3;
 use ff::PrimeField;
 
 // HashValue represents the digest type output from the hash function
-type HashValue = Vec<Boolean>;
+pub type HashValue = Vec<Boolean>;
+pub type Key = Vec<Boolean>;
 const HASH_LENGTH: usize = 32 * 8;
 
 // Leaf structure represents a leaf node in the Jellyfish Merkle Tree
-struct Leaf {
-    key: HashValue,
+pub struct Leaf {
+    key: Key,
     value_hash: HashValue,
 }
 
@@ -27,20 +28,20 @@ impl TryFrom<Vec<Boolean>> for Leaf {
     type Error = SynthesisError;
 
     fn try_from(value: Vec<Boolean>) -> Result<Self, Self::Error> {
-        if value.len() == HASH_LENGTH * 2 {
+        if value.len() != HASH_LENGTH * 2 {
             // TODO better error
             return Err(SynthesisError::Unsatisfiable);
         }
 
         Ok(Self {
-            key: value[0..HASH_LENGTH - 1].to_owned(),
+            key: value[0..HASH_LENGTH].to_owned(),
             value_hash: value[HASH_LENGTH..].to_owned(),
         })
     }
 }
 
 // Proof structure contains a leaf node and sibling hashes for proof verification
-struct Proof {
+pub struct Proof {
     leaf: Leaf,
     siblings: Vec<HashValue>,
 }
@@ -49,16 +50,19 @@ impl TryFrom<Vec<Boolean>> for Proof {
     type Error = SynthesisError;
 
     fn try_from(value: Vec<Boolean>) -> Result<Self, Self::Error> {
-        if value.len() >= HASH_LENGTH * 3 || value.len() % HASH_LENGTH == 0 {
+        if value.len() <= HASH_LENGTH * 3 || !(value.len() % HASH_LENGTH == 0) {
             // TODO better error
             return Err(SynthesisError::Unsatisfiable);
         }
 
         Ok(Self {
-            leaf: Leaf::try_from(value[0..HASH_LENGTH * 2 - 1].to_owned())?,
+            leaf: Leaf::try_from(value[0..HASH_LENGTH * 2].to_owned())?,
             siblings: value[HASH_LENGTH * 2..]
                 .chunks(HASH_LENGTH)
-                .map(|chunk| chunk.to_vec())
+                .map(|chunk| {
+                    let a = chunk.to_vec();
+                    return a;
+                })
                 .collect(),
         })
     }
@@ -83,7 +87,7 @@ where
     assert!(input.len() >= HASH_LENGTH * 4);
     assert_eq!(input.len() % HASH_LENGTH, 0);
 
-    let expected_root = input[0..HASH_LENGTH - 1].to_vec();
+    let expected_root = input[0..HASH_LENGTH].to_vec();
     let proof = Proof::try_from(input[HASH_LENGTH..].to_vec())?;
 
     //Assert that we do not have more siblings than the length of our hash (otherwise cannot know which path to go)
@@ -94,7 +98,7 @@ where
         HASH_LENGTH,
         proof.siblings.len(),
     );
-
+    //assert_eq!(expected_root, );
     // Reconstruct the root hash from the leaf and sibling hashes
     let (cs, actual_root_hash) = construct_actual_hash(
         cs,
