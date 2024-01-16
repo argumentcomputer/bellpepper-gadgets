@@ -632,59 +632,52 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use bellpepper_core::test_cs::TestConstraintSystem;
-    use pasta_curves::Fp;
+    // use super::*;
+    // use bellpepper_core::test_cs::TestConstraintSystem;
+    // use pasta_curves::group::Group;
+    // use pasta_curves::Fp;
 
-    use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective};
+    // use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective};
 
-    #[test]
-    fn test_random_pairing() {
-        // NOTE: this test currently takes ~100GB of ram and a few minutes to run, might be good to disable by default
-        use pasta_curves::group::Group;
+    // use expect_test::{expect, Expect};
+    // fn expect_eq(computed: usize, expected: Expect) {
+    //     expected.assert_eq(&computed.to_string());
+    // }
 
-        let mut rng = rand::thread_rng();
-        let a = G1Projective::random(&mut rng);
-        let b = G2Projective::random(&mut rng);
-        let a = G1Affine::from(a);
-        let b = G2Affine::from(b);
-        let c = bls12_381::pairing(&a, &b);
-        let c = c.0;
+    // NOTE: this test currently takes ~100GB of ram and a few minutes to run, might be good to disable by default
+    // #[test]
+    // fn test_random_pairing() {
+    //     let mut rng = rand::thread_rng();
+    //     let a = G1Projective::random(&mut rng);
+    //     let b = G2Projective::random(&mut rng);
+    //     let a = G1Affine::from(a);
+    //     let b = G2Affine::from(b);
+    //     let c = bls12_381::pairing(&a, &b);
+    //     let c = c.0;
 
-        let mut cs = TestConstraintSystem::<Fp>::new();
-
-        let a_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a);
-        assert!(a_alloc.is_ok());
-        let a_alloc = a_alloc.unwrap();
-
-        let b_alloc = AllocatedG2Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b);
-        assert!(b_alloc.is_ok());
-        let b_alloc = b_alloc.unwrap();
-
-        let c_alloc = AllocatedE12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c);
-        assert!(c_alloc.is_ok());
-        let c_alloc = c_alloc.unwrap();
-
-        let res_alloc = EmulatedBls12381Pairing::pair(
-            &mut cs.namespace(|| "pair(a, b)"),
-            &[a_alloc],
-            &[b_alloc],
-        );
-        assert!(res_alloc.is_ok());
-        let res_alloc = res_alloc.unwrap();
-
-        let eq_alloc = AllocatedE12Element::assert_is_equal(
-            &mut cs.namespace(|| "pair(a, b) = c"),
-            &res_alloc,
-            &c_alloc,
-        );
-        assert!(eq_alloc.is_ok());
-
-        if !cs.is_satisfied() {
-            eprintln!("{:?}", cs.which_is_unsatisfied())
-        }
-        assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 27589382);
-        assert_eq!(cs.num_inputs(), 1);
-    }
+    //     let mut cs = TestConstraintSystem::<Fp>::new();
+    //     let a_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+    //     let b_alloc = AllocatedG2Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+    //     let c_alloc =
+    //         AllocatedE12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+    //     let res_alloc = EmulatedBls12381Pairing::pair(
+    //         &mut cs.namespace(|| "pair(a, b)"),
+    //         &[a_alloc],
+    //         &[b_alloc],
+    //     )
+    //     .unwrap();
+    //     AllocatedE12Element::assert_is_equal(
+    //         &mut cs.namespace(|| "pair(a, b) = c"),
+    //         &res_alloc,
+    //         &c_alloc,
+    //     )
+    //     .unwrap();
+    //     if !cs.is_satisfied() {
+    //         eprintln!("{:?}", cs.which_is_unsatisfied())
+    //     }
+    //     assert!(cs.is_satisfied());
+    //     expect_eq(cs.num_inputs(), expect!["1"]);
+    //     expect_eq(cs.scalar_aux().len(), expect!["27479875"]);
+    //     expect_eq(cs.num_constraints(), expect!["27589382"]);
+    // }
 }

@@ -282,16 +282,18 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedG1Point<F> {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Neg;
-
     use super::*;
     use bellpepper_core::test_cs::TestConstraintSystem;
+    use pasta_curves::group::Group;
     use pasta_curves::Fp;
+
+    use expect_test::{expect, Expect};
+    fn expect_eq(computed: usize, expected: Expect) {
+        expected.assert_eq(&computed.to_string());
+    }
 
     #[test]
     fn test_random_add() {
-        use pasta_curves::group::Group;
-
         let mut rng = rand::thread_rng();
         let a = G1Projective::random(&mut rng);
         let b = G1Projective::random(&mut rng);
@@ -301,81 +303,50 @@ mod tests {
         let c = G1Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-
-        let a_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a);
-        assert!(a_alloc.is_ok());
-        let a_alloc = a_alloc.unwrap();
-
-        let b_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b);
-        assert!(b_alloc.is_ok());
-        let b_alloc = b_alloc.unwrap();
-
-        let c_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c);
-        assert!(c_alloc.is_ok());
-        let c_alloc = c_alloc.unwrap();
-
-        let res_alloc = a_alloc.add(&mut cs.namespace(|| "a+b"), &b_alloc);
-        assert!(res_alloc.is_ok());
-        let res_alloc = res_alloc.unwrap();
-
-        let eq_alloc = AllocatedG1Point::assert_is_equal(
-            &mut cs.namespace(|| "a+b = c"),
-            &res_alloc,
-            &c_alloc,
-        );
-        assert!(eq_alloc.is_ok());
-
+        let a_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let b_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+        let c_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = a_alloc.add(&mut cs.namespace(|| "a+b"), &b_alloc).unwrap();
+        AllocatedG1Point::assert_is_equal(&mut cs.namespace(|| "a+b = c"), &res_alloc, &c_alloc)
+            .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 5051);
-        assert_eq!(cs.num_inputs(), 1);
+        expect_eq(cs.num_inputs(), expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), expect!["5063"]);
+        expect_eq(cs.num_constraints(), expect!["5051"]);
     }
 
     #[test]
     fn test_random_neg() {
-        use pasta_curves::group::Group;
-
         let mut rng = rand::thread_rng();
         let a = G1Projective::random(&mut rng);
-        let c = a.neg();
+        let c = -a;
         let a = G1Affine::from(a);
         let c = G1Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-
-        let a_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a);
-        assert!(a_alloc.is_ok());
-        let a_alloc = a_alloc.unwrap();
-
-        let c_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c);
-        assert!(c_alloc.is_ok());
-        let c_alloc = c_alloc.unwrap();
-
-        let res_alloc = a_alloc.neg(&mut cs.namespace(|| "a.neg()"));
-        assert!(res_alloc.is_ok());
-        let res_alloc = res_alloc.unwrap();
-
-        let eq_alloc = AllocatedG1Point::assert_is_equal(
+        let a_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = a_alloc.neg(&mut cs.namespace(|| "a.neg()")).unwrap();
+        AllocatedG1Point::assert_is_equal(
             &mut cs.namespace(|| "a.neg() = c"),
             &res_alloc,
             &c_alloc,
-        );
-        assert!(eq_alloc.is_ok());
-
+        )
+        .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 524);
-        assert_eq!(cs.num_inputs(), 1);
+        expect_eq(cs.num_inputs(), expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), expect!["542"]);
+        expect_eq(cs.num_constraints(), expect!["524"]);
     }
 
     #[test]
     fn test_random_triple() {
-        use pasta_curves::group::Group;
-
         let mut rng = rand::thread_rng();
         let a = G1Projective::random(&mut rng);
         let c = a + a.double();
@@ -383,38 +354,26 @@ mod tests {
         let c = G1Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-
-        let a_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a);
-        assert!(a_alloc.is_ok());
-        let a_alloc = a_alloc.unwrap();
-
-        let c_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c);
-        assert!(c_alloc.is_ok());
-        let c_alloc = c_alloc.unwrap();
-
-        let res_alloc = a_alloc.triple(&mut cs.namespace(|| "a.triple()"));
-        assert!(res_alloc.is_ok());
-        let res_alloc = res_alloc.unwrap();
-
-        let eq_alloc = AllocatedG1Point::assert_is_equal(
+        let a_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = a_alloc.triple(&mut cs.namespace(|| "a.triple()")).unwrap();
+        AllocatedG1Point::assert_is_equal(
             &mut cs.namespace(|| "a.triple() = c"),
             &res_alloc,
             &c_alloc,
-        );
-        assert!(eq_alloc.is_ok());
-
+        )
+        .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 8912);
-        assert_eq!(cs.num_inputs(), 1);
+        expect_eq(cs.num_inputs(), expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), expect!["8894"]);
+        expect_eq(cs.num_constraints(), expect!["8912"]);
     }
 
     #[test]
     fn test_random_double() {
-        use pasta_curves::group::Group;
-
         let mut rng = rand::thread_rng();
         let a = G1Projective::random(&mut rng);
         let c = a.double();
@@ -422,38 +381,26 @@ mod tests {
         let c = G1Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-
-        let a_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a);
-        assert!(a_alloc.is_ok());
-        let a_alloc = a_alloc.unwrap();
-
-        let c_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c);
-        assert!(c_alloc.is_ok());
-        let c_alloc = c_alloc.unwrap();
-
-        let res_alloc = a_alloc.double(&mut cs.namespace(|| "a.double()"));
-        assert!(res_alloc.is_ok());
-        let res_alloc = res_alloc.unwrap();
-
-        let eq_alloc = AllocatedG1Point::assert_is_equal(
+        let a_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = a_alloc.double(&mut cs.namespace(|| "a.double()")).unwrap();
+        AllocatedG1Point::assert_is_equal(
             &mut cs.namespace(|| "a.double() = c"),
             &res_alloc,
             &c_alloc,
-        );
-        assert!(eq_alloc.is_ok());
-
+        )
+        .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 5068);
-        assert_eq!(cs.num_inputs(), 1);
+        expect_eq(cs.num_inputs(), expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), expect!["5068"]);
+        expect_eq(cs.num_constraints(), expect!["5068"]);
     }
 
     #[test]
     fn test_random_sub() {
-        use pasta_curves::group::Group;
-
         let mut rng = rand::thread_rng();
         let a = G1Projective::random(&mut rng);
         let b = G1Projective::random(&mut rng);
@@ -463,42 +410,23 @@ mod tests {
         let c = G1Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-
-        let a_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a);
-        assert!(a_alloc.is_ok());
-        let a_alloc = a_alloc.unwrap();
-
-        let b_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b);
-        assert!(b_alloc.is_ok());
-        let b_alloc = b_alloc.unwrap();
-
-        let c_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c);
-        assert!(c_alloc.is_ok());
-        let c_alloc = c_alloc.unwrap();
-
-        let res_alloc = a_alloc.sub(&mut cs.namespace(|| "a-b"), &b_alloc);
-        assert!(res_alloc.is_ok());
-        let res_alloc = res_alloc.unwrap();
-
-        let eq_alloc = AllocatedG1Point::assert_is_equal(
-            &mut cs.namespace(|| "a-b = c"),
-            &res_alloc,
-            &c_alloc,
-        );
-        assert!(eq_alloc.is_ok());
-
+        let a_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let b_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+        let c_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = a_alloc.sub(&mut cs.namespace(|| "a-b"), &b_alloc).unwrap();
+        AllocatedG1Point::assert_is_equal(&mut cs.namespace(|| "a-b = c"), &res_alloc, &c_alloc)
+            .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 5051);
-        assert_eq!(cs.num_inputs(), 1);
+        expect_eq(cs.num_inputs(), expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), expect!["5063"]);
+        expect_eq(cs.num_constraints(), expect!["5051"]);
     }
 
     #[test]
     fn test_random_double_and_add() {
-        use pasta_curves::group::Group;
-
         let mut rng = rand::thread_rng();
         let a = G1Projective::random(&mut rng);
         let b = G1Projective::random(&mut rng);
@@ -508,36 +436,24 @@ mod tests {
         let c = G1Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-
-        let a_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a);
-        assert!(a_alloc.is_ok());
-        let a_alloc = a_alloc.unwrap();
-
-        let b_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b);
-        assert!(b_alloc.is_ok());
-        let b_alloc = b_alloc.unwrap();
-
-        let c_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c);
-        assert!(c_alloc.is_ok());
-        let c_alloc = c_alloc.unwrap();
-
-        let res_alloc =
-            a_alloc.double_and_add(&mut cs.namespace(|| "a.double_and_add(b)"), &b_alloc);
-        assert!(res_alloc.is_ok());
-        let res_alloc = res_alloc.unwrap();
-
-        let eq_alloc = AllocatedG1Point::assert_is_equal(
+        let a_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let b_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+        let c_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = a_alloc
+            .double_and_add(&mut cs.namespace(|| "a.double_and_add(b)"), &b_alloc)
+            .unwrap();
+        AllocatedG1Point::assert_is_equal(
             &mut cs.namespace(|| "a.double_and_add(b) = c"),
             &res_alloc,
             &c_alloc,
-        );
-        assert!(eq_alloc.is_ok());
-
+        )
+        .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 8919);
-        assert_eq!(cs.num_inputs(), 1);
+        expect_eq(cs.num_inputs(), expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), expect!["8913"]);
+        expect_eq(cs.num_constraints(), expect!["8919"]);
     }
 }

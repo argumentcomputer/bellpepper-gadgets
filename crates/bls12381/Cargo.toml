@@ -22,4 +22,5 @@ rand = "0.8.5"
 bls12_381 = { git = "https://github.com/wrinqle/bls12_381" }
 
 [dev-dependencies]
+expect-test = "1.4.1"
 pasta_curves = "0.5.1"

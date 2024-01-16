@@ -460,44 +460,35 @@ mod tests {
 
     use bls12_381::fp::Fp as BlsFp;
 
+    use expect_test::{expect, Expect};
+    fn expect_eq(computed: usize, expected: Expect) {
+        expected.assert_eq(&computed.to_string());
+    }
+
     #[test]
     fn test_random_add() {
         let mut rng = rand::thread_rng();
         let a = BlsFp2::random(&mut rng);
         let b = BlsFp2::random(&mut rng);
-        let c = &a + &b;
+        let c = a + b;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-
-        let a_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a);
-        assert!(a_alloc.is_ok());
-        let a_alloc = a_alloc.unwrap();
-
-        let b_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b);
-        assert!(b_alloc.is_ok());
-        let b_alloc = b_alloc.unwrap();
-
-        let c_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c);
-        assert!(c_alloc.is_ok());
-        let c_alloc = c_alloc.unwrap();
-
-        let res_alloc = a_alloc.add(&mut cs.namespace(|| "a+b"), &b_alloc);
-        assert!(res_alloc.is_ok());
-        let res_alloc = res_alloc.unwrap();
-
-        let eq_alloc = AllocatedE2Element::assert_is_equal(
-            &mut cs.namespace(|| "a+b = c"),
-            &res_alloc,
-            &c_alloc,
-        );
-        assert!(eq_alloc.is_ok());
-
+        let a_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let b_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+        let c_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = a_alloc.add(&mut cs.namespace(|| "a+b"), &b_alloc).unwrap();
+        AllocatedE2Element::assert_is_equal(&mut cs.namespace(|| "a+b = c"), &res_alloc, &c_alloc)
+            .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 524);
-        assert_eq!(cs.num_inputs(), 1);
+        expect_eq(cs.num_inputs(), expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), expect!["554"]);
+        expect_eq(cs.num_constraints(), expect!["524"]);
     }
 
     #[test]
@@ -505,74 +496,48 @@ mod tests {
         let mut rng = rand::thread_rng();
         let a = BlsFp2::random(&mut rng);
         let b = BlsFp2::random(&mut rng);
-        let c = &a - &b;
+        let c = a - b;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-
-        let a_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a);
-        assert!(a_alloc.is_ok());
-        let a_alloc = a_alloc.unwrap();
-
-        let b_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b);
-        assert!(b_alloc.is_ok());
-        let b_alloc = b_alloc.unwrap();
-
-        let c_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c);
-        assert!(c_alloc.is_ok());
-        let c_alloc = c_alloc.unwrap();
-
-        let res_alloc = a_alloc.sub(&mut cs.namespace(|| "a-b"), &b_alloc);
-        assert!(res_alloc.is_ok());
-        let res_alloc = res_alloc.unwrap();
-
-        let eq_alloc = AllocatedE2Element::assert_is_equal(
-            &mut cs.namespace(|| "a-b = c"),
-            &res_alloc,
-            &c_alloc,
-        );
-        assert!(eq_alloc.is_ok());
-
+        let a_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let b_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+        let c_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = a_alloc.sub(&mut cs.namespace(|| "a-b"), &b_alloc).unwrap();
+        AllocatedE2Element::assert_is_equal(&mut cs.namespace(|| "a-b = c"), &res_alloc, &c_alloc)
+            .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 524);
-        assert_eq!(cs.num_inputs(), 1);
+        expect_eq(cs.num_inputs(), expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), expect!["554"]);
+        expect_eq(cs.num_constraints(), expect!["524"]);
     }
 
     #[test]
     fn test_random_double() {
         let mut rng = rand::thread_rng();
         let a = BlsFp2::random(&mut rng);
-        let c = &a + &a;
+        let c = a + a;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-
-        let a_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a);
-        assert!(a_alloc.is_ok());
-        let a_alloc = a_alloc.unwrap();
-
-        let c_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c);
-        assert!(c_alloc.is_ok());
-        let c_alloc = c_alloc.unwrap();
-
-        let res_alloc = a_alloc.double(&mut cs.namespace(|| "2a"));
-        assert!(res_alloc.is_ok());
-        let res_alloc = res_alloc.unwrap();
-
-        let eq_alloc = AllocatedE2Element::assert_is_equal(
-            &mut cs.namespace(|| "2a = c"),
-            &res_alloc,
-            &c_alloc,
-        );
-        assert!(eq_alloc.is_ok());
-
+        let a_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = a_alloc.double(&mut cs.namespace(|| "2a")).unwrap();
+        AllocatedE2Element::assert_is_equal(&mut cs.namespace(|| "2a = c"), &res_alloc, &c_alloc)
+            .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 524);
-        assert_eq!(cs.num_inputs(), 1);
+        expect_eq(cs.num_inputs(), expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), expect!["542"]);
+        expect_eq(cs.num_constraints(), expect!["524"]);
     }
 
     #[test]
@@ -580,109 +545,77 @@ mod tests {
         let mut rng = rand::thread_rng();
         let a = BlsFp2::random(&mut rng);
         let b = BlsFp2::random(&mut rng);
-        let c = &a * &b;
+        let c = a * b;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-
-        let a_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a);
-        assert!(a_alloc.is_ok());
-        let a_alloc = a_alloc.unwrap();
-
-        let b_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b);
-        assert!(b_alloc.is_ok());
-        let b_alloc = b_alloc.unwrap();
-
-        let c_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c);
-        assert!(c_alloc.is_ok());
-        let c_alloc = c_alloc.unwrap();
-
-        let res_alloc = a_alloc.mul(&mut cs.namespace(|| "a*b"), &b_alloc);
-        assert!(res_alloc.is_ok());
-        let res_alloc = res_alloc.unwrap();
-
-        let eq_alloc = AllocatedE2Element::assert_is_equal(
-            &mut cs.namespace(|| "a*b = c"),
-            &res_alloc,
-            &c_alloc,
-        );
-        assert!(eq_alloc.is_ok());
-
+        let a_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let b_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+        let c_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = a_alloc.mul(&mut cs.namespace(|| "a*b"), &b_alloc).unwrap();
+        AllocatedE2Element::assert_is_equal(&mut cs.namespace(|| "a*b = c"), &res_alloc, &c_alloc)
+            .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 1355);
-        assert_eq!(cs.num_inputs(), 1);
+        expect_eq(cs.num_inputs(), expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), expect!["1385"]);
+        expect_eq(cs.num_constraints(), expect!["1355"]);
     }
 
     #[test]
     fn test_random_mul_by_nonresidue() {
         let mut rng = rand::thread_rng();
         let a = BlsFp2::random(&mut rng);
-        let c = &a.mul_by_nonresidue();
+        let c = a.mul_by_nonresidue();
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-
-        let a_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a);
-        assert!(a_alloc.is_ok());
-        let a_alloc = a_alloc.unwrap();
-
-        let c_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c);
-        assert!(c_alloc.is_ok());
-        let c_alloc = c_alloc.unwrap();
-
-        let res_alloc = a_alloc.mul_by_nonresidue(&mut cs.namespace(|| "a*(1+u)"));
-        assert!(res_alloc.is_ok());
-        let res_alloc = res_alloc.unwrap();
-
-        let eq_alloc = AllocatedE2Element::assert_is_equal(
+        let a_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = a_alloc
+            .mul_by_nonresidue(&mut cs.namespace(|| "a*(1+u)"))
+            .unwrap();
+        AllocatedE2Element::assert_is_equal(
             &mut cs.namespace(|| "a*(1+u) = c"),
             &res_alloc,
             &c_alloc,
-        );
-        assert!(eq_alloc.is_ok());
-
+        )
+        .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 524);
-        assert_eq!(cs.num_inputs(), 1);
+        expect_eq(cs.num_inputs(), expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), expect!["542"]);
+        expect_eq(cs.num_constraints(), expect!["524"]);
     }
 
     #[test]
     fn test_random_square() {
         let mut rng = rand::thread_rng();
         let a = BlsFp2::random(&mut rng);
-        let c = &a * &a;
+        let c = a * a;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-
-        let a_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a);
-        assert!(a_alloc.is_ok());
-        let a_alloc = a_alloc.unwrap();
-
-        let c_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c);
-        assert!(c_alloc.is_ok());
-        let c_alloc = c_alloc.unwrap();
-
-        let res_alloc = a_alloc.square(&mut cs.namespace(|| "a²"));
-        assert!(res_alloc.is_ok());
-        let res_alloc = res_alloc.unwrap();
-
-        let eq_alloc = AllocatedE2Element::assert_is_equal(
-            &mut cs.namespace(|| "a² = c"),
-            &res_alloc,
-            &c_alloc,
-        );
-        assert!(eq_alloc.is_ok());
-
+        let a_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = a_alloc.square(&mut cs.namespace(|| "a²")).unwrap();
+        AllocatedE2Element::assert_is_equal(&mut cs.namespace(|| "a² = c"), &res_alloc, &c_alloc)
+            .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 1347);
-        assert_eq!(cs.num_inputs(), 1);
+        expect_eq(cs.num_inputs(), expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), expect!["1365"]);
+        expect_eq(cs.num_constraints(), expect!["1347"]);
     }
 
     #[test]
@@ -693,39 +626,31 @@ mod tests {
         while b.invert().is_none().into() {
             b = BlsFp2::random(&mut rng);
         }
-        let c = &a * &b.invert().unwrap();
+        let c = a * b.invert().unwrap();
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-
-        let a_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a);
-        assert!(a_alloc.is_ok());
-        let a_alloc = a_alloc.unwrap();
-
-        let b_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b);
-        assert!(b_alloc.is_ok());
-        let b_alloc = b_alloc.unwrap();
-
-        let c_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c);
-        assert!(c_alloc.is_ok());
-        let c_alloc = c_alloc.unwrap();
-
-        let res_alloc = a_alloc.div_unchecked(&mut cs.namespace(|| "a div b"), &b_alloc);
-        assert!(res_alloc.is_ok());
-        let res_alloc = res_alloc.unwrap();
-
-        let eq_alloc = AllocatedE2Element::assert_is_equal(
+        let a_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let b_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+        let c_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = a_alloc
+            .div_unchecked(&mut cs.namespace(|| "a div b"), &b_alloc)
+            .unwrap();
+        AllocatedE2Element::assert_is_equal(
             &mut cs.namespace(|| "a div b = c"),
             &res_alloc,
             &c_alloc,
-        );
-        assert!(eq_alloc.is_ok());
-
+        )
+        .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 1879);
-        assert_eq!(cs.num_inputs(), 1);
+        expect_eq(cs.num_inputs(), expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), expect!["1915"]);
+        expect_eq(cs.num_constraints(), expect!["1879"]);
     }
 
     #[test]
@@ -733,42 +658,26 @@ mod tests {
         let mut rng = rand::thread_rng();
         let a = BlsFp2::random(&mut rng);
         let b = BlsFp::random(&mut rng);
-        let c = &a * &b.into();
+        let c = a * BlsFp2::from(b);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-
-        let a_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a);
-        assert!(a_alloc.is_ok());
-        let a_alloc = a_alloc.unwrap();
-
+        let a_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
         let b_elem: AllocatedFieldElement<Fp> = (&b).into();
-        let b_alloc = b_elem
-            .0
-            .allocate_field_element_unchecked(&mut cs.namespace(|| "alloc b"));
-        assert!(b_alloc.is_ok());
-        let _b_alloc = b_alloc.unwrap();
-
-        let c_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c);
-        assert!(c_alloc.is_ok());
-        let c_alloc = c_alloc.unwrap();
-
-        let res_alloc = a_alloc.mul_element(&mut cs.namespace(|| "a*b (elm)"), &b_elem);
-        assert!(res_alloc.is_ok());
-        let res_alloc = res_alloc.unwrap();
-
-        let eq_alloc = AllocatedE2Element::assert_is_equal(
-            &mut cs.namespace(|| "a*b = c"),
-            &res_alloc,
-            &c_alloc,
-        );
-        assert!(eq_alloc.is_ok());
-
+        let c_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = a_alloc
+            .mul_element(&mut cs.namespace(|| "a*b (elm)"), &b_elem)
+            .unwrap();
+        AllocatedE2Element::assert_is_equal(&mut cs.namespace(|| "a*b = c"), &res_alloc, &c_alloc)
+            .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 1310);
-        assert_eq!(cs.num_inputs(), 1);
+        expect_eq(cs.num_inputs(), expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), expect!["1328"]);
+        expect_eq(cs.num_constraints(), expect!["1310"]);
     }
 
     #[test]
@@ -781,38 +690,27 @@ mod tests {
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x7f,
         ])
         .unwrap();
-        let c = &a * &b.into();
+        let c = a * BlsFp2::from(b);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-
-        let a_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a);
-        assert!(a_alloc.is_ok());
-        let a_alloc = a_alloc.unwrap();
-
+        let a_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
         let b_elem: AllocatedFieldElement<Fp> = (&b).into();
         let b_val: BigInt = (&b_elem.0).into();
-
-        let c_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c);
-        assert!(c_alloc.is_ok());
-        let c_alloc = c_alloc.unwrap();
-
-        let res_alloc = a_alloc.mul_const(&mut cs.namespace(|| "a*b (const)"), &b_val);
-        assert!(res_alloc.is_ok());
-        let res_alloc = res_alloc.unwrap();
-
-        let eq_alloc = AllocatedE2Element::assert_is_equal(
-            &mut cs.namespace(|| "a*b = c"),
-            &res_alloc,
-            &c_alloc,
-        );
-        assert!(eq_alloc.is_ok());
-
+        let c_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = a_alloc
+            .mul_const(&mut cs.namespace(|| "a*b (const)"), &b_val)
+            .unwrap();
+        AllocatedE2Element::assert_is_equal(&mut cs.namespace(|| "a*b = c"), &res_alloc, &c_alloc)
+            .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 524);
-        assert_eq!(cs.num_inputs(), 1);
+        expect_eq(cs.num_inputs(), expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), expect!["542"]);
+        expect_eq(cs.num_constraints(), expect!["524"]);
     }
 
     #[test]
@@ -822,102 +720,70 @@ mod tests {
         let c = -&a;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-
-        let a_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a);
-        assert!(a_alloc.is_ok());
-        let a_alloc = a_alloc.unwrap();
-
-        let c_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c);
-        assert!(c_alloc.is_ok());
-        let c_alloc = c_alloc.unwrap();
-
-        let res_alloc = a_alloc.neg(&mut cs.namespace(|| "-a"));
-        assert!(res_alloc.is_ok());
-        let res_alloc = res_alloc.unwrap();
-
-        let eq_alloc = AllocatedE2Element::assert_is_equal(
-            &mut cs.namespace(|| "-a = c"),
-            &res_alloc,
-            &c_alloc,
-        );
-        assert!(eq_alloc.is_ok());
-
+        let a_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = a_alloc.neg(&mut cs.namespace(|| "-a")).unwrap();
+        AllocatedE2Element::assert_is_equal(&mut cs.namespace(|| "-a = c"), &res_alloc, &c_alloc)
+            .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 524);
-        assert_eq!(cs.num_inputs(), 1);
+        expect_eq(cs.num_inputs(), expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), expect!["542"]);
+        expect_eq(cs.num_constraints(), expect!["524"]);
     }
 
     #[test]
     fn test_random_conjugate() {
         let mut rng = rand::thread_rng();
         let a = BlsFp2::random(&mut rng);
-        let c = &a.conjugate();
+        let c = a.conjugate();
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-
-        let a_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a);
-        assert!(a_alloc.is_ok());
-        let a_alloc = a_alloc.unwrap();
-
-        let c_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c);
-        assert!(c_alloc.is_ok());
-        let c_alloc = c_alloc.unwrap();
-
-        let res_alloc = a_alloc.conjugate(&mut cs.namespace(|| "conj(a)"));
-        assert!(res_alloc.is_ok());
-        let res_alloc = res_alloc.unwrap();
-
-        let eq_alloc = AllocatedE2Element::assert_is_equal(
+        let a_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = a_alloc.conjugate(&mut cs.namespace(|| "conj(a)")).unwrap();
+        AllocatedE2Element::assert_is_equal(
             &mut cs.namespace(|| "conj(a) = c"),
             &res_alloc,
             &c_alloc,
-        );
-        assert!(eq_alloc.is_ok());
-
+        )
+        .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 524);
-        assert_eq!(cs.num_inputs(), 1);
+        expect_eq(cs.num_inputs(), expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), expect!["542"]);
+        expect_eq(cs.num_constraints(), expect!["524"]);
     }
 
     #[test]
     fn test_random_inverse() {
         let mut rng = rand::thread_rng();
         let a = BlsFp2::random(&mut rng);
-        let c = &a.invert().unwrap_or_else(|| BlsFp2::zero());
+        let c = a.invert().unwrap_or_else(BlsFp2::zero);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-
-        let a_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a);
-        assert!(a_alloc.is_ok());
-        let a_alloc = a_alloc.unwrap();
-
-        let c_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c);
-        assert!(c_alloc.is_ok());
-        let c_alloc = c_alloc.unwrap();
-
-        let res_alloc = a_alloc.inverse(&mut cs.namespace(|| "a^-1"));
-        assert!(res_alloc.is_ok());
-        let res_alloc = res_alloc.unwrap();
-
-        let eq_alloc = AllocatedE2Element::assert_is_equal(
-            &mut cs.namespace(|| "a^-1 = c"),
-            &res_alloc,
-            &c_alloc,
-        );
-        assert!(eq_alloc.is_ok());
-
+        let a_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = a_alloc.inverse(&mut cs.namespace(|| "a^-1")).unwrap();
+        AllocatedE2Element::assert_is_equal(&mut cs.namespace(|| "a^-1 = c"), &res_alloc, &c_alloc)
+            .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 1879);
-        assert_eq!(cs.num_inputs(), 1);
+        expect_eq(cs.num_inputs(), expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), expect!["1903"]);
+        expect_eq(cs.num_constraints(), expect!["1879"]);
     }
 
     #[test]
@@ -925,70 +791,40 @@ mod tests {
         let mut rng = rand::thread_rng();
         let a = BlsFp2::random(&mut rng);
         let b = BlsFp2::random(&mut rng);
-        let c = b.clone();
-        let zero = BlsFp2::zero();
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-
-        let a_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a);
-        assert!(a_alloc.is_ok());
-        let a_alloc = a_alloc.unwrap();
-
-        let a2_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a2"), &a.neg());
-        assert!(a2_alloc.is_ok());
-        let a2_alloc = a2_alloc.unwrap();
-
-        let b_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b);
-        assert!(b_alloc.is_ok());
-        let b_alloc = b_alloc.unwrap();
-
-        let res_alloc = a_alloc.add(&mut cs.namespace(|| "a-a"), &a2_alloc);
-        assert!(res_alloc.is_ok());
-        let res_alloc = res_alloc.unwrap();
-
-        let c_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c);
-        assert!(c_alloc.is_ok());
-        let c_alloc = c_alloc.unwrap();
-
-        let z_alloc = AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc zero"), &zero);
-        assert!(z_alloc.is_ok());
-        let z_alloc = z_alloc.unwrap();
-
-        let z2_alloc = z_alloc.double(&mut cs.namespace(|| "z2 <- 2*z")).unwrap();
-
-        let eq_alloc = AllocatedE2Element::assert_is_equal(
-            &mut cs.namespace(|| "a-a = z"),
-            &res_alloc,
-            &z2_alloc,
-        );
-        assert!(eq_alloc.is_ok());
-
-        let zbit_alloc = res_alloc.alloc_is_zero(&mut cs.namespace(|| "z <- a-a ?= 0"));
-        assert!(zbit_alloc.is_ok());
-        let zbit_alloc = zbit_alloc.unwrap();
-
+        let a_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let b_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+        let res_alloc = a_alloc.sub(&mut cs.namespace(|| "a-a"), &a_alloc).unwrap();
+        let z_alloc =
+            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc zero"), &BlsFp2::zero())
+                .unwrap();
+        AllocatedE2Element::assert_is_equal(&mut cs.namespace(|| "a-a = z"), &res_alloc, &z_alloc)
+            .unwrap();
+        let zbit_alloc = res_alloc
+            .alloc_is_zero(&mut cs.namespace(|| "z <- a-a ?= 0"))
+            .unwrap();
         let cond_alloc = AllocatedE2Element::conditionally_select(
             &mut cs.namespace(|| "select(a, b, z)"),
             &a_alloc,
             &b_alloc,
             &Boolean::Is(zbit_alloc),
-        );
-        assert!(cond_alloc.is_ok());
-        let cond_alloc = cond_alloc.unwrap();
-
-        let eq_alloc = AllocatedE2Element::assert_is_equal(
-            &mut cs.namespace(|| "select(a, b, z) = c = b"),
+        )
+        .unwrap();
+        AllocatedE2Element::assert_is_equal(
+            &mut cs.namespace(|| "select(a, b, z) = b"),
             &cond_alloc,
-            &c_alloc,
-        );
-        assert!(eq_alloc.is_ok());
-
+            &b_alloc,
+        )
+        .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 2393);
-        assert_eq!(cs.num_inputs(), 1);
+        expect_eq(cs.num_inputs(), expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), expect!["2399"]);
+        expect_eq(cs.num_constraints(), expect!["2393"]);
     }
 }

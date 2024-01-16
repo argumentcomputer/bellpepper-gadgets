@@ -317,6 +317,11 @@ mod tests {
     use bellpepper_core::test_cs::TestConstraintSystem;
     use pasta_curves::Fp;
 
+    use expect_test::{expect, Expect};
+    fn expect_eq(computed: usize, expected: Expect) {
+        expected.assert_eq(&computed.to_string());
+    }
+
     #[test]
     fn test_random_compress() {
         let mut rng = rand::thread_rng();
@@ -324,32 +329,24 @@ mod tests {
         let c = Torus::<Fp>::compress_native(&a).unwrap();
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-
-        let a_alloc = AllocatedE12Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a);
-        assert!(a_alloc.is_ok());
-        let a_alloc = a_alloc.unwrap();
-
-        let c_alloc = AllocatedE6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c);
-        assert!(c_alloc.is_ok());
-        let c_alloc = c_alloc.unwrap();
-
-        let res_alloc = Torus::compress(&mut cs.namespace(|| "a.torus()"), &a_alloc);
-        assert!(res_alloc.is_ok());
-        let res_alloc = res_alloc.unwrap();
-
-        let eq_alloc = AllocatedE6Element::assert_is_equal(
+        let a_alloc =
+            AllocatedE12Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc =
+            AllocatedE6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = Torus::compress(&mut cs.namespace(|| "a.torus()"), &a_alloc).unwrap();
+        AllocatedE6Element::assert_is_equal(
             &mut cs.namespace(|| "a.torus() = c"),
             &res_alloc.0,
             &c_alloc,
-        );
-        assert!(eq_alloc.is_ok());
-
+        )
+        .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 5799);
-        assert_eq!(cs.num_inputs(), 1);
+        expect_eq(cs.num_inputs(), expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), expect!["5907"]);
+        expect_eq(cs.num_constraints(), expect!["5799"]);
     }
 
     #[test]
@@ -359,33 +356,27 @@ mod tests {
         let c = Torus::<Fp>::decompress_native(&a).unwrap();
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-
-        let a_alloc = AllocatedE6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a);
-        assert!(a_alloc.is_ok());
-        let a_alloc = a_alloc.unwrap();
-
-        let c_alloc = AllocatedE12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c);
-        assert!(c_alloc.is_ok());
-        let c_alloc = c_alloc.unwrap();
-
+        let a_alloc =
+            AllocatedE6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc =
+            AllocatedE12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
         let res = Torus(a_alloc);
-        let res_alloc = res.decompress(&mut cs.namespace(|| "a.decompress()"));
-        assert!(res_alloc.is_ok());
-        let res_alloc = res_alloc.unwrap();
-
-        let eq_alloc = AllocatedE12Element::assert_is_equal(
+        let res_alloc = res
+            .decompress(&mut cs.namespace(|| "a.decompress()"))
+            .unwrap();
+        AllocatedE12Element::assert_is_equal(
             &mut cs.namespace(|| "a.decompress() = c"),
             &res_alloc,
             &c_alloc,
-        );
-        assert!(eq_alloc.is_ok());
-
+        )
+        .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 11931);
-        assert_eq!(cs.num_inputs(), 1);
+        expect_eq(cs.num_inputs(), expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), expect!["12075"]);
+        expect_eq(cs.num_constraints(), expect!["11931"]);
     }
 
     #[test]
@@ -404,48 +395,31 @@ mod tests {
             let mut n = y1.mul(y2);
             n.c1 += BlsFp2::one();
             let d = y1.add(y2);
-            let y3 = n * d.invert().unwrap();
-            y3
+            n * d.invert().unwrap()
         };
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-
-        let a_alloc = AllocatedE12Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a);
-        assert!(a_alloc.is_ok());
-        let a_alloc = a_alloc.unwrap();
-
-        let b_alloc = AllocatedE12Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b);
-        assert!(b_alloc.is_ok());
-        let b_alloc = b_alloc.unwrap();
-
-        let c_alloc = AllocatedE6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c);
-        assert!(c_alloc.is_ok());
-        let c_alloc = c_alloc.unwrap();
-
-        let a_alloc = Torus::compress(&mut cs.namespace(|| "a <- a.torus()"), &a_alloc);
-        assert!(a_alloc.is_ok());
-        let a_alloc = a_alloc.unwrap();
-
-        let b_alloc = Torus::compress(&mut cs.namespace(|| "b <- b.torus()"), &b_alloc);
-        assert!(b_alloc.is_ok());
-        let b_alloc = b_alloc.unwrap();
-
-        let res_alloc = a_alloc.mul(&mut cs.namespace(|| "a*b"), &b_alloc);
-        assert!(res_alloc.is_ok());
-        let res_alloc = res_alloc.unwrap();
-
-        let eq_alloc = AllocatedE6Element::assert_is_equal(
+        let a_alloc =
+            AllocatedE12Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let b_alloc =
+            AllocatedE12Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+        let c_alloc =
+            AllocatedE6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Torus::compress(&mut cs.namespace(|| "a <- a.torus()"), &a_alloc).unwrap();
+        let b_alloc = Torus::compress(&mut cs.namespace(|| "b <- b.torus()"), &b_alloc).unwrap();
+        let res_alloc = a_alloc.mul(&mut cs.namespace(|| "a*b"), &b_alloc).unwrap();
+        AllocatedE6Element::assert_is_equal(
             &mut cs.namespace(|| "a*b = c"),
             &res_alloc.0,
             &c_alloc,
-        );
-        assert!(eq_alloc.is_ok());
-
+        )
+        .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 14493);
-        assert_eq!(cs.num_inputs(), 1);
+        expect_eq(cs.num_inputs(), expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), expect!["14709"]);
+        expect_eq(cs.num_constraints(), expect!["14493"]);
     }
 }
