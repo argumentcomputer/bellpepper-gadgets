@@ -2,7 +2,7 @@
 name = "bellpepper-bls12381"
 version = "0.2.0"
 edition = "2021"
-authors = ["Gustavo <gustavo@wrinqle.xyz>"]
+authors = ["Gustavo <gustavo@wrinqle.net>"]
 license = "MIT OR Apache-2.0"
 description = "Bellpepper circuit implementation of BLS12-381 pairing and curve operations"
 documentation = ""

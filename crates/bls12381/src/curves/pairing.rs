@@ -319,9 +319,8 @@ impl<F: PrimeField + PrimeFieldBits> EmulatedBls12381Pairing<F> {
             // P are supposed to be on G1 respectively of prime order r.
             // The point (x,0) is of order 2. But this function does not check
             // subgroup membership.
-            let y = pt
-                .y
-                .inverse(&mut cs.namespace(|| format!("y_inv[{k}] <- p[{k}].y.inverse()")))?;
+            let y =
+                pt.y.inverse(&mut cs.namespace(|| format!("y_inv[{k}] <- p[{k}].y.inverse()")))?;
             let x = pt.x.mul(
                 &mut cs.namespace(|| format!("x_neg_over_y[{k}] <- p[{k}].x * y_inv[{k}]")),
                 &y,
@@ -479,11 +478,8 @@ where
             .iter()
             .enumerate()
             .map(|(idx, pq)| {
-                Self::compute_lines(
-                    &mut cs.namespace(|| format!("compute_lines(q[{idx}])")),
-                    pq,
-                )
-                .unwrap() // CLEANUP
+                Self::compute_lines(&mut cs.namespace(|| format!("compute_lines(q[{idx}])")), pq)
+                    .unwrap() // CLEANUP
             })
             .collect();
 

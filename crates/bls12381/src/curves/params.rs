@@ -1,8 +1,5 @@
 use std::marker::PhantomData;
 
-
-
-
 use ff::{PrimeField, PrimeFieldBits};
 
 use crate::fields::{e2::AllocatedE2Element, fp::AllocatedFieldElement};

@@ -1,4 +1,3 @@
-
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use bls12_381::fp2::Fp2 as BlsFp2;
 use bls12_381::{G2Affine, G2Projective};
