@@ -227,7 +227,6 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        // CLEANUP: this is kinda gross, can we remove this option usage in the loop?
         let mut x = Some(self);
         let mut tmp = None;
         let mut cs = cs.namespace(|| format!("compute x.n_square({n})"));

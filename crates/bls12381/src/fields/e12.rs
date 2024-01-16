@@ -255,7 +255,7 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedE12Element<F> {
         let zc0b0 = AllocatedE2Element::<F>::non_residue();
         let zc0b0 = zc0b0.add(&mut cs.namespace(|| "zc0b0 <- non_residue() + x0"), &x0)?;
 
-        // FIXME: is this usage ith calling alloc_element necessary?
+        // TODO: double check if we need to actually alloc here or if this could be a constant
         let c1b0 = AllocatedE2Element::<F>::alloc_element(
             &mut cs.namespace(|| "c1b0 <- 0"),
             &BlsFp2::zero(),
@@ -358,12 +358,10 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedE12Element<F> {
         // x*inv = 1
         let prod = inv_alloc.mul(&mut cs.namespace(|| "x*inv"), self)?;
 
-        // CLEANUP: do we need to reduce here (and add the width constraints and etc) or would compute_rem be enough?
-        // can't really assert equality to constant here without reducing it mod P, but this has more constraints than
-        // just using assert_is_equal instead of assert_equality_to_constant
-
-        // let prod = prod.reduce(&mut cs.namespace(|| "x*inv mod P"))?;
-        // prod.assert_equality_to_constant(&mut cs.namespace(|| "x*inv = 1"), &Self::one())?;
+        // TODO: An alternative implementation would be calling
+        // `assert_equality_to_constant(1)`, however that seems to only work if
+        // we `reduce` the value first, and then the constraint count of just
+        // calling `assert_is_equal` ends up being lower instead.
 
         Self::assert_is_equal(&mut cs.namespace(|| "x*inv = 1 mod P"), &prod, &Self::one())?;
 

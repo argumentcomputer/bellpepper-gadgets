@@ -24,14 +24,6 @@ where
     }
 }
 
-// TODO: missing
-// assert_is_on_curve
-// mul_scalar (generic, glv, both?) glv uses eigenvalue and thirdroot
-// add_unified (also comment on add preconditions)
-// base_mul_scalar (uses the gm values)
-// joint_scalar_mul (and base variant)
-// multi_scalar_mul
-
 impl<F> From<&AllocatedG1Point<F>> for G1Affine
 where
     F: PrimeField + PrimeFieldBits,
@@ -189,7 +181,6 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedG1Point<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        // CLEANUP: this is kinda gross, can we remove this option usage in the loop?
         let mut p = Some(self);
         let mut tmp = None;
         let mut cs = cs.namespace(|| format!("compute p.double_n({n})"));

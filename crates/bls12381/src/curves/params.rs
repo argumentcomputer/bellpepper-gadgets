@@ -4,27 +4,11 @@ use ff::{PrimeField, PrimeFieldBits};
 
 use crate::fields::{e2::AllocatedE2Element, fp::AllocatedFieldElement};
 
-// TODO: add the following if we need them:
-// Gm: m*base point coords
-// Eigenvalue: endomorphism eigenvalue
-// ThirdRootOne: endomorphism image scaler
-
-// TODO: add trait bounds on BaseElement so generic curve operations can be shared between curves
-// CurveParams defines parameters of an elliptic curve in short Weierstrass form
-// given by the equation
-//
-//      Y² = X³ + aX + b
-//
-// The base point is defined by generator()
 pub trait EmulatedCurveParams<BaseElement> {
     fn a() -> BaseElement;
     fn b() -> BaseElement;
 
     fn generator() -> (BaseElement, BaseElement); // returns (x, y) coordinates of a generator point for the curve
-}
-
-pub trait EmulatedCurve<Params: EmulatedCurveParams<BaseElement>, BaseElement> {
-    // ....
 }
 
 pub struct Bls12381G1Params<F> {

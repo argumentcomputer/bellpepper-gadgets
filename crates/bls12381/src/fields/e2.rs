@@ -366,7 +366,6 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedE2Element<F> {
         Ok(Self { a0: a, a1: b })
     }
 
-    // FIXME: why not just mul_const directly and get rid of this function?
     pub fn double<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -390,12 +389,10 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedE2Element<F> {
         // x*inv = 1
         let prod = inv_alloc.mul(&mut cs.namespace(|| "x*inv"), self)?;
 
-        // CLEANUP: do we need to reduce here (and add the width constraints and etc) or would compute_rem be enough?
-        // can't really assert equality to constant here without reducing it mod P, but this has more constraints than
-        // just using assert_is_equal instead of assert_equality_to_constant
-
-        // let prod = prod.reduce(&mut cs.namespace(|| "x*inv mod P"))?;
-        // prod.assert_equality_to_constant(&mut cs.namespace(|| "x*inv = 1"), &Self::one())?;
+        // TODO: An alternative implementation would be calling
+        // `assert_equality_to_constant(1)`, however that seems to only work if
+        // we `reduce` the value first, and then the constraint count of just
+        // calling `assert_is_equal` ends up being lower instead.
 
         Self::assert_is_equal(&mut cs.namespace(|| "x*inv = 1 mod P"), &prod, &Self::one())?;
 
@@ -684,7 +681,7 @@ mod tests {
     fn test_random_mul_const() {
         let mut rng = rand::thread_rng();
         let a = BlsFp2::random(&mut rng);
-        // the product can't overflow -- FIXME: can technically fail if the random is unlucky enough?
+        // the product can't overflow or mul_const fails, so use a very small value here
         let b = BlsFp::from_bytes(&[
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x7f,

@@ -1,14 +1,12 @@
-#![allow(clippy::type_complexity)] // FIXME: temporary?
-
 use std::marker::PhantomData;
 
 use bellpepper_core::{
     boolean::{AllocatedBit, Boolean},
     ConstraintSystem, SynthesisError,
 };
+use bls12_381::fp12::Fp12 as BlsFp12;
 use bls12_381::fp2::Fp2 as BlsFp2;
 use bls12_381::fp6::Fp6 as BlsFp6;
-use bls12_381::{fp12::Fp12 as BlsFp12, G2Affine};
 use ff::{PrimeField, PrimeFieldBits};
 use num_bigint::BigInt;
 
@@ -67,7 +65,6 @@ impl<F: PrimeField + PrimeFieldBits> LineEval<F> {
     }
 }
 
-// CLEANUP: can we organize this better?
 pub struct LineEvals<F: PrimeField + PrimeFieldBits> {
     pub(crate) v0: Vec<LineEval<F>>,
     pub(crate) v1: Vec<LineEval<F>>,
@@ -131,7 +128,7 @@ impl<F: PrimeField + PrimeFieldBits> EmulatedBls12381Pairing<F> {
                 res.v1[i] = tmp1;
             }
 
-            // FIXME: is this *really* necessary? it's very gross
+            // TODO: This fails with an overflow without an explicit reduce call every few iterations, even though theoretically this should be happening automatically.
             if j % 16 == 0 {
                 q_acc =
                     q_acc.reduce(&mut cs.namespace(|| format!("q_acc <- q_acc.reduce() ({i})")))?;
@@ -146,10 +143,7 @@ impl<F: PrimeField + PrimeFieldBits> EmulatedBls12381Pairing<F> {
         Ok(res)
     }
 
-    pub fn precompute_lines(_q: &G2Affine) -> LineEvals<F> {
-        todo!()
-    }
-
+    #[allow(clippy::type_complexity)]
     /// triple_step triples p1 in affine coordinates, and evaluates the line in Miller loop
     pub fn triple_step<CS: ConstraintSystem<F>>(
         cs: &mut CS,
@@ -227,6 +221,7 @@ impl<F: PrimeField + PrimeFieldBits> EmulatedBls12381Pairing<F> {
         Ok((AllocatedG2Point { x: xr, y: yr }, LineEval { r0, r1 }))
     }
 
+    #[allow(clippy::type_complexity)]
     /// double_and_add_step doubles p1 and adds p2 to the result in affine coordinates, and evaluates the line in Miller loop
     /// https://eprint.iacr.org/2022/1162 (Section 6.1)/
     pub fn double_and_add_step<CS: ConstraintSystem<F>>(
@@ -333,7 +328,7 @@ impl<F: PrimeField + PrimeFieldBits> EmulatedBls12381Pairing<F> {
             x_neg_over_y.push(x);
         }
 
-        // CLEANUP: there should be some unnecessary allocs due to how we're overwriting some res values below
+        // TODO: there should be some unnecessary allocs due to how we're overwriting some res values below, double check
         let mut res =
             AllocatedE12Element::alloc_element(&mut cs.namespace(|| "res <- 1"), &BlsFp12::one())?;
 
@@ -473,15 +468,14 @@ where
             )));
         }
 
-        // TODO: implement precompute_lines and omit line computation for some elements instead
+        // TODO: implement precompute_lines and omit line computation for constant elements here
         let lines: Vec<LineEvals<F>> = q
             .iter()
             .enumerate()
             .map(|(idx, pq)| {
                 Self::compute_lines(&mut cs.namespace(|| format!("compute_lines(q[{idx}])")), pq)
-                    .unwrap() // CLEANUP
             })
-            .collect();
+            .collect::<Result<_, _>>()?;
 
         Self::miller_loop_lines(cs, p, lines)
     }
@@ -511,7 +505,7 @@ where
             dummy = Some(AllocatedE6Element::<F>::alloc_element(
                 &mut cs.namespace(|| "alloc dummy"),
                 &BlsFp6::one(),
-            )?); // FIXME: does this need an alloc or can it just be ::one()?
+            )?); // TODO: do we need to explicit alloc here or could this be a constant?
             sel1 = Some(e.c1.alloc_is_zero(&mut cs.namespace(|| "sel1 <- e.c1.is_zero()"))?);
             e = AllocatedE12Element {
                 c0: e.c0,
@@ -596,7 +590,7 @@ where
             let dummy2 = AllocatedE12Element::<F>::alloc_element(
                 &mut cs.namespace(|| "alloc dummy2"),
                 &BlsFp12::one(),
-            )?; // FIXME: does this need an alloc or can it just be ::one()?
+            )?; // TODO: does this need an explicit alloc or could this be a constant?
             let res = AllocatedE12Element::conditionally_select(
                 &mut cs.namespace(|| "res <- select(res, 1, selector)"),
                 &res,

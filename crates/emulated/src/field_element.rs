@@ -258,7 +258,7 @@ where
         // we need to calculate the remainder of self and the modulus since the element is not necessarily reduced at this point
         // and alloc_num_equals_constant does not do the reduction itself
 
-        // CLEANUP: do we need to reduce here (and add the width constraints and etc) or would compute_rem be enough?
+        // TODO: do we actually need to reduce here (and add the width constraints and etc) or would compute_rem be enough?
         // or is there a better way of checking equality to 0 mod P without reducing?
         let k = self.reduce(&mut cs.namespace(|| "self mod P"))?;
 

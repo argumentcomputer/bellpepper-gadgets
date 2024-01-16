@@ -205,7 +205,6 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedG2Point<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        // CLEANUP: this is kinda gross, can we remove this option usage in the loop?
         let mut p = Some(self);
         let mut tmp = None;
         let mut cs = cs.namespace(|| format!("compute p.double_n({n})"));
