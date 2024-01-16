@@ -3,7 +3,6 @@ pub mod traits;
 use crate::traits::GadgetDigest;
 use bellpepper_core::boolean::Boolean;
 use bellpepper_core::{ConstraintSystem, SynthesisError};
-use bellpepper_keccak::sha3;
 use ff::PrimeField;
 
 // HashValue represents the digest type output from the hash function
@@ -18,6 +17,9 @@ pub struct Leaf {
 }
 
 impl Leaf {
+    pub fn new(key: Key, value_hash: HashValue) -> Self {
+        Self { key, value_hash }
+    }
     pub fn hash(&self) -> &HashValue {
         &self.value_hash
     }
@@ -34,6 +36,10 @@ pub struct Proof {
 }
 
 impl Proof {
+    pub fn new(leaf: Leaf, siblings: Vec<HashValue>) -> Self {
+        Self { leaf, siblings }
+    }
+
     pub fn leaf(&self) -> &Leaf {
         &self.leaf
     }

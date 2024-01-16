@@ -6,7 +6,7 @@ use bitvec::prelude::*;
 use pairing::Engine;
 use tiny_keccak::{Hasher, Sha3};
 
-use bellpepper_merkle_inclusion::verify_proof;
+use bellpepper_merkle_inclusion::{verify_proof, Leaf, Proof};
 
 fn sha3(preimage: &[u8]) -> [u8; 32] {
     let mut sha3 = Sha3::v256();
@@ -69,7 +69,20 @@ fn test_verify_empty_sparse_merkle() {
 
     let cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
 
-    let res = verify_proof::<_, _, bellpepper_merkle_inclusion::traits::Sha3>(cs, &payload);
+    let proof = Proof::new(
+        Leaf::new(key.to_vec(), bytes_to_bitvec(&f)),
+        vec![
+            bytes_to_bitvec(&e),
+            bytes_to_bitvec(&d),
+            bytes_to_bitvec(&a),
+        ],
+    );
+
+    let res = verify_proof::<_, _, bellpepper_merkle_inclusion::traits::Sha3>(
+        cs,
+        bytes_to_bitvec(&root),
+        proof,
+    );
     dbg!(&res);
     assert_eq!(bits_to_bytevec(&res.unwrap()), root.to_vec());
 }
