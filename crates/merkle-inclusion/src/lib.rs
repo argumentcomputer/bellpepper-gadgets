@@ -1,3 +1,6 @@
+pub mod traits;
+
+use crate::traits::GadgetDigest;
 use bellpepper_core::boolean::Boolean;
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use bellpepper_keccak::sha3;
@@ -24,48 +27,10 @@ impl Leaf {
     }
 }
 
-impl TryFrom<Vec<Boolean>> for Leaf {
-    type Error = SynthesisError;
-
-    fn try_from(value: Vec<Boolean>) -> Result<Self, Self::Error> {
-        if value.len() != HASH_LENGTH * 2 {
-            // TODO better error
-            return Err(SynthesisError::Unsatisfiable);
-        }
-
-        Ok(Self {
-            key: value[0..HASH_LENGTH].to_owned(),
-            value_hash: value[HASH_LENGTH..].to_owned(),
-        })
-    }
-}
-
 // Proof structure contains a leaf node and sibling hashes for proof verification
 pub struct Proof {
     leaf: Leaf,
     siblings: Vec<HashValue>,
-}
-
-impl TryFrom<Vec<Boolean>> for Proof {
-    type Error = SynthesisError;
-
-    fn try_from(value: Vec<Boolean>) -> Result<Self, Self::Error> {
-        if value.len() <= HASH_LENGTH * 3 || !(value.len() % HASH_LENGTH == 0) {
-            // TODO better error
-            return Err(SynthesisError::Unsatisfiable);
-        }
-
-        Ok(Self {
-            leaf: Leaf::try_from(value[0..HASH_LENGTH * 2].to_owned())?,
-            siblings: value[HASH_LENGTH * 2..]
-                .chunks(HASH_LENGTH)
-                .map(|chunk| {
-                    let a = chunk.to_vec();
-                    return a;
-                })
-                .collect(),
-        })
-    }
 }
 
 impl Proof {
@@ -78,82 +43,62 @@ impl Proof {
     }
 }
 
-pub fn verify_proof<E, CS>(cs: CS, input: &[Boolean]) -> Result<Vec<Boolean>, SynthesisError>
+pub fn verify_proof<E, CS, GD>(
+    mut cs: CS,
+    expected_root: Vec<Boolean>,
+    proof: Proof,
+) -> Result<Vec<Boolean>, SynthesisError>
 where
     E: PrimeField,
     CS: ConstraintSystem<E>,
+    GD: GadgetDigest<E>,
 {
     // Length of input is 256*3*nbr_siblings = 256 (expected_root) + 256 (proof_leaf_key) + 256 (proof_leaf_hash_value) + 256 * nbr_siblings
-    assert!(input.len() >= HASH_LENGTH * 4);
-    assert_eq!(input.len() % HASH_LENGTH, 0);
-
-    let expected_root = input[0..HASH_LENGTH].to_vec();
-    let proof = Proof::try_from(input[HASH_LENGTH..].to_vec())?;
+    assert_eq!(expected_root.len(), GD::output_size());
 
     //Assert that we do not have more siblings than the length of our hash (otherwise cannot know which path to go)
-    // todo shouldn't this return proper error ?
     assert!(
         proof.siblings.len() <= HASH_LENGTH,
         "Merkle Tree proof has more than {} ({}) siblings.",
         HASH_LENGTH,
         proof.siblings.len(),
     );
-    //assert_eq!(expected_root, );
+
     // Reconstruct the root hash from the leaf and sibling hashes
-    let (cs, actual_root_hash) = construct_actual_hash(
-        cs,
-        proof.siblings().to_vec(),
-        proof.leaf().key().to_vec(),
-        proof.leaf().hash().to_vec(),
-    )?;
+    let mut actual_root_hash = proof.leaf().hash().to_vec();
 
-    hash_equality(cs, expected_root, actual_root_hash)
-}
-
-fn construct_actual_hash<E, CS>(
-    mut cs: CS,
-    siblings: Vec<HashValue>,
-    leaf_key: HashValue,
-    leaf_hash: HashValue,
-) -> Result<(CS, HashValue), SynthesisError>
-where
-    E: PrimeField,
-    CS: ConstraintSystem<E>,
-{
-    let mut hash = leaf_hash;
-
-    for (i, (sibling_hash, bit)) in siblings
+    for (i, (sibling_hash, bit)) in proof
+        .siblings()
+        .to_vec()
         .iter()
-        .zip(leaf_key.iter().rev().skip(HASH_LENGTH - siblings.len()))
+        .zip(
+            proof
+                .leaf()
+                .key()
+                .iter()
+                .rev()
+                .skip(GD::output_size() - proof.siblings().len()),
+        )
         .enumerate()
     {
-        let cs = &mut cs.namespace(|| format!("sibling {}", i));
-
         if let Some(b) = bit.get_value() {
             if b {
-                hash = hash_combine(cs, sibling_hash.to_owned(), hash)?
+                actual_root_hash = GD::digest(
+                    cs.namespace(|| format!("sibling {}", i)),
+                    &[sibling_hash.to_owned(), actual_root_hash].concat(),
+                )?
             } else {
-                hash = hash_combine(cs, hash, sibling_hash.to_owned())?
+                actual_root_hash = GD::digest(
+                    cs.namespace(|| format!("sibling {}", i)),
+                    &[actual_root_hash, sibling_hash.to_owned()].concat(),
+                )?
             }
         } else {
-            // TODO better error
             return Err(SynthesisError::Unsatisfiable);
         }
     }
-    Ok((cs, hash))
-}
 
-// Implementing hash_combine using SHA-256 to combine two hash values
-fn hash_combine<E, CS>(
-    mut cs: CS,
-    hash1: HashValue,
-    hash2: HashValue,
-) -> Result<HashValue, SynthesisError>
-where
-    E: PrimeField,
-    CS: ConstraintSystem<E>,
-{
-    sha3(cs.namespace(|| "hash combine"), &[hash1, hash2].concat())
+    hash_equality(cs, expected_root, actual_root_hash)
 }
 
 fn hash_equality<E, CS>(

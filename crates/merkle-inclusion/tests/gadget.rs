@@ -69,7 +69,7 @@ fn test_verify_empty_sparse_merkle() {
 
     let cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
 
-    let res = verify_proof(cs, &payload);
+    let res = verify_proof::<_, _, bellpepper_merkle_inclusion::traits::Sha3>(cs, &payload);
     dbg!(&res);
     assert_eq!(bits_to_bytevec(&res.unwrap()), root.to_vec());
 }

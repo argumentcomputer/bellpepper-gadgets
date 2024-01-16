@@ -12,6 +12,8 @@ ff = { workspace = true }
 bellpepper-core = { workspace = true }
 bellpepper = { workspace = true }
 bellpepper-keccak = { path="../keccak", version = "0.1.0" }
+hybrid-array = "0.2.0-rc.0"
+rust-crypto = "0.2.36"
 
 [dev-dependencies]
 bitvec = "0.17.4"
