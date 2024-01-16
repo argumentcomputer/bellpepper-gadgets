@@ -34,7 +34,7 @@ fn bits_to_bytevec(bits: &[Boolean]) -> Vec<u8> {
 }
 
 #[test]
-fn test_verify_empty_sparse_merkle() {
+fn test_verify_inclusion_merkle() {
     //            root
     //           /    \
     //          a      b
