@@ -5,9 +5,10 @@ edition = "2021"
 authors = ["Gustavo <gustavo@wrinqle.net>"]
 license = "MIT OR Apache-2.0"
 description = "Bellpepper circuit implementation of BLS12-381 pairing and curve operations"
-documentation = ""
+documentation = "https://docs.rs/bellpepper-bls12381"
 homepage.workspace = true
 repository.workspace = true
+rust-version = "1.66.1"
 
 
 [dependencies]
