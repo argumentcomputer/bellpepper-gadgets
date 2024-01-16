@@ -1,4 +1,4 @@
-use bellpepper_core::boolean::AllocatedBit;
+
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use bls12_381::fp2::Fp2 as BlsFp2;
 use bls12_381::{G2Affine, G2Projective};
@@ -121,13 +121,13 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedG2Point<F> {
         let cs = &mut cs.namespace(|| "compute g2.scalar_mul_by_seed(q)");
         let z = self.triple(&mut cs.namespace(|| "z <- q.triple()"))?;
         let z = z.double(&mut cs.namespace(|| "z <- z.double()"))?;
-        let z = z.double_and_add(&mut cs.namespace(|| "z <- z.double_and_add(q) 1"), &self)?;
+        let z = z.double_and_add(&mut cs.namespace(|| "z <- z.double_and_add(q) 1"), self)?;
         let z = z.double_n(&mut cs.namespace(|| "z <- z.double_n(2)"), 2)?;
-        let z = z.double_and_add(&mut cs.namespace(|| "z <- z.double_and_add(q) 2"), &self)?;
+        let z = z.double_and_add(&mut cs.namespace(|| "z <- z.double_and_add(q) 2"), self)?;
         let z = z.double_n(&mut cs.namespace(|| "z <- z.double_n(8)"), 8)?;
-        let z = z.double_and_add(&mut cs.namespace(|| "z <- z.double_and_add(q) 3"), &self)?;
+        let z = z.double_and_add(&mut cs.namespace(|| "z <- z.double_and_add(q) 3"), self)?;
         let z = z.double_n(&mut cs.namespace(|| "z <- z.double_n(31)"), 31)?;
-        let z = z.double_and_add(&mut cs.namespace(|| "z <- z.double_and_add(q) 4"), &self)?;
+        let z = z.double_and_add(&mut cs.namespace(|| "z <- z.double_and_add(q) 4"), self)?;
         let z = z.double_n(&mut cs.namespace(|| "z <- z.double_n(16)"), 16)?;
         let z = z.neg(&mut cs.namespace(|| "z <- z.neg()"))?;
 

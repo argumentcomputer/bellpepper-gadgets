@@ -13,6 +13,8 @@ use num_bigint::{BigInt, Sign};
 pub struct Bls12381FpParams;
 
 impl EmulatedFieldParams for Bls12381FpParams {
+    // TODO: Depending on the native field, different limb/bit pairs are more optimal and have less waste. This should be customizable and not hardcoded
+    // for example, in the pasta field, 4/96 could be used instead
     fn num_limbs() -> usize {
         6
     }
@@ -241,14 +243,14 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedFieldElement<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        self.mul(&mut cs.namespace(|| "x.square()"), &self)
+        self.mul(&mut cs.namespace(|| "x.square()"), self)
     }
 
     pub fn double<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
-        self.add(&mut cs.namespace(|| "x.double()"), &self)
+        self.add(&mut cs.namespace(|| "x.double()"), self)
     }
 
     pub fn mul_const<CS>(&self, cs: &mut CS, value: &BigInt) -> Result<Self, SynthesisError>

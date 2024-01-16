@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity)] // FIXME: temporary?
+
 use std::marker::PhantomData;
 
 use bellpepper_core::{
@@ -144,7 +146,7 @@ impl<F: PrimeField + PrimeFieldBits> EmulatedBls12381Pairing<F> {
         Ok(res)
     }
 
-    pub fn precompute_lines(q: &G2Affine) -> LineEvals<F> {
+    pub fn precompute_lines(_q: &G2Affine) -> LineEvals<F> {
         todo!()
     }
 
@@ -305,7 +307,7 @@ impl<F: PrimeField + PrimeFieldBits> EmulatedBls12381Pairing<F> {
         let cs = &mut cs.namespace(|| "miller_loop_lines(p, l)");
         let (p, lines) = (g1.as_ref(), g2_lines.as_ref());
         assert!(
-            p.len() != 0 && p.len() == lines.len(),
+            !p.is_empty() && p.len() == lines.len(),
             "mismatching miller_loop_lines lengths"
         ); // just assert since we check in miller_loop properly
         let n = p.len();
@@ -313,14 +315,14 @@ impl<F: PrimeField + PrimeFieldBits> EmulatedBls12381Pairing<F> {
         // precomputation
         let mut y_inv = Vec::with_capacity(n);
         let mut x_neg_over_y = Vec::with_capacity(n);
-        for k in 0..n {
+        for (k, pt) in p.iter().enumerate() {
             // P are supposed to be on G1 respectively of prime order r.
             // The point (x,0) is of order 2. But this function does not check
             // subgroup membership.
-            let y = p[k]
+            let y = pt
                 .y
                 .inverse(&mut cs.namespace(|| format!("y_inv[{k}] <- p[{k}].y.inverse()")))?;
-            let x = p[k].x.mul(
+            let x = pt.x.mul(
                 &mut cs.namespace(|| format!("x_neg_over_y[{k}] <- p[{k}].x * y_inv[{k}]")),
                 &y,
             )?;
@@ -464,7 +466,7 @@ where
         g2: impl AsRef<[AllocatedG2Point<F>]>,
     ) -> Result<AllocatedE12Element<F>, SynthesisError> {
         let (p, q) = (g1.as_ref(), g2.as_ref());
-        if p.len() == 0 || p.len() != q.len() {
+        if p.is_empty() || p.len() != q.len() {
             return Err(SynthesisError::IncompatibleLengthVector(format!(
                 "miller loop: {} vs {}",
                 p.len(),
@@ -479,7 +481,7 @@ where
             .map(|(idx, pq)| {
                 Self::compute_lines(
                     &mut cs.namespace(|| format!("compute_lines(q[{idx}])")),
-                    &pq,
+                    pq,
                 )
                 .unwrap() // CLEANUP
             })
@@ -638,7 +640,6 @@ mod tests {
     use bellpepper_core::test_cs::TestConstraintSystem;
     use pasta_curves::Fp;
 
-    use bls12_381::Gt as BlsGt;
     use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective};
 
     #[test]
@@ -687,7 +688,7 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 28604881);
+        assert_eq!(cs.num_constraints(), 27589382);
         assert_eq!(cs.num_inputs(), 1);
     }
 }

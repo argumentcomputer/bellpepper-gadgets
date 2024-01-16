@@ -1,16 +1,9 @@
 use std::marker::PhantomData;
 
-use bellpepper_core::{
-    boolean::{AllocatedBit, Boolean},
-    ConstraintSystem, SynthesisError,
-};
-use bellpepper_emulated::field_element::{
-    EmulatedFieldElement, EmulatedFieldParams, PseudoMersennePrime,
-};
-use bls12_381::fp::Fp as BlsFp;
+
+
+
 use ff::{PrimeField, PrimeFieldBits};
-use num_bigint::{BigInt, Sign};
-use num_traits::{FromPrimitive, Zero};
 
 use crate::fields::{e2::AllocatedE2Element, fp::AllocatedFieldElement};
 

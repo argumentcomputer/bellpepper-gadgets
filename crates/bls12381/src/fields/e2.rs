@@ -421,7 +421,7 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedE2Element<F> {
         let div_alloc = Self::alloc_element(&mut cs.namespace(|| "alloc div"), &div)?;
 
         // y*div = x
-        let prod = div_alloc.mul(&mut cs.namespace(|| "y*div"), &value)?;
+        let prod = div_alloc.mul(&mut cs.namespace(|| "y*div"), value)?;
         Self::assert_is_equal(&mut cs.namespace(|| "y*div = x"), &prod, self)?;
 
         Ok(div_alloc)
