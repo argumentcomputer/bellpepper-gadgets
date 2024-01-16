@@ -56,17 +56,6 @@ fn test_verify_empty_sparse_merkle() {
     key[0] = Boolean::Constant(true);
     key[2] = Boolean::Constant(true);
 
-    let payload = [
-        bytes_to_bitvec(&root),
-        key.to_vec(),
-        bytes_to_bitvec(&f),
-        bytes_to_bitvec(&e),
-        bytes_to_bitvec(&d),
-        bytes_to_bitvec(&a),
-    ]
-    .concat()
-    .to_vec();
-
     let cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
 
     let proof = Proof::new(

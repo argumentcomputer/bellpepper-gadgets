@@ -10,7 +10,10 @@ pub type HashValue = Vec<Boolean>;
 pub type Key = Vec<Boolean>;
 const HASH_LENGTH: usize = 32 * 8;
 
-// Leaf structure represents a leaf node in the Jellyfish Merkle Tree
+/// Represents a leaf node in a Jellyfish Merkle Tree.
+///
+/// Each leaf node contains a key-value pair, where the key is used to determine the position in the tree and the value
+/// is the data stored.
 pub struct Leaf {
     key: Key,
     value_hash: HashValue,
@@ -29,7 +32,10 @@ impl Leaf {
     }
 }
 
-// Proof structure contains a leaf node and sibling hashes for proof verification
+/// Contains a leaf node and sibling hashes required for proof verification in a Merkle Tree.
+///
+/// The `Proof` struct is essential for the Merkle Tree's cryptographic verification process, providing the necessary
+/// information to verify the integrity and authenticity of the data.
 pub struct Proof {
     leaf: Leaf,
     siblings: Vec<HashValue>,
@@ -49,6 +55,18 @@ impl Proof {
     }
 }
 
+/// Verifies the Merkle Tree proof against an expected root hash.
+///
+/// This function reconstructs the root hash from the given leaf and sibling hashes and compares it against the provided
+/// expected root hash.
+///
+/// # Arguments
+/// * `cs` - A mutable reference to the constraint system.
+/// * `expected_root` - The expected root hash of the Merkle Tree.
+/// * `proof` - The proof containing the leaf and its sibling hashes.
+///
+/// # Returns
+/// A result containing the reconstructed root hash if successful, or a `SynthesisError` otherwise.
 pub fn verify_proof<E, CS, GD>(
     mut cs: CS,
     expected_root: Vec<Boolean>,
@@ -59,7 +77,6 @@ where
     CS: ConstraintSystem<E>,
     GD: GadgetDigest<E>,
 {
-    // Length of input is 256*3*nbr_siblings = 256 (expected_root) + 256 (proof_leaf_key) + 256 (proof_leaf_hash_value) + 256 * nbr_siblings
     assert_eq!(expected_root.len(), GD::output_size());
 
     //Assert that we do not have more siblings than the length of our hash (otherwise cannot know which path to go)
@@ -107,6 +124,15 @@ where
     hash_equality(cs, expected_root, actual_root_hash)
 }
 
+/// Compares two hash values for equality bit by bit.
+///
+/// # Arguments
+/// * `cs` - A mutable reference to the constraint system.
+/// * `expected` - The expected hash value.
+/// * `actual` - The actual hash value to compare against.
+///
+/// # Returns
+/// A result containing the actual hash value if the hashes are equal, or a `SynthesisError` otherwise.
 fn hash_equality<E, CS>(
     mut cs: CS,
     expected: HashValue,
