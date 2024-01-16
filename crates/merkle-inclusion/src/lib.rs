@@ -143,7 +143,6 @@ where
     CS: ConstraintSystem<E>,
 {
     if expected.len() != actual.len() {
-        // TODO better error
         return Err(SynthesisError::Unsatisfiable);
     }
 
