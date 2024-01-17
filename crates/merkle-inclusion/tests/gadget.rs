@@ -164,9 +164,16 @@ macro_rules! create_hash_tests {
                 let proof = Proof::new(
                     Leaf::new(
                         simple_tree.get_leaf_key(0).to_vec().iter().enumerate().map(
-                            |(i, b)| Boolean::from(
-                                AllocatedBit::alloc(cs.namespace(|| format!("leaf_key bit {}", i)), b.get_value()).unwrap()
-                            )
+                            |(i, b)| {
+                                // Only the 3 first bits need to be allocated.
+                                if i < 3 {
+                                    return Boolean::from(
+                                        AllocatedBit::alloc(cs.namespace(|| format!("leaf_key bit {}", i)), b.get_value()).unwrap()
+                                    )
+                                } else {
+                                    return Boolean::Constant(false)
+                                }
+                            }
                         ).collect(),
                         bytes_to_bitvec(simple_tree.get_leaf_hash(0)).iter().enumerate().map(
                             |(i, b)| Boolean::from(
@@ -213,7 +220,7 @@ macro_rules! create_hash_tests {
 
                 assert!(cs.is_satisfied(), "CS should be satisfied, but it is not.");
 
-                assert_eq!(cs.num_constraints(), 456063, "Expected 456063 constraints, got {}", cs.num_constraints());
+                assert_eq!(cs.num_constraints(), 455810, "Expected 455810 constraints, got {}", cs.num_constraints());
             }
         }
     };
