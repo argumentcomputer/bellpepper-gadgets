@@ -2,76 +2,130 @@ use bellpepper_core::boolean::Boolean;
 use bellpepper_core::test_cs::TestConstraintSystem;
 use bls12_381::Bls12;
 
-use bitvec::prelude::*;
-use pairing::Engine;
-use tiny_keccak::{Hasher, Sha3};
-
+use crate::utils;
+use crate::utils::sha3;
 use bellpepper_merkle_inclusion::{verify_proof, Leaf, Proof};
-
-fn sha3(preimage: &[u8]) -> [u8; 32] {
-    let mut sha3 = Sha3::v256();
-
-    sha3.update(preimage);
-
-    let mut hash = [0u8; 32];
-    sha3.finalize(&mut hash);
-    hash
-}
-
-fn bytes_to_bitvec(bytes: &[u8]) -> Vec<Boolean> {
-    let bits = BitVec::<Lsb0, u8>::from_slice(bytes);
-    let bits: Vec<Boolean> = bits.iter().map(|b| Boolean::constant(*b)).collect();
-    bits
-}
-
-fn bits_to_bytevec(bits: &[Boolean]) -> Vec<u8> {
-    let result: Vec<bool> = bits.iter().map(|b| b.get_value().unwrap()).collect();
-    let mut bv = BitVec::<Lsb0, u8>::new();
-    for bit in result {
-        bv.push(bit);
-    }
-    bv.as_slice().to_vec()
-}
+use pairing::Engine;
 
 #[test]
 fn test_verify_inclusion_merkle() {
-    //            root
-    //           /    \
-    //          a      b
-    //                / \
-    //               c   d
-    //              / \
-    //             e   f
-    // f key: 101
-    let a = sha3(b"a");
-    let d = sha3(b"d");
-    let e = sha3(b"e");
-    let f = sha3(b"f");
+    // Construct the Merkle tree
+    let (root, leaves) = utils::construct_merkle_tree();
 
-    let c = sha3(&[e, f].concat());
-    let b = sha3(&[c, d].concat());
-    let root = sha3(&[a, b].concat());
-
-    let mut key = [false; 256].map(|b| Boolean::constant(b));
-    key[0] = Boolean::Constant(true);
-    key[2] = Boolean::Constant(true);
-
+    // Get key for d
     let cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
 
     let proof = Proof::new(
-        Leaf::new(key.to_vec(), bytes_to_bitvec(&f)),
+        Leaf::new(
+            leaves.get(0).unwrap().1.to_vec(),
+            utils::bytes_to_bitvec(&leaves.get(0).unwrap().0),
+        ),
         vec![
-            bytes_to_bitvec(&e),
-            bytes_to_bitvec(&d),
-            bytes_to_bitvec(&a),
+            utils::bytes_to_bitvec(&leaves.get(1).unwrap().0),
+            utils::bytes_to_bitvec(&leaves.get(9).unwrap().0),
+            utils::bytes_to_bitvec(&leaves.get(13).unwrap().0),
         ],
     );
 
     let res = verify_proof::<_, _, bellpepper_merkle_inclusion::traits::Sha3>(
         cs,
-        bytes_to_bitvec(&root),
+        utils::bytes_to_bitvec(&root),
         proof,
     );
-    dbg!(&res);
-    assert_eq!(bits_to_bytevec(&res.unwrap()), root.to_vec());
+
+    assert_eq!(
+        utils::bits_to_bytevec(&res.unwrap()),
+        root.to_vec(),
+        "The root hash must match the expected root hash."
+    );
+}
+
+#[test]
+fn test_verify_non_existing_leaf() {
+    // Construct the Merkle tree
+    let (root, _) = utils::construct_merkle_tree();
+
+    let non_existing_key = [false; 256].map(|b| Boolean::constant(b));
+    let non_existing_leaf_hash = utils::sha3(b"non_existing");
+
+    let proof = Proof::new(
+        Leaf::new(
+            non_existing_key.to_vec(),
+            utils::bytes_to_bitvec(&non_existing_leaf_hash),
+        ),
+        vec![/* sibling hashes */],
+    );
+
+    let cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
+    let res = verify_proof::<_, _, bellpepper_merkle_inclusion::traits::Sha3>(
+        cs,
+        utils::bytes_to_bitvec(&root),
+        proof,
+    );
+
+    assert!(
+        res.is_err(),
+        "Proof verification should fail for a non-existing leaf."
+    );
+}
+
+#[test]
+fn test_verify_incorrect_sibling_hashes() {
+    // Construct the Merkle tree
+    let (root, leaves) = utils::construct_merkle_tree();
+
+    let incorrect_sibling = utils::sha3(b"incorrect");
+
+    let proof = Proof::new(
+        Leaf::new(
+            leaves.get(0).unwrap().1.to_vec(),
+            utils::bytes_to_bitvec(&leaves.get(0).unwrap().0),
+        ),
+        vec![
+            utils::bytes_to_bitvec(&leaves.get(1).unwrap().0),
+            utils::bytes_to_bitvec(&incorrect_sibling), // incorrect sibling hash
+            utils::bytes_to_bitvec(&leaves.get(13).unwrap().0),
+        ],
+    );
+
+    let cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
+    let res = verify_proof::<_, _, bellpepper_merkle_inclusion::traits::Sha3>(
+        cs,
+        utils::bytes_to_bitvec(&root),
+        proof,
+    );
+
+    assert!(
+        res.is_err(),
+        "Proof verification should fail with incorrect sibling hashes."
+    );
+}
+
+#[test]
+fn test_verify_single_leaf_merkle() {
+    // Single leaf Merkle tree (root is the leaf itself)
+    let single_leaf = sha3(b"single_leaf".as_slice());
+
+    let leaf_key = [false; 256].map(|b| Boolean::constant(b));
+    let proof = Proof::new(
+        Leaf::new(leaf_key.to_vec(), utils::bytes_to_bitvec(&single_leaf)),
+        vec![], // No siblings in a single-leaf tree
+    );
+
+    let cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
+    let res = verify_proof::<_, _, bellpepper_merkle_inclusion::traits::Sha3>(
+        cs,
+        utils::bytes_to_bitvec(&single_leaf),
+        proof,
+    );
+
+    assert!(
+        res.is_ok(),
+        "Proof verification should succeed for a single-leaf Merkle tree."
+    );
+    assert_eq!(
+        utils::bits_to_bytevec(&res.unwrap()),
+        single_leaf.to_vec(),
+        "The root hash must match the single leaf hash."
+    );
 }
