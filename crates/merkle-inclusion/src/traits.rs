@@ -2,6 +2,7 @@ use bellpepper_core::boolean::Boolean;
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use bellpepper_keccak::{keccak256, sha3};
 use ff::PrimeField;
+use sha3::{Keccak256, Sha3_256};
 
 /// A trait for implementing hash digest gadgets.
 ///
@@ -9,6 +10,8 @@ use ff::PrimeField;
 pub trait GadgetDigest<E: PrimeField> {
     /// Output size for our hasher, in bits.
     const OUTPUT_SIZE: usize;
+
+    type OutOfCircuitHasher: digest::Digest;
 
     /// Get output size of the hasher.
     fn output_size() -> usize {
@@ -32,11 +35,12 @@ pub trait GadgetDigest<E: PrimeField> {
 /// * `digest_method` - The digest method to be used in the implementation.
 /// * `output_size` - The output size of the hasher, in bits.
 macro_rules! create_gadget_digest_impl {
-    ($struct_name:ident, $digest_method:path, $output_size:expr) => {
+    ($struct_name:ident, $digest_method:path, $output_size:expr, $out_of_circuit_hasher:ty) => {
         pub struct $struct_name {}
 
         impl<E: PrimeField> GadgetDigest<E> for $struct_name {
             const OUTPUT_SIZE: usize = $output_size;
+            type OutOfCircuitHasher = $out_of_circuit_hasher;
 
             fn digest<CS: ConstraintSystem<E>>(
                 cs: CS,
@@ -48,5 +52,6 @@ macro_rules! create_gadget_digest_impl {
     };
 }
 
-create_gadget_digest_impl!(Sha3, sha3, 256);
-create_gadget_digest_impl!(Keccak, keccak256, 256);
+// Example use of the macro with OutOfCircuitHasher specified
+create_gadget_digest_impl!(Sha3, sha3, 256, Sha3_256);
+create_gadget_digest_impl!(Keccak, keccak256, 256, Keccak256);
