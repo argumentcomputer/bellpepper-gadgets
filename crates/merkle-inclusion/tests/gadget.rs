@@ -1,4 +1,6 @@
-use bellpepper_core::boolean::Boolean;
+use bellpepper_core::boolean::{AllocatedBit, Boolean};
+use bellpepper_core::ConstraintSystem;
+
 use bellpepper_core::test_cs::TestConstraintSystem;
 use bellpepper_merkle_inclusion::traits::{GadgetDigest, Keccak, Sha3};
 use bellpepper_merkle_inclusion::{verify_proof, Leaf, Proof};
@@ -147,6 +149,71 @@ macro_rules! create_hash_tests {
                     single_leaf.to_vec(),
                     "The root hash must match the single leaf hash."
                 );
+            }
+
+            #[test]
+            fn test_number_constraints() {
+                // Construct the Merkle tree
+                let simple_tree = construct_merkle_tree::<
+                    <$hash_struct as GadgetDigest<Scalar>>::OutOfCircuitHasher,
+                >();
+
+                // Get key for d
+                let mut cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
+
+                let proof = Proof::new(
+                    Leaf::new(
+                        simple_tree.get_leaf_key(0).to_vec().iter().enumerate().map(
+                            |(i, b)| Boolean::from(
+                                AllocatedBit::alloc(cs.namespace(|| format!("leaf_key bit {}", i)), b.get_value()).unwrap()
+                            )
+                        ).collect(),
+                        bytes_to_bitvec(simple_tree.get_leaf_hash(0)).iter().enumerate().map(
+                            |(i, b)| Boolean::from(
+                                AllocatedBit::alloc(cs.namespace(|| format!("leaf_hash bit {}", i)), b.get_value()).unwrap()
+                            )
+                        ).collect(),
+                    ),
+                    vec![
+                        bytes_to_bitvec(simple_tree.get_leaf_hash(1)).iter().enumerate().map(
+                            |(i, b)| Boolean::from(
+                                AllocatedBit::alloc(cs.namespace(|| format!("first_sibling bit {}", i)), b.get_value()).unwrap()
+                            )
+                        ).collect(),
+                        bytes_to_bitvec(simple_tree.get_leaf_hash(9)).iter().enumerate().map(
+                            |(i, b)| Boolean::from(
+                                AllocatedBit::alloc(cs.namespace(|| format!("second_sibling bit {}", i)), b.get_value()).unwrap()
+                            )
+                        ).collect(),
+                        bytes_to_bitvec(simple_tree.get_leaf_hash(13)).iter().enumerate().map(
+                            |(i, b)| Boolean::from(
+                                AllocatedBit::alloc(cs.namespace(|| format!("third_sibling bit {}", i)), b.get_value()).unwrap()
+                            )
+                        ).collect(),
+                    ],
+                );
+
+                let constrained_expected_root = bytes_to_bitvec(simple_tree.root()).iter().enumerate().map(
+                            |(i, b)| Boolean::from(
+                                AllocatedBit::alloc(cs.namespace(|| format!("expected_root bit {}", i)), b.get_value()).unwrap()
+                            )
+                        ).collect();
+
+                let res = verify_proof::<_, _, $hash_struct>(
+                    cs.namespace(|| "verify_proof"),
+                    constrained_expected_root,
+                    proof,
+                );
+
+                assert_eq!(
+                    bits_to_bytevec(&res.unwrap()),
+                    simple_tree.root().to_vec(),
+                    "The root hash must match the expected root hash."
+                );
+
+                assert!(cs.is_satisfied(), "CS should be satisfied, but it is not.");
+
+                assert_eq!(cs.num_constraints(), 456063, "Expected 456063 constraints, got {}", cs.num_constraints());
             }
         }
     };
