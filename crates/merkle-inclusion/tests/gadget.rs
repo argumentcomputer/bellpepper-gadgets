@@ -1,7 +1,8 @@
 use bellpepper_core::boolean::Boolean;
 use bellpepper_core::test_cs::TestConstraintSystem;
+use bellpepper_merkle_inclusion::traits::GadgetDigest;
 use bellpepper_merkle_inclusion::{verify_proof, Leaf, Proof};
-use bls12_381::Bls12;
+use bls12_381::{Bls12, Scalar};
 use pairing::Engine;
 use sha3::Sha3_256;
 
@@ -11,7 +12,9 @@ use crate::utils::hash;
 #[test]
 fn test_verify_inclusion_merkle() {
     // Construct the Merkle tree
-    let (root, leaves) = utils::construct_merkle_tree::<Sha3_256>();
+    let (root, leaves) = utils::construct_merkle_tree::<
+        <bellpepper_merkle_inclusion::traits::Sha3 as GadgetDigest<Scalar>>::OutOfCircuitHasher,
+    >();
 
     // Get key for d
     let cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
@@ -44,7 +47,9 @@ fn test_verify_inclusion_merkle() {
 #[test]
 fn test_verify_non_existing_leaf() {
     // Construct the Merkle tree
-    let (root, _) = utils::construct_merkle_tree::<Sha3_256>();
+    let (root, _) = utils::construct_merkle_tree::<
+        <bellpepper_merkle_inclusion::traits::Sha3 as GadgetDigest<Scalar>>::OutOfCircuitHasher,
+    >();
 
     let non_existing_key = [false; 256].map(|b| Boolean::constant(b));
     let non_existing_leaf_hash = hash::<Sha3_256>(b"non_existing").to_vec();
@@ -73,7 +78,9 @@ fn test_verify_non_existing_leaf() {
 #[test]
 fn test_verify_incorrect_sibling_hashes() {
     // Construct the Merkle tree
-    let (root, leaves) = utils::construct_merkle_tree::<Sha3_256>();
+    let (root, leaves) = utils::construct_merkle_tree::<
+        <bellpepper_merkle_inclusion::traits::Sha3 as GadgetDigest<Scalar>>::OutOfCircuitHasher,
+    >();
 
     let incorrect_sibling = hash::<Sha3_256>(b"incorrect").to_vec();
 
@@ -105,7 +112,10 @@ fn test_verify_incorrect_sibling_hashes() {
 #[test]
 fn test_verify_single_leaf_merkle() {
     // Single leaf Merkle tree (root is the leaf itself)
-    let single_leaf = hash::<Sha3_256>(b"single_leaf").to_vec();
+    let single_leaf = hash::<
+        <bellpepper_merkle_inclusion::traits::Sha3 as GadgetDigest<Scalar>>::OutOfCircuitHasher,
+    >(b"single_leaf")
+    .to_vec();
 
     let leaf_key = [false; 256].map(|b| Boolean::constant(b));
     let proof = Proof::new(
