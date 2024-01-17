@@ -1,17 +1,7 @@
 use bellpepper_core::boolean::Boolean;
 use bitvec::order::Lsb0;
 use bitvec::prelude::BitVec;
-use tiny_keccak::{Hasher, Sha3};
-
-pub fn sha3(preimage: &[u8]) -> [u8; 32] {
-    let mut sha3 = Sha3::v256();
-
-    sha3.update(preimage);
-
-    let mut hash = [0u8; 32];
-    sha3.finalize(&mut hash);
-    hash
-}
+use digest::{Digest, Output};
 
 pub fn bytes_to_bitvec(bytes: &[u8]) -> Vec<Boolean> {
     let bits = BitVec::<Lsb0, u8>::from_slice(bytes);
@@ -71,16 +61,16 @@ pub fn bits_to_bytevec(bits: &[Boolean]) -> Vec<u8> {
 ///     // Process each leaf and intermediary node's hash and key...
 /// }
 /// ```
-pub fn construct_merkle_tree() -> ([u8; 32], Vec<([u8; 32], Vec<Boolean>)>) {
+pub fn construct_merkle_tree<D: Digest>() -> (Vec<u8>, Vec<(Vec<u8>, Vec<Boolean>)>) {
     let predefined_leaves = vec![b"a", b"b", b"c", b"d", b"e", b"f", b"g", b"h"]
         .iter()
-        .map(|d| sha3(&d.to_vec()))
-        .collect::<Vec<[u8; 32]>>();
+        .map(|d| hash::<D>(&d.to_vec()).to_vec())
+        .collect::<Vec<Vec<u8>>>();
 
     let mut leaves = predefined_leaves.clone();
 
     for j in (0..12).step_by(2) {
-        leaves.push(sha3(&[leaves[j], leaves[j + 1]].concat()));
+        leaves.push(hash::<D>(&[leaves[j].to_owned(), leaves[j + 1].to_owned()].concat()).to_vec());
     }
     // Generate keys
     let mut leaf_key_vec = Vec::new();
@@ -104,7 +94,7 @@ pub fn construct_merkle_tree() -> ([u8; 32], Vec<([u8; 32], Vec<Boolean>)>) {
             while path.len() < 256 {
                 path.push(Boolean::constant(false));
             }
-            leaf_key_vec.push((leaves[i], path));
+            leaf_key_vec.push((leaves[i].to_owned(), path));
         } else if i > 7 && i < 12 {
             for _ in 0..2 {
                 // We only need 3 bits for the path in a tree of depth 3
@@ -120,7 +110,7 @@ pub fn construct_merkle_tree() -> ([u8; 32], Vec<([u8; 32], Vec<Boolean>)>) {
             while path.len() < 256 {
                 path.push(Boolean::constant(false));
             }
-            leaf_key_vec.push((leaves[i], path));
+            leaf_key_vec.push((leaves[i].to_owned(), path));
         } else {
             for _ in 0..1 {
                 // We only need 3 bits for the path in a tree of depth 3
@@ -136,12 +126,20 @@ pub fn construct_merkle_tree() -> ([u8; 32], Vec<([u8; 32], Vec<Boolean>)>) {
             while path.len() < 256 {
                 path.push(Boolean::constant(false));
             }
-            leaf_key_vec.push((leaves[i], path));
+            leaf_key_vec.push((leaves[i].to_owned(), path));
         }
     }
 
     // Compute expected root hash
-    let expected_root = sha3(&[leaves[12], leaves[13]].concat());
+    let expected_root =
+        hash::<D>(&[leaves[12].to_owned(), leaves[13].to_owned()].concat()).to_vec();
 
-    (expected_root, leaf_key_vec)
+    (expected_root.to_owned(), leaf_key_vec)
+}
+
+pub fn hash<D: Digest>(data: &[u8]) -> Output<D> {
+    let mut hasher = D::new();
+    hasher.update(data);
+
+    hasher.finalize()
 }

@@ -1,16 +1,18 @@
 use bellpepper_core::boolean::Boolean;
 use bellpepper_core::test_cs::TestConstraintSystem;
+use bellpepper_merkle_inclusion::{verify_proof, Leaf, Proof};
 use bls12_381::Bls12;
+use digest::{Digest, DynDigest, Update};
+use pairing::Engine;
+use sha3::Sha3_256;
 
 use crate::utils;
-use crate::utils::sha3;
-use bellpepper_merkle_inclusion::{verify_proof, Leaf, Proof};
-use pairing::Engine;
+use crate::utils::hash;
 
 #[test]
 fn test_verify_inclusion_merkle() {
     // Construct the Merkle tree
-    let (root, leaves) = utils::construct_merkle_tree();
+    let (root, leaves) = utils::construct_merkle_tree::<Sha3_256>();
 
     // Get key for d
     let cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
@@ -43,10 +45,10 @@ fn test_verify_inclusion_merkle() {
 #[test]
 fn test_verify_non_existing_leaf() {
     // Construct the Merkle tree
-    let (root, _) = utils::construct_merkle_tree();
+    let (root, _) = utils::construct_merkle_tree::<Sha3_256>();
 
     let non_existing_key = [false; 256].map(|b| Boolean::constant(b));
-    let non_existing_leaf_hash = utils::sha3(b"non_existing");
+    let non_existing_leaf_hash = hash::<Sha3_256>(b"non_existing").to_vec();
 
     let proof = Proof::new(
         Leaf::new(
@@ -72,9 +74,9 @@ fn test_verify_non_existing_leaf() {
 #[test]
 fn test_verify_incorrect_sibling_hashes() {
     // Construct the Merkle tree
-    let (root, leaves) = utils::construct_merkle_tree();
+    let (root, leaves) = utils::construct_merkle_tree::<Sha3_256>();
 
-    let incorrect_sibling = utils::sha3(b"incorrect");
+    let incorrect_sibling = hash::<Sha3_256>(b"incorrect").to_vec();
 
     let proof = Proof::new(
         Leaf::new(
@@ -104,7 +106,7 @@ fn test_verify_incorrect_sibling_hashes() {
 #[test]
 fn test_verify_single_leaf_merkle() {
     // Single leaf Merkle tree (root is the leaf itself)
-    let single_leaf = sha3(b"single_leaf".as_slice());
+    let single_leaf = hash::<Sha3_256>(b"single_leaf").to_vec();
 
     let leaf_key = [false; 256].map(|b| Boolean::constant(b));
     let proof = Proof::new(
