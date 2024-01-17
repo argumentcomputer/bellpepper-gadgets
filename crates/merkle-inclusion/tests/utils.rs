@@ -77,57 +77,28 @@ pub fn construct_merkle_tree<D: Digest>() -> (Vec<u8>, Vec<(Vec<u8>, Vec<Boolean
     for i in 0..14 {
         let mut path = Vec::new();
         let mut node_index = i;
-
-        if i <= 7 {
-            // Generate path for each node
-            for _ in 0..3 {
-                // We only need 3 bits for the path in a tree of depth 3
-                let direction = (node_index & 1) != 0; // Right if odd, Left if even
-                path.push(Boolean::constant(direction));
-                node_index >>= 1;
-            }
-
-            // Reverse to get the path from root to the node
-            path.reverse();
-
-            // Pad the path to ensure it's 256 elements long
-            while path.len() < 256 {
-                path.push(Boolean::constant(false));
-            }
-            leaf_key_vec.push((leaves[i].to_owned(), path));
-        } else if i > 7 && i < 12 {
-            for _ in 0..2 {
-                // We only need 3 bits for the path in a tree of depth 3
-                let direction = (node_index & 1) != 0; // Right if odd, Left if even
-                path.push(Boolean::constant(direction));
-                node_index >>= 1;
-            }
-
-            // Reverse to get the path from root to the node
-            path.reverse();
-
-            // Pad the path to ensure it's 256 elements long
-            while path.len() < 256 {
-                path.push(Boolean::constant(false));
-            }
-            leaf_key_vec.push((leaves[i].to_owned(), path));
+        let depth = if i <= 7 {
+            3
+        } else if i < 12 {
+            2
         } else {
-            for _ in 0..1 {
-                // We only need 3 bits for the path in a tree of depth 3
-                let direction = (node_index & 1) != 0; // Right if odd, Left if even
-                path.push(Boolean::constant(direction));
-                node_index >>= 1;
-            }
+            1
+        };
 
-            // Reverse to get the path from root to the node
-            path.reverse();
-
-            // Pad the path to ensure it's 256 elements long
-            while path.len() < 256 {
-                path.push(Boolean::constant(false));
-            }
-            leaf_key_vec.push((leaves[i].to_owned(), path));
+        for _ in 0..depth {
+            let direction = (node_index & 1) != 0; // Right if odd, Left if even
+            path.push(Boolean::constant(direction));
+            node_index >>= 1;
         }
+
+        // Reverse to get the path from root to the node
+        path.reverse();
+
+        // Pad the path to ensure it's 256 elements long
+        while path.len() < 256 {
+            path.push(Boolean::constant(false));
+        }
+        leaf_key_vec.push((leaves[i].to_owned(), path));
     }
 
     // Compute expected root hash

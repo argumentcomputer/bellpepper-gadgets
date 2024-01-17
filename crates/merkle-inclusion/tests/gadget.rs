@@ -2,7 +2,6 @@ use bellpepper_core::boolean::Boolean;
 use bellpepper_core::test_cs::TestConstraintSystem;
 use bellpepper_merkle_inclusion::{verify_proof, Leaf, Proof};
 use bls12_381::Bls12;
-use digest::{Digest, DynDigest, Update};
 use pairing::Engine;
 use sha3::Sha3_256;
 
