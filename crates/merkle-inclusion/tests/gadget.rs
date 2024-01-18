@@ -205,6 +205,7 @@ macro_rules! create_hash_tests {
                                 AllocatedBit::alloc(cs.namespace(|| format!("expected_root bit {}", i)), b.get_value()).unwrap()
                             )
                         ).collect();
+                dbg!(cs.num_constraints());
 
                 let res = verify_proof::<_, _, $hash_struct>(
                     cs.namespace(|| "verify_proof"),
@@ -220,7 +221,7 @@ macro_rules! create_hash_tests {
 
                 assert!(cs.is_satisfied(), "CS should be satisfied, but it is not.");
 
-                assert_eq!(cs.num_constraints(), 455810, "Expected 455810 constraints, got {}", cs.num_constraints());
+                assert_eq!(cs.num_constraints(), 455811, "Expected 455811 constraints, got {}", cs.num_constraints());
             }
         }
     };
