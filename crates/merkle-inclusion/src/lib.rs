@@ -8,7 +8,6 @@ use ff::PrimeField;
 // HashValue represents the digest type output from the hash function
 pub type HashValue = Vec<Boolean>;
 pub type Key = Vec<Boolean>;
-const HASH_LENGTH: usize = 32 * 8;
 
 /// Represents a leaf node in a Jellyfish Merkle Tree.
 ///
@@ -77,13 +76,13 @@ where
     CS: ConstraintSystem<E>,
     GD: GadgetDigest<E>,
 {
-    assert_eq!(expected_root.len(), GD::output_size());
+    assert_eq!(expected_root.len(), GD::output_size() * 8);
 
     //Assert that we do not have more siblings than the length of our hash (otherwise cannot know which path to go)
     assert!(
-        proof.siblings.len() <= HASH_LENGTH,
+        proof.siblings.len() <= GD::output_size() * 8,
         "Merkle Tree proof has more than {} ({}) siblings.",
-        HASH_LENGTH,
+        GD::output_size() * 8,
         proof.siblings.len(),
     );
 
@@ -100,7 +99,7 @@ where
                 .key()
                 .iter()
                 .rev()
-                .skip(GD::output_size() - proof.siblings().len()),
+                .skip(GD::output_size() * 8 - proof.siblings().len()),
         )
         .enumerate()
     {
@@ -154,5 +153,6 @@ where
             &actual[i],
         )?;
     }
+    dbg!("qq");
     Ok(actual)
 }

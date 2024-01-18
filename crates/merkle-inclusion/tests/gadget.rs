@@ -1,235 +1,288 @@
 use bellpepper_core::boolean::{AllocatedBit, Boolean};
-use bellpepper_core::ConstraintSystem;
-
 use bellpepper_core::test_cs::TestConstraintSystem;
-use bellpepper_merkle_inclusion::traits::{GadgetDigest, Keccak, Sha3};
-use bellpepper_merkle_inclusion::{verify_proof, Leaf, Proof};
+use bellpepper_core::{ConstraintSystem, SynthesisError};
+use bellpepper_keccak::{keccak256, sha3};
+use bellpepper_merkle_inclusion::traits::GadgetDigest;
+use bellpepper_merkle_inclusion::{create_gadget_digest_impl, verify_proof, Leaf, Proof};
+use bellpepper_sha512::sha512::sha512;
 use bitvec::order::Lsb0;
 use bitvec::prelude::BitVec;
 use bls12_381::{Bls12, Scalar};
 use digest::{Digest, Output};
+use ff::PrimeField;
 use pairing::Engine;
+use sha2::Sha512 as rSha512;
+use sha3::{Keccak256, Sha3_256};
 
-macro_rules! create_hash_tests {
-    ($test_name_suffix:ident, $hash_struct:ident) => {
-        mod $test_name_suffix {
-            use super::*;
+// Example use of the macro with OutOfCircuitHasher specified
+create_gadget_digest_impl!(Sha3, sha3, 32, Sha3_256);
+create_gadget_digest_impl!(Keccak, keccak256, 32, Keccak256);
+create_gadget_digest_impl!(Sha512, sha512, 64, rSha512);
 
-            #[test]
-            fn test_verify_inclusion_merkle() {
-                // Construct the Merkle tree
-                let simple_tree = construct_merkle_tree::<
-                    <$hash_struct as GadgetDigest<Scalar>>::OutOfCircuitHasher,
-                >();
+fn verify_inclusion_merkle<GD: GadgetDigest<Scalar>>() {
+    // Construct the Merkle tree
+    let simple_tree = construct_merkle_tree::<<GD as GadgetDigest<Scalar>>::OutOfCircuitHasher>();
 
-                // Get key for d
-                let cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
+    // Get key for d
+    let cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
 
-                let proof = Proof::new(
-                    Leaf::new(
-                        simple_tree.get_leaf_key(0).to_vec(),
-                        bytes_to_bitvec(simple_tree.get_leaf_hash(0)),
-                    ),
-                    vec![
-                        bytes_to_bitvec(simple_tree.get_leaf_hash(1)),
-                        bytes_to_bitvec(simple_tree.get_leaf_hash(9)),
-                        bytes_to_bitvec(simple_tree.get_leaf_hash(13)),
-                    ],
-                );
+    let proof = Proof::new(
+        Leaf::new(
+            simple_tree.get_leaf_key(0).to_vec(),
+            bytes_to_bitvec(simple_tree.get_leaf_hash(0)),
+        ),
+        vec![
+            bytes_to_bitvec(simple_tree.get_leaf_hash(1)),
+            bytes_to_bitvec(simple_tree.get_leaf_hash(9)),
+            bytes_to_bitvec(simple_tree.get_leaf_hash(13)),
+        ],
+    );
 
-                let res = verify_proof::<_, _, $hash_struct>(
-                    cs,
-                    bytes_to_bitvec(simple_tree.root()),
-                    proof,
-                );
+    let res = verify_proof::<_, _, GD>(cs, bytes_to_bitvec(simple_tree.root()), proof);
 
-                assert_eq!(
-                    bits_to_bytevec(&res.unwrap()),
-                    simple_tree.root().to_vec(),
-                    "The root hash must match the expected root hash."
-                );
-            }
-
-            #[test]
-            fn test_verify_non_existing_leaf() {
-                // Construct the Merkle tree
-                let simple_tree = construct_merkle_tree::<
-                    <$hash_struct as GadgetDigest<Scalar>>::OutOfCircuitHasher,
-                >();
-
-                let non_existing_key = [false; 256].map(|b| Boolean::constant(b));
-                let non_existing_leaf_hash = hash::<
-                    <$hash_struct as GadgetDigest<Scalar>>::OutOfCircuitHasher,
-                >(b"non_existing").to_vec();
-
-                let proof = Proof::new(
-                    Leaf::new(
-                        non_existing_key.to_vec(),
-                        bytes_to_bitvec(&non_existing_leaf_hash),
-                    ),
-                    vec![/* sibling hashes */],
-                );
-
-                let cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
-                let res = verify_proof::<_, _, $hash_struct>(
-                    cs,
-                    bytes_to_bitvec(&simple_tree.root()),
-                    proof,
-                );
-
-                assert!(
-                    res.is_err(),
-                    "Proof verification should fail for a non-existing leaf."
-                );
-            }
-
-            #[test]
-            fn test_verify_incorrect_sibling_hashes() {
-                // Construct the Merkle tree
-                let simple_tree = construct_merkle_tree::<
-                    <$hash_struct as GadgetDigest<Scalar>>::OutOfCircuitHasher,
-                >();
-
-                let incorrect_sibling = hash::<
-                    <$hash_struct as GadgetDigest<Scalar>>::OutOfCircuitHasher,
-                >(b"incorrect").to_vec();
-
-                let proof = Proof::new(
-                    Leaf::new(
-                        simple_tree.get_leaf_key(0).to_vec(),
-                        bytes_to_bitvec(simple_tree.get_leaf_hash(0)),
-                    ),
-                    vec![
-                        bytes_to_bitvec(simple_tree.get_leaf_hash(1)),
-                        bytes_to_bitvec(&incorrect_sibling), // incorrect sibling hash
-                        bytes_to_bitvec(simple_tree.get_leaf_hash(13)),
-                    ],
-                );
-
-                let cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
-                let res = verify_proof::<_, _, $hash_struct>(
-                    cs,
-                    bytes_to_bitvec(simple_tree.root()),
-                    proof,
-                );
-
-                assert!(
-                    res.is_err(),
-                    "Proof verification should fail with incorrect sibling hashes."
-                );
-            }
-
-            #[test]
-            fn test_verify_single_leaf_merkle() {
-                // Single leaf Merkle tree (root is the leaf itself)
-                let single_leaf = hash::<
-                    <$hash_struct as GadgetDigest<Scalar>>::OutOfCircuitHasher,
-                >(b"single_leaf")
-                .to_vec();
-
-                let leaf_key = [false; 256].map(|b| Boolean::constant(b));
-                let proof = Proof::new(
-                    Leaf::new(leaf_key.to_vec(), bytes_to_bitvec(&single_leaf)),
-                    vec![], // No siblings in a single-leaf tree
-                );
-
-                let cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
-                let res = verify_proof::<_, _, $hash_struct>(
-                    cs,
-                    bytes_to_bitvec(&single_leaf),
-                    proof,
-                );
-
-                assert!(
-                    res.is_ok(),
-                    "Proof verification should succeed for a single-leaf Merkle tree."
-                );
-                assert_eq!(
-                    bits_to_bytevec(&res.unwrap()),
-                    single_leaf.to_vec(),
-                    "The root hash must match the single leaf hash."
-                );
-            }
-
-            #[test]
-            fn test_number_constraints() {
-                // Construct the Merkle tree
-                let simple_tree = construct_merkle_tree::<
-                    <$hash_struct as GadgetDigest<Scalar>>::OutOfCircuitHasher,
-                >();
-
-                // Get key for d
-                let mut cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
-
-                let proof = Proof::new(
-                    Leaf::new(
-                        simple_tree.get_leaf_key(0).to_vec().iter().enumerate().map(
-                            |(i, b)| {
-                                // Only the 3 first bits need to be allocated.
-                                if i < 3 {
-                                    return Boolean::from(
-                                        AllocatedBit::alloc(cs.namespace(|| format!("leaf_key bit {}", i)), b.get_value()).unwrap()
-                                    )
-                                } else {
-                                    return Boolean::Constant(false)
-                                }
-                            }
-                        ).collect(),
-                        bytes_to_bitvec(simple_tree.get_leaf_hash(0)).iter().enumerate().map(
-                            |(i, b)| Boolean::from(
-                                AllocatedBit::alloc(cs.namespace(|| format!("leaf_hash bit {}", i)), b.get_value()).unwrap()
-                            )
-                        ).collect(),
-                    ),
-                    vec![
-                        bytes_to_bitvec(simple_tree.get_leaf_hash(1)).iter().enumerate().map(
-                            |(i, b)| Boolean::from(
-                                AllocatedBit::alloc(cs.namespace(|| format!("first_sibling bit {}", i)), b.get_value()).unwrap()
-                            )
-                        ).collect(),
-                        bytes_to_bitvec(simple_tree.get_leaf_hash(9)).iter().enumerate().map(
-                            |(i, b)| Boolean::from(
-                                AllocatedBit::alloc(cs.namespace(|| format!("second_sibling bit {}", i)), b.get_value()).unwrap()
-                            )
-                        ).collect(),
-                        bytes_to_bitvec(simple_tree.get_leaf_hash(13)).iter().enumerate().map(
-                            |(i, b)| Boolean::from(
-                                AllocatedBit::alloc(cs.namespace(|| format!("third_sibling bit {}", i)), b.get_value()).unwrap()
-                            )
-                        ).collect(),
-                    ],
-                );
-
-                let constrained_expected_root = bytes_to_bitvec(simple_tree.root()).iter().enumerate().map(
-                            |(i, b)| Boolean::from(
-                                AllocatedBit::alloc(cs.namespace(|| format!("expected_root bit {}", i)), b.get_value()).unwrap()
-                            )
-                        ).collect();
-                dbg!(cs.num_constraints());
-
-                let res = verify_proof::<_, _, $hash_struct>(
-                    cs.namespace(|| "verify_proof"),
-                    constrained_expected_root,
-                    proof,
-                );
-
-                assert_eq!(
-                    bits_to_bytevec(&res.unwrap()),
-                    simple_tree.root().to_vec(),
-                    "The root hash must match the expected root hash."
-                );
-
-                assert!(cs.is_satisfied(), "CS should be satisfied, but it is not.");
-
-                assert_eq!(cs.num_constraints(), 455811, "Expected 455811 constraints, got {}", cs.num_constraints());
-            }
-        }
-    };
+    assert_eq!(
+        bits_to_bytevec(&res.unwrap()),
+        simple_tree.root().to_vec(),
+        "The root hash must match the expected root hash."
+    );
 }
 
-// Generate tests for Sha3 and Keccak with lowercase suffixes
-create_hash_tests!(sha3, Sha3);
-create_hash_tests!(keccak, Keccak);
+fn verify_non_existing_leaf<GD: GadgetDigest<Scalar>>() {
+    // Construct the Merkle tree
+    let simple_tree = construct_merkle_tree::<<GD as GadgetDigest<Scalar>>::OutOfCircuitHasher>();
+
+    let mut non_existing_key: Vec<Boolean> = Vec::with_capacity(GD::OUTPUT_SIZE * 8);
+    for i in 0..<GD as GadgetDigest<Scalar>>::OUTPUT_SIZE * 8 {
+        non_existing_key.push(Boolean::constant(false));
+    }
+
+    let non_existing_leaf_hash =
+        hash::<<GD as GadgetDigest<Scalar>>::OutOfCircuitHasher>(b"non_existing").to_vec();
+
+    let proof = Proof::new(
+        Leaf::new(
+            non_existing_key.to_vec(),
+            bytes_to_bitvec(&non_existing_leaf_hash),
+        ),
+        vec![/* sibling hashes */],
+    );
+
+    let cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
+    let res = verify_proof::<_, _, GD>(cs, bytes_to_bitvec(&simple_tree.root()), proof);
+
+    assert!(
+        res.is_err(),
+        "Proof verification should fail for a non-existing leaf."
+    );
+}
+
+fn verify_incorrect_sibling_hashes<GD: GadgetDigest<Scalar>>() {
+    // Construct the Merkle tree
+    let simple_tree = construct_merkle_tree::<<GD as GadgetDigest<Scalar>>::OutOfCircuitHasher>();
+
+    let incorrect_sibling =
+        hash::<<GD as GadgetDigest<Scalar>>::OutOfCircuitHasher>(b"incorrect").to_vec();
+
+    let proof = Proof::new(
+        Leaf::new(
+            simple_tree.get_leaf_key(0).to_vec(),
+            bytes_to_bitvec(simple_tree.get_leaf_hash(0)),
+        ),
+        vec![
+            bytes_to_bitvec(simple_tree.get_leaf_hash(1)),
+            bytes_to_bitvec(&incorrect_sibling), // incorrect sibling hash
+            bytes_to_bitvec(simple_tree.get_leaf_hash(13)),
+        ],
+    );
+
+    let cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
+    let res = verify_proof::<_, _, GD>(cs, bytes_to_bitvec(simple_tree.root()), proof);
+
+    assert!(
+        res.is_err(),
+        "Proof verification should fail with incorrect sibling hashes."
+    );
+}
+
+fn verify_single_leaf_merkle<GD: GadgetDigest<Scalar>>() {
+    // Single leaf Merkle tree (root is the leaf itself)
+    let single_leaf =
+        hash::<<GD as GadgetDigest<Scalar>>::OutOfCircuitHasher>(b"single_leaf").to_vec();
+
+    let mut leaf_key: Vec<Boolean> = Vec::with_capacity(GD::OUTPUT_SIZE * 8);
+    for i in 0..GD::OUTPUT_SIZE * 8 {
+        leaf_key.push(Boolean::constant(false));
+    }
+
+    let proof = Proof::new(
+        Leaf::new(leaf_key.to_vec(), bytes_to_bitvec(&single_leaf)),
+        vec![], // No siblings in a single-leaf tree
+    );
+
+    let cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
+    let res = verify_proof::<_, _, GD>(cs, bytes_to_bitvec(&single_leaf), proof);
+
+    assert!(
+        res.is_ok(),
+        "Proof verification should succeed for a single-leaf Merkle tree."
+    );
+    assert_eq!(
+        bits_to_bytevec(&res.unwrap()),
+        single_leaf.to_vec(),
+        "The root hash must match the single leaf hash."
+    );
+}
+
+fn check_number_constraints<GD: GadgetDigest<Scalar>>() {
+    // Construct the Merkle tree
+    let simple_tree = construct_merkle_tree::<<GD as GadgetDigest<Scalar>>::OutOfCircuitHasher>();
+
+    // Get key for d
+    let mut cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
+
+    let proof = Proof::new(
+        Leaf::new(
+            simple_tree
+                .get_leaf_key(0)
+                .to_vec()
+                .iter()
+                .enumerate()
+                .map(|(i, b)| {
+                    // Only the 3 first bits need to be allocated.
+                    if i < 3 {
+                        return Boolean::from(
+                            AllocatedBit::alloc(
+                                cs.namespace(|| format!("leaf_key bit {}", i)),
+                                b.get_value(),
+                            )
+                            .unwrap(),
+                        );
+                    } else {
+                        return Boolean::Constant(false);
+                    }
+                })
+                .collect(),
+            bytes_to_bitvec(simple_tree.get_leaf_hash(0))
+                .iter()
+                .enumerate()
+                .map(|(i, b)| {
+                    Boolean::from(
+                        AllocatedBit::alloc(
+                            cs.namespace(|| format!("leaf_hash bit {}", i)),
+                            b.get_value(),
+                        )
+                        .unwrap(),
+                    )
+                })
+                .collect(),
+        ),
+        vec![
+            bytes_to_bitvec(simple_tree.get_leaf_hash(1))
+                .iter()
+                .enumerate()
+                .map(|(i, b)| {
+                    Boolean::from(
+                        AllocatedBit::alloc(
+                            cs.namespace(|| format!("first_sibling bit {}", i)),
+                            b.get_value(),
+                        )
+                        .unwrap(),
+                    )
+                })
+                .collect(),
+            bytes_to_bitvec(simple_tree.get_leaf_hash(9))
+                .iter()
+                .enumerate()
+                .map(|(i, b)| {
+                    Boolean::from(
+                        AllocatedBit::alloc(
+                            cs.namespace(|| format!("second_sibling bit {}", i)),
+                            b.get_value(),
+                        )
+                        .unwrap(),
+                    )
+                })
+                .collect(),
+            bytes_to_bitvec(simple_tree.get_leaf_hash(13))
+                .iter()
+                .enumerate()
+                .map(|(i, b)| {
+                    Boolean::from(
+                        AllocatedBit::alloc(
+                            cs.namespace(|| format!("third_sibling bit {}", i)),
+                            b.get_value(),
+                        )
+                        .unwrap(),
+                    )
+                })
+                .collect(),
+        ],
+    );
+
+    let constrained_expected_root = bytes_to_bitvec(simple_tree.root())
+        .iter()
+        .enumerate()
+        .map(|(i, b)| {
+            Boolean::from(
+                AllocatedBit::alloc(
+                    cs.namespace(|| format!("expected_root bit {}", i)),
+                    b.get_value(),
+                )
+                .unwrap(),
+            )
+        })
+        .collect();
+
+    let res = verify_proof::<_, _, GD>(
+        cs.namespace(|| "verify_proof"),
+        constrained_expected_root,
+        proof,
+    );
+
+    assert_eq!(
+        bits_to_bytevec(&res.unwrap()),
+        simple_tree.root().to_vec(),
+        "The root hash must match the expected root hash."
+    );
+
+    assert!(cs.is_satisfied(), "CS should be satisfied, but it is not.");
+
+    assert_eq!(
+        cs.num_constraints(),
+        455811,
+        "Expected 455811 constraints, got {}",
+        cs.num_constraints()
+    );
+}
+
+#[test]
+fn test_verify_inclusion_merkle() {
+    verify_inclusion_merkle::<Sha512>();
+}
+#[test]
+fn test_verify_non_existing_leaf() {
+    verify_non_existing_leaf::<Sha3>();
+    verify_non_existing_leaf::<Keccak>();
+    verify_non_existing_leaf::<Sha512>();
+}
+#[test]
+fn test_verify_incorrect_sibling_hashes() {
+    verify_incorrect_sibling_hashes::<Sha3>();
+    verify_incorrect_sibling_hashes::<Keccak>();
+    verify_incorrect_sibling_hashes::<Sha512>();
+}
+#[test]
+fn test_verify_single_leaf_merkle() {
+    verify_single_leaf_merkle::<Sha3>();
+    verify_single_leaf_merkle::<Keccak>();
+    verify_single_leaf_merkle::<Sha512>();
+}
+#[test]
+fn test_check_number_constraints() {
+    check_number_constraints::<Sha3>();
+    check_number_constraints::<Keccak>();
+    check_number_constraints::<Sha512>();
+}
 
 /**************************************************************
  * Utilities
@@ -286,7 +339,7 @@ impl SimpleMerkleTree {
 /// The path key is a vector of `Boolean` values, where each value indicates a direction at a node:
 /// - `Boolean::constant(false)` for a left turn.
 /// - `Boolean::constant(true)` for a right turn.
-/// The path keys are 256 bits long, padded with `false` values.
+/// The path keys are long as specified by the referred Digest output size bits long, padded with `false` values.
 ///
 /// # Tree Structure
 /// The tree structure is as follows (indexes in the vector are shown in parentheses):
@@ -345,8 +398,8 @@ pub fn construct_merkle_tree<D: Digest>() -> SimpleMerkleTree {
         // Reverse to get the path from root to the node
         path.reverse();
 
-        // Pad the path to ensure it's 256 elements long
-        while path.len() < 256 {
+        // Pad the path to ensure it's sized as Digest output
+        while path.len() < <D as Digest>::output_size() * 8 {
             path.push(Boolean::constant(false));
         }
         leaf_key_vec.push((item.to_owned(), path));
