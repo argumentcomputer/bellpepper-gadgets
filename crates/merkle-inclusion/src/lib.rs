@@ -147,7 +147,7 @@ where
     }
 
     // Check if the reconstructed root hash matches the expected root hash
-    for i in 0..expected.len() - 1 {
+    for i in 0..expected.len() {
         Boolean::enforce_equal(
             cs.namespace(|| format!("equality on {} hash bit", i)),
             &expected[i],
