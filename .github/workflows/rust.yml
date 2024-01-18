@@ -87,6 +87,7 @@ jobs:
           - "sha512"
           - "ed25519"
           - "keccak"
+          - "bls12381"
     steps:
     - uses: actions/checkout@v4
     - name: Install rustup

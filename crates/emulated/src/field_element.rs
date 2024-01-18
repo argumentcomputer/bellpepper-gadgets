@@ -13,6 +13,7 @@ use num_traits::{One, Signed, Zero};
 
 use crate::util::*;
 
+#[derive(Debug)]
 pub enum EmulatedLimbs<F: PrimeField + PrimeFieldBits> {
     Allocated(Vec<Num<F>>),
     Constant(Vec<F>),
@@ -88,6 +89,7 @@ pub trait EmulatedFieldParams {
 }
 
 #[allow(clippy::len_without_is_empty)]
+#[derive(Debug)]
 pub struct EmulatedFieldElement<F: PrimeField + PrimeFieldBits, P: EmulatedFieldParams> {
     pub(crate) limbs: EmulatedLimbs<F>,
     pub(crate) overflow: usize,
@@ -238,6 +240,55 @@ where
             eprintln!("input must have constant limb values");
             Err(SynthesisError::Unsatisfiable)
         }
+    }
+
+    /// Allocates an `AllocatedBit` that is set if and only if the element is
+    /// congruent to 0 modulo the field prime.
+    ///
+    /// First reduces the field element, then allocates a bit per limb using
+    /// `alloc_num_equals_constant` and `AND`s them all together.
+    pub fn alloc_is_zero<CS>(&self, cs: &mut CS) -> Result<AllocatedBit, SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        if self.is_constant() {
+            // FIXME: it's not necessarily unsat, could do the comparison like the other cases and allocate a constant bit
+            return Err(SynthesisError::Unsatisfiable);
+        }
+
+        // allocate one bit per limb of the allocated limbs and AND them all together
+        let mut prev_allocated_limb_bit: Option<AllocatedBit> = None;
+        let mut final_bit: Option<AllocatedBit> = None;
+
+        // explicitly reduce so we can use `alloc_num_equals_constant` on every limb and directly compare against 0
+        let k = self.reduce(&mut cs.namespace(|| "self mod P"))?;
+
+        if let EmulatedLimbs::Allocated(alloc_limbs) = &k.limbs {
+            assert!(
+                alloc_limbs.len() > 1,
+                "alloc_is_zero needs more than 1 limb"
+            );
+
+            for (i, v) in alloc_limbs.iter().enumerate() {
+                let new_allocated_limb_bit = alloc_num_equals_constant(
+                    &mut cs.namespace(|| format!("alloc limb is_zero {i}")),
+                    v,
+                    F::ZERO,
+                )?;
+                if let Some(prev_allocated_limb_bit) = prev_allocated_limb_bit {
+                    final_bit = Some(AllocatedBit::and(
+                        &mut cs.namespace(|| format!("alloc and bit {i}")),
+                        &prev_allocated_limb_bit,
+                        &new_allocated_limb_bit,
+                    )?);
+                }
+                prev_allocated_limb_bit = Some(new_allocated_limb_bit);
+            }
+        } else {
+            panic!("cannot alloc is_zero for constant limbs");
+        }
+
+        Ok(final_bit.unwrap())
     }
 
     /// Allocates an emulated field element from constant limbs **without**
