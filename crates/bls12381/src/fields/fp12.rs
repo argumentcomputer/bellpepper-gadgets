@@ -111,12 +111,8 @@ impl<F: PrimeField + PrimeFieldBits> Fp12Element<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let c0 = self
-            .c0
-            .add(&mut cs.namespace(|| "compute c0 + c0"), &value.c0)?;
-        let c1 = self
-            .c1
-            .add(&mut cs.namespace(|| "compute c1 + c1"), &value.c1)?;
+        let c0 = self.c0.add(&mut cs.namespace(|| "c0 + c0"), &value.c0)?;
+        let c1 = self.c1.add(&mut cs.namespace(|| "c1 + c1"), &value.c1)?;
         Ok(Self { c0, c1 })
     }
 
@@ -124,12 +120,8 @@ impl<F: PrimeField + PrimeFieldBits> Fp12Element<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let c0 = self
-            .c0
-            .sub(&mut cs.namespace(|| "compute c0 - c0"), &value.c0)?;
-        let c1 = self
-            .c1
-            .sub(&mut cs.namespace(|| "compute c1 - c1"), &value.c1)?;
+        let c0 = self.c0.sub(&mut cs.namespace(|| "c0 - c0"), &value.c0)?;
+        let c1 = self.c1.sub(&mut cs.namespace(|| "c1 - c1"), &value.c1)?;
         Ok(Self { c0, c1 })
     }
 
@@ -137,7 +129,7 @@ impl<F: PrimeField + PrimeFieldBits> Fp12Element<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let z1 = self.c1.neg(&mut cs.namespace(|| "conj e12"))?;
+        let z1 = self.c1.neg(&mut cs.namespace(|| "Fp12::conjugate()"))?;
         Ok(Self {
             c0: self.c0.clone(),
             c1: z1,
@@ -149,7 +141,7 @@ impl<F: PrimeField + PrimeFieldBits> Fp12Element<F> {
         CS: ConstraintSystem<F>,
     {
         let (x, y) = (self, value);
-        let mut cs = cs.namespace(|| "compute e12 mul(x,y)");
+        let mut cs = cs.namespace(|| "Fp12::mul(x,y)");
         let a = x.c0.add(&mut cs.namespace(|| "a <- x.c0 + x.c1"), &x.c1)?;
         let b = y.c0.add(&mut cs.namespace(|| "b <- y.c0 + y.c1"), &y.c1)?;
         let a = a.mul(&mut cs.namespace(|| "a <- a * b"), &b)?;
@@ -163,11 +155,11 @@ impl<F: PrimeField + PrimeFieldBits> Fp12Element<F> {
         Ok(Self { c0: z0, c1: z1 })
     }
 
-    /// MulBy014 multiplies z by an E12 sparse element of the form
+    /// MulBy014 multiplies z by an Fp12 sparse element of the form
     ///
-    ///  E12{
-    ///    C0: E6{B0: c0, B1: c1, B2: 0},
-    ///    C1: E6{B0: 0, B1: 1, B2: 0},
+    ///  Fp12{
+    ///    C0: Fp6{B0: c0, B1: c1, B2: 0},
+    ///    C1: Fp6{B0: 0, B1: 1, B2: 0},
     ///  }
     pub fn mul_by_014<CS>(
         &self,
@@ -179,7 +171,7 @@ impl<F: PrimeField + PrimeFieldBits> Fp12Element<F> {
         CS: ConstraintSystem<F>,
     {
         let z = self;
-        let mut cs = cs.namespace(|| "compute e12 mul_by_014(c0, c1)");
+        let mut cs = cs.namespace(|| "Fp12::mul_by_014(c0, c1)");
 
         let a =
             z.c0.mul_by_01(&mut cs.namespace(|| "a <- z.c0.mul_by_01(c0, c1)"), c0, c1)?;
@@ -207,18 +199,18 @@ impl<F: PrimeField + PrimeFieldBits> Fp12Element<F> {
         Ok(Self { c0: rc0, c1: rc1 })
     }
 
-    ///  mul_014_by_014 multiplies two E12 sparse element of the form:
+    ///  mul_014_by_014 multiplies two Fp12 sparse element of the form:
     ///
-    ///  E12{
-    ///    C0: E6{B0: c0, B1: c1, B2: 0},
-    ///    C1: E6{B0: 0, B1: 1, B2: 0},
+    ///  Fp12{
+    ///    C0: Fp6{B0: c0, B1: c1, B2: 0},
+    ///    C1: Fp6{B0: 0, B1: 1, B2: 0},
     ///  }
     ///
     /// and
     ///
-    ///  E12{
-    ///    C0: E6{B0: d0, B1: d1, B2: 0},
-    ///    C1: E6{B0: 0, B1: 1, B2: 0},
+    ///  Fp12{
+    ///    C0: Fp6{B0: d0, B1: d1, B2: 0},
+    ///    C1: Fp6{B0: 0, B1: 1, B2: 0},
     ///  }
     pub fn mul_014_by_014<CS>(
         cs: &mut CS,
@@ -230,7 +222,7 @@ impl<F: PrimeField + PrimeFieldBits> Fp12Element<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let mut cs = cs.namespace(|| "compute e12 mul_014_by_014(c0, c1, d0, d1)");
+        let mut cs = cs.namespace(|| "Fp12::mul_014_by_014(c0, c1, d0, d1)");
         let one = Fp2Element::<F>::one();
         let x0 = c0.mul(&mut cs.namespace(|| "x0 <- c0 * d0"), d0)?;
         let x1 = c1.mul(&mut cs.namespace(|| "x1 <- c1 * d1"), d1)?;
@@ -270,11 +262,11 @@ impl<F: PrimeField + PrimeFieldBits> Fp12Element<F> {
         })
     }
 
-    /// mul_by_01245 multiplies z by an E12 sparse element of the form
+    /// mul_by_01245 multiplies z by an Fp12 sparse element of the form
     ///
-    ///  E12{
-    ///    C0: E6{B0: c00, B1: c01, B2: c02},
-    ///    C1: E6{B0: 0, B1: c11, B2: c12},
+    ///  Fp12{
+    ///    C0: Fp6{B0: c00, B1: c01, B2: c02},
+    ///    C1: Fp6{B0: 0, B1: c11, B2: c12},
     ///  }
     pub fn mul_by_01245<CS>(
         &self,
@@ -299,7 +291,7 @@ impl<F: PrimeField + PrimeFieldBits> Fp12Element<F> {
             b1: c11.clone(),
             b2: c12.clone(),
         };
-        let mut cs = cs.namespace(|| "compute e12 mul_by_01245(x, e12(c0,c1))");
+        let mut cs = cs.namespace(|| "Fp12::mul_by_01245(x, Fp12(c0,c1))");
         let a = z.c0.add(&mut cs.namespace(|| "a <- z.c0 + z.c1"), &z.c1)?;
         let b = c0.add(&mut cs.namespace(|| "b <- c0 + c1"), &c1)?;
         let a = a.mul(&mut cs.namespace(|| "a <- a * b"), &b)?;
@@ -322,7 +314,7 @@ impl<F: PrimeField + PrimeFieldBits> Fp12Element<F> {
         CS: ConstraintSystem<F>,
     {
         let x = self;
-        let mut cs = cs.namespace(|| "compute e12 square(x)");
+        let mut cs = cs.namespace(|| "Fp12::square(x)");
         let c0 = x.c0.sub(&mut cs.namespace(|| "c0 <- x.c0 - x.c1"), &x.c1)?;
         let c3 =
             x.c1.mul_by_nonresidue(&mut cs.namespace(|| "c3 <- x.c1.mul_by_nonresidue()"))?;

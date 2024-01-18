@@ -122,15 +122,9 @@ impl<F: PrimeField + PrimeFieldBits> Fp6Element<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let b0 = self
-            .b0
-            .add(&mut cs.namespace(|| "compute b0 + b0"), &value.b0)?;
-        let b1 = self
-            .b1
-            .add(&mut cs.namespace(|| "compute b1 + b1"), &value.b1)?;
-        let b2 = self
-            .b2
-            .add(&mut cs.namespace(|| "compute b2 + b2"), &value.b2)?;
+        let b0 = self.b0.add(&mut cs.namespace(|| "b0 + b0"), &value.b0)?;
+        let b1 = self.b1.add(&mut cs.namespace(|| "b1 + b1"), &value.b1)?;
+        let b2 = self.b2.add(&mut cs.namespace(|| "b2 + b2"), &value.b2)?;
         Ok(Self { b0, b1, b2 })
     }
 
@@ -138,15 +132,9 @@ impl<F: PrimeField + PrimeFieldBits> Fp6Element<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let b0 = self
-            .b0
-            .sub(&mut cs.namespace(|| "compute b0 - b0"), &value.b0)?;
-        let b1 = self
-            .b1
-            .sub(&mut cs.namespace(|| "compute b1 - b1"), &value.b1)?;
-        let b2 = self
-            .b2
-            .sub(&mut cs.namespace(|| "compute b2 - b2"), &value.b2)?;
+        let b0 = self.b0.sub(&mut cs.namespace(|| "b0 - b0"), &value.b0)?;
+        let b1 = self.b1.sub(&mut cs.namespace(|| "b1 - b1"), &value.b1)?;
+        let b2 = self.b2.sub(&mut cs.namespace(|| "b2 - b2"), &value.b2)?;
         Ok(Self { b0, b1, b2 })
     }
 
@@ -154,9 +142,9 @@ impl<F: PrimeField + PrimeFieldBits> Fp6Element<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let b0 = self.b0.neg(&mut cs.namespace(|| "compute -b0"))?;
-        let b1 = self.b1.neg(&mut cs.namespace(|| "compute -b1"))?;
-        let b2 = self.b2.neg(&mut cs.namespace(|| "compute -b2"))?;
+        let b0 = self.b0.neg(&mut cs.namespace(|| "-b0"))?;
+        let b1 = self.b1.neg(&mut cs.namespace(|| "-b1"))?;
+        let b2 = self.b2.neg(&mut cs.namespace(|| "-b2"))?;
         Ok(Self { b0, b1, b2 })
     }
 
@@ -165,7 +153,7 @@ impl<F: PrimeField + PrimeFieldBits> Fp6Element<F> {
         CS: ConstraintSystem<F>,
     {
         let (x, y) = (self, value);
-        let mut cs = cs.namespace(|| "compute e6 mul(x,y)");
+        let mut cs = cs.namespace(|| "Fp6::mul(x,y)");
         let t0 = x.b0.mul(&mut cs.namespace(|| "t0 <- x.b0 * y.b0"), &y.b0)?;
         let t1 = x.b1.mul(&mut cs.namespace(|| "t1 <- x.b1 * y.b1"), &y.b1)?;
         let t2 = x.b2.mul(&mut cs.namespace(|| "t2 <- x.b2 * y.b2"), &y.b2)?;
@@ -218,7 +206,7 @@ impl<F: PrimeField + PrimeFieldBits> Fp6Element<F> {
         CS: ConstraintSystem<F>,
     {
         let x = self;
-        let mut cs = cs.namespace(|| "compute e6 square(x)");
+        let mut cs = cs.namespace(|| "Fp6::square(x)");
         let c4 = x.b0.mul(&mut cs.namespace(|| "c4 <- x.b0 * x.b1"), &x.b1)?;
         let c4 = c4.double(&mut cs.namespace(|| "c4 <- c4.double()"))?;
         let c5 = x.b2.square(&mut cs.namespace(|| "c5 <- x.b2.square()"))?;
@@ -260,7 +248,7 @@ impl<F: PrimeField + PrimeFieldBits> Fp6Element<F> {
         })
     }
 
-    /// Equivalent to multiplying by sparse element E6(0, b1, b2)
+    /// Equivalent to multiplying by sparse element Fp6(0, b1, b2)
     pub fn mul_by_12<CS>(
         &self,
         cs: &mut CS,
@@ -271,7 +259,7 @@ impl<F: PrimeField + PrimeFieldBits> Fp6Element<F> {
         CS: ConstraintSystem<F>,
     {
         let x = self;
-        let mut cs = cs.namespace(|| "compute e6 mul_by_12(x, b1, b2)");
+        let mut cs = cs.namespace(|| "Fp6::mul_by_12(x, b1, b2)");
         let t1 = x.b1.mul(&mut cs.namespace(|| "t1 <- x.b1 * b1"), b1)?;
         let t2 = x.b2.mul(&mut cs.namespace(|| "t2 <- x.b2 * b2"), b2)?;
         let c0 = x.b1.add(&mut cs.namespace(|| "c0 <- x.b1 + x.b2"), &x.b2)?;
@@ -298,13 +286,13 @@ impl<F: PrimeField + PrimeFieldBits> Fp6Element<F> {
         })
     }
 
-    /// Equivalent to multiplying by sparse element E6(b0, 0, 0)
+    /// Equivalent to multiplying by sparse element Fp6(b0, 0, 0)
     pub fn mul_by_0<CS>(&self, cs: &mut CS, b0: &Fp2Element<F>) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
         let x = self;
-        let mut cs = cs.namespace(|| "compute e6 mul_by_0(x, b0)");
+        let mut cs = cs.namespace(|| "Fp6::mul_by_0(x, b0)");
         let a = x.b0.mul(&mut cs.namespace(|| "a <- x.b0 * b0"), b0)?;
         let tmp =
             x.b0.add(&mut cs.namespace(|| "tmp <- x.b0 + x.b2"), &x.b2)?;
@@ -322,7 +310,7 @@ impl<F: PrimeField + PrimeFieldBits> Fp6Element<F> {
         })
     }
 
-    /// Equivalent to multiplying by sparse element E6(b0, b1, 0)
+    /// Equivalent to multiplying by sparse element Fp6(b0, b1, 0)
     pub fn mul_by_01<CS>(
         &self,
         cs: &mut CS,
@@ -333,7 +321,7 @@ impl<F: PrimeField + PrimeFieldBits> Fp6Element<F> {
         CS: ConstraintSystem<F>,
     {
         let x = self;
-        let mut cs = cs.namespace(|| "compute e6 mul_by_01(x, b0, b1)");
+        let mut cs = cs.namespace(|| "Fp6::mul_by_01(x, b0, b1)");
         let a = x.b0.mul(&mut cs.namespace(|| "a <- x.b0 * b0"), b0)?;
         let b = x.b1.mul(&mut cs.namespace(|| "b <- x.b1 * b1"), b1)?;
         let tmp =
@@ -366,7 +354,7 @@ impl<F: PrimeField + PrimeFieldBits> Fp6Element<F> {
         CS: ConstraintSystem<F>,
     {
         let (z2, z1, z0) = (&self.b1, &self.b0, &self.b2);
-        let z0 = z0.mul_by_nonresidue(&mut cs.namespace(|| "e6.b2.mul_by_nonresidue()"))?;
+        let z0 = z0.mul_by_nonresidue(&mut cs.namespace(|| "Fp6::mul_by_nonresidue(x)"))?;
         Ok(Self {
             b0: z0,
             b1: z1.clone(),

@@ -5,7 +5,7 @@ use bls12_381::fp2::Fp2 as BlsFp2;
 use ff::{PrimeField, PrimeFieldBits};
 use num_bigint::BigInt;
 
-use super::fp::{bigint_to_fpelem, FpElement};
+use super::fp::FpElement;
 
 #[derive(Clone)]
 pub struct Fp2Element<F: PrimeField + PrimeFieldBits> {
@@ -33,12 +33,6 @@ where
         let c1 = BlsFp::from(&value.a1);
         BlsFp2 { c0, c1 }
     }
-}
-
-pub fn bigint_to_e2elem(val: (&BigInt, &BigInt)) -> Option<BlsFp2> {
-    let c0 = bigint_to_fpelem(val.0).unwrap();
-    let c1 = bigint_to_fpelem(val.1).unwrap();
-    Some(BlsFp2 { c0, c1 })
 }
 
 impl<F: PrimeField + PrimeFieldBits> Fp2Element<F> {
@@ -132,12 +126,8 @@ impl<F: PrimeField + PrimeFieldBits> Fp2Element<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let a0 = self
-            .a0
-            .add(&mut cs.namespace(|| "compute a0 + a0"), &value.a0)?;
-        let a1 = self
-            .a1
-            .add(&mut cs.namespace(|| "compute a1 + a1"), &value.a1)?;
+        let a0 = self.a0.add(&mut cs.namespace(|| "a0 + a0"), &value.a0)?;
+        let a1 = self.a1.add(&mut cs.namespace(|| "a1 + a1"), &value.a1)?;
         Ok(Self { a0, a1 })
     }
 
@@ -145,12 +135,8 @@ impl<F: PrimeField + PrimeFieldBits> Fp2Element<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let a0 = self
-            .a0
-            .sub(&mut cs.namespace(|| "compute a0 - a0"), &value.a0)?;
-        let a1 = self
-            .a1
-            .sub(&mut cs.namespace(|| "compute a1 - a1"), &value.a1)?;
+        let a0 = self.a0.sub(&mut cs.namespace(|| "a0 - a0"), &value.a0)?;
+        let a1 = self.a1.sub(&mut cs.namespace(|| "a1 - a1"), &value.a1)?;
         Ok(Self { a0, a1 })
     }
 
@@ -158,7 +144,7 @@ impl<F: PrimeField + PrimeFieldBits> Fp2Element<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let mut cs = cs.namespace(|| "compute e2 mul(x,y)");
+        let mut cs = cs.namespace(|| "Fp2::mul(x,y)");
         let a = self
             .a0
             .add(&mut cs.namespace(|| "a <- x.a0 + x.a1"), &self.a1)?;
@@ -204,7 +190,10 @@ impl<F: PrimeField + PrimeFieldBits> Fp2Element<F> {
         CS: ConstraintSystem<F>,
     {
         let elm = Self::from_dec(("3850754370037169011952147076051364057158807420970682438676050522613628423219637725072182697113062777891589506424760", "151655185184498381465642749684540099398075398968325446656007613510403227271200139370504932015952886146304766135027")).unwrap();
-        self.mul(&mut cs.namespace(|| "e2.mul_by_nonresidue_1pow5"), &elm)
+        self.mul(
+            &mut cs.namespace(|| "Fp2::mul_by_nonresidue_1pow5(x)"),
+            &elm,
+        )
     }
 
     /// mul_by_nonresidue_1pow2 returns x*(1+u)^(2*(p^1-1)/6)
@@ -225,7 +214,10 @@ impl<F: PrimeField + PrimeFieldBits> Fp2Element<F> {
         CS: ConstraintSystem<F>,
     {
         let elm = Self::from_dec(("1028732146235106349975324479215795277384839936929757896155643118032610843298655225875571310552543014690878354869257", "1028732146235106349975324479215795277384839936929757896155643118032610843298655225875571310552543014690878354869257")).unwrap();
-        self.mul(&mut cs.namespace(|| "e2.mul_by_nonresidue_1pow3"), &elm)
+        self.mul(
+            &mut cs.namespace(|| "Fp2::mul_by_nonresidue_1pow3(x)"),
+            &elm,
+        )
     }
 
     /// mul_by_nonresidue_1pow4 returns x*(1+u)^(4*(p^1-1)/6)
@@ -234,7 +226,10 @@ impl<F: PrimeField + PrimeFieldBits> Fp2Element<F> {
         CS: ConstraintSystem<F>,
     {
         let elm = FpElement::from_dec("4002409555221667392624310435006688643935503118305586438271171395842971157480381377015405980053539358417135540939437").unwrap();
-        self.mul_element(&mut cs.namespace(|| "e2.mul_by_nonresidue_1pow4"), &elm)
+        self.mul_element(
+            &mut cs.namespace(|| "Fp2::mul_by_nonresidue_1pow4(x)"),
+            &elm,
+        )
     }
 
     /// mul_by_nonresidue_1pow5 returns x*(1+u)^(5*(p^1-1)/6)
@@ -243,7 +238,10 @@ impl<F: PrimeField + PrimeFieldBits> Fp2Element<F> {
         CS: ConstraintSystem<F>,
     {
         let elm = Self::from_dec(("877076961050607968509681729531255177986764537961432449499635504522207616027455086505066378536590128544573588734230", "3125332594171059424908108096204648978570118281977575435832422631601824034463382777937621250592425535493320683825557")).unwrap();
-        self.mul(&mut cs.namespace(|| "e2.mul_by_nonresidue_1pow5"), &elm)
+        self.mul(
+            &mut cs.namespace(|| "Fp2::mul_by_nonresidue_1pow5(x)"),
+            &elm,
+        )
     }
 
     /// mul_by_nonresidue_2pow1 returns x*(1+u)^(1*(p^2-1)/6)
@@ -252,7 +250,10 @@ impl<F: PrimeField + PrimeFieldBits> Fp2Element<F> {
         CS: ConstraintSystem<F>,
     {
         let elm = FpElement::from_dec("793479390729215512621379701633421447060886740281060493010456487427281649075476305620758731620351").unwrap();
-        self.mul_element(&mut cs.namespace(|| "e2.mul_by_nonresidue_2pow1"), &elm)
+        self.mul_element(
+            &mut cs.namespace(|| "Fp2::mul_by_nonresidue_2pow1(x)"),
+            &elm,
+        )
     }
 
     /// mul_by_nonresidue_2pow2 returns x*(1+u)^(2*(p^2-1)/6)
@@ -261,7 +262,10 @@ impl<F: PrimeField + PrimeFieldBits> Fp2Element<F> {
         CS: ConstraintSystem<F>,
     {
         let elm = FpElement::from_dec("793479390729215512621379701633421447060886740281060493010456487427281649075476305620758731620350").unwrap();
-        self.mul_element(&mut cs.namespace(|| "e2.mul_by_nonresidue_2pow2"), &elm)
+        self.mul_element(
+            &mut cs.namespace(|| "Fp2::mul_by_nonresidue_2pow2(x)"),
+            &elm,
+        )
     }
 
     /// mul_by_nonresidue_2pow3 returns x*(1+u)^(3*(p^2-1)/6)
@@ -270,7 +274,10 @@ impl<F: PrimeField + PrimeFieldBits> Fp2Element<F> {
         CS: ConstraintSystem<F>,
     {
         let elm = FpElement::from_dec("4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559786").unwrap();
-        self.mul_element(&mut cs.namespace(|| "e2.mul_by_nonresidue_2pow3"), &elm)
+        self.mul_element(
+            &mut cs.namespace(|| "Fp2::mul_by_nonresidue_2pow3(x)"),
+            &elm,
+        )
     }
 
     /// mul_by_nonresidue_2pow4 returns x*(1+u)^(4*(p^2-1)/6)
@@ -279,7 +286,10 @@ impl<F: PrimeField + PrimeFieldBits> Fp2Element<F> {
         CS: ConstraintSystem<F>,
     {
         let elm = FpElement::from_dec("4002409555221667392624310435006688643935503118305586438271171395842971157480381377015405980053539358417135540939436").unwrap();
-        self.mul_element(&mut cs.namespace(|| "e2.mul_by_nonresidue_2pow4"), &elm)
+        self.mul_element(
+            &mut cs.namespace(|| "Fp2::mul_by_nonresidue_2pow4(x)"),
+            &elm,
+        )
     }
 
     /// mul_by_nonresidue_2pow5 returns x*(1+u)^(5*(p^2-1)/6)
@@ -288,7 +298,10 @@ impl<F: PrimeField + PrimeFieldBits> Fp2Element<F> {
         CS: ConstraintSystem<F>,
     {
         let elm = FpElement::from_dec("4002409555221667392624310435006688643935503118305586438271171395842971157480381377015405980053539358417135540939437").unwrap();
-        self.mul_element(&mut cs.namespace(|| "e2.mul_by_nonresidue_2pow5"), &elm)
+        self.mul_element(
+            &mut cs.namespace(|| "Fp2::mul_by_nonresidue_2pow5(x)"),
+            &elm,
+        )
     }
 
     pub fn mul_const<CS>(&self, cs: &mut CS, value: &BigInt) -> Result<Self, SynthesisError>
@@ -317,8 +330,8 @@ impl<F: PrimeField + PrimeFieldBits> Fp2Element<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let a0 = self.a0.neg(&mut cs.namespace(|| "compute -a0"))?;
-        let a1 = self.a1.neg(&mut cs.namespace(|| "compute -a1"))?;
+        let a0 = self.a0.neg(&mut cs.namespace(|| "-a0"))?;
+        let a1 = self.a1.neg(&mut cs.namespace(|| "-a1"))?;
         Ok(Self { a0, a1 })
     }
 
@@ -327,7 +340,7 @@ impl<F: PrimeField + PrimeFieldBits> Fp2Element<F> {
         CS: ConstraintSystem<F>,
     {
         let a0 = self.a0.clone();
-        let a1 = self.a1.neg(&mut cs.namespace(|| "compute -a1 (conj)"))?;
+        let a1 = self.a1.neg(&mut cs.namespace(|| "Fp2::conjugate(x)"))?;
         Ok(Self { a0, a1 })
     }
 
@@ -335,7 +348,7 @@ impl<F: PrimeField + PrimeFieldBits> Fp2Element<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let mut cs = cs.namespace(|| "compute e2 square(x)");
+        let mut cs = cs.namespace(|| "Fp2::square(x)");
         let a = self
             .a0
             .add(&mut cs.namespace(|| "a <- x.a0 + x.a1"), &self.a1)?;

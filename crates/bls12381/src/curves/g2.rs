@@ -111,7 +111,7 @@ impl<F: PrimeField + PrimeFieldBits> G2Point<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let cs = &mut cs.namespace(|| "compute g2.scalar_mul_by_seed(q)");
+        let cs = &mut cs.namespace(|| "G2::scalar_mul_by_seed(q)");
         let z = self.triple(&mut cs.namespace(|| "z <- q.triple()"))?;
         let z = z.double(&mut cs.namespace(|| "z <- z.double()"))?;
         let z = z.double_and_add(&mut cs.namespace(|| "z <- z.double_and_add(q) 1"), self)?;
@@ -132,7 +132,7 @@ impl<F: PrimeField + PrimeFieldBits> G2Point<F> {
         CS: ConstraintSystem<F>,
     {
         let (p, q) = (self, value);
-        let cs = &mut cs.namespace(|| "compute g2.add(p, q)");
+        let cs = &mut cs.namespace(|| "G2::add(p, q)");
         // compute λ = (q.y-p.y)/(q.x-p.x)
         let qypy = q.y.sub(&mut cs.namespace(|| "qypy <- q.y - p.y"), &p.y)?;
         let qxpx = q.x.sub(&mut cs.namespace(|| "qxpx <- q.x - p.x"), &p.x)?;
@@ -175,7 +175,7 @@ impl<F: PrimeField + PrimeFieldBits> G2Point<F> {
         CS: ConstraintSystem<F>,
     {
         let p = self;
-        let cs = &mut cs.namespace(|| "compute g2.double(p)");
+        let cs = &mut cs.namespace(|| "G2::double(p)");
         // compute λ = (3p.x²)/2*p.y
         let xx3a = p.x.square(&mut cs.namespace(|| "xx3a <- p.x.square()"))?;
         let xx3a = xx3a.mul_const(&mut cs.namespace(|| "xx3a <- xx3a * 3"), &BigInt::from(3))?;
@@ -201,7 +201,7 @@ impl<F: PrimeField + PrimeFieldBits> G2Point<F> {
     {
         let mut p: Option<&Self> = Some(self);
         let mut tmp: Option<Self> = None;
-        let mut cs = cs.namespace(|| format!("compute p.double_n({n})"));
+        let mut cs = cs.namespace(|| format!("G2::double_n(p, {n})"));
         for i in 0..n {
             if let Some(cur_p) = p {
                 let val = cur_p.double(&mut cs.namespace(|| format!("p <- p.double() ({i})")))?;
@@ -222,7 +222,7 @@ impl<F: PrimeField + PrimeFieldBits> G2Point<F> {
         CS: ConstraintSystem<F>,
     {
         let p = self;
-        let cs = &mut cs.namespace(|| "compute g2.triple(p)");
+        let cs = &mut cs.namespace(|| "G2::triple(p)");
         // compute λ1 = (3p.x²)/2p.y
         let xx = p.x.square(&mut cs.namespace(|| "xx <- p.x.square()"))?;
         let xx = xx.mul_const(&mut cs.namespace(|| "xx <- xx * 3"), &BigInt::from(3))?;
@@ -259,7 +259,7 @@ impl<F: PrimeField + PrimeFieldBits> G2Point<F> {
         CS: ConstraintSystem<F>,
     {
         let (p, q) = (self, value);
-        let cs = &mut cs.namespace(|| "compute g2.double_and_add(p, q)");
+        let cs = &mut cs.namespace(|| "G2::double_and_add(p, q)");
         // compute λ1 = (q.y-p.y)/(q.x-p.x)
         let yqyp = q.y.sub(&mut cs.namespace(|| "yqyp <- q.y - p.y"), &p.y)?;
         let xqxp = q.x.sub(&mut cs.namespace(|| "xqxp <- q.x - p.x"), &p.x)?;

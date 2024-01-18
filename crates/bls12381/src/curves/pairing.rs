@@ -94,7 +94,7 @@ impl<F: PrimeField + PrimeFieldBits> EmulatedBls12381Pairing<F> {
         cs: &mut CS,
         q: &G2Point<F>,
     ) -> Result<LineEvals<F>, SynthesisError> {
-        let cs = &mut cs.namespace(|| "compute_lines(q)");
+        let cs = &mut cs.namespace(|| "Pairing::compute_lines(q)");
         let mut res = LineEvals::<F>::new();
         let n = LOOP_COUNTER.len();
         let mut q_acc = q.clone();
@@ -332,7 +332,7 @@ impl<F: PrimeField + PrimeFieldBits> EmulatedBls12381Pairing<F> {
 
         // Compute ∏ᵢ { fᵢ_{x₀,Q}(P) }
 
-        // i = 62, separately to avoid an E12 Square
+        // i = 62, separately to avoid an Fp12 Square
         // (Square(res) = 1² = 1)
         // k = 0, separately to avoid MulBy014 (res × ℓ)
         res.c0.b0 = lines[0].v0[62]
@@ -562,7 +562,7 @@ where
             // Finally we do a select on both edge cases:
             //   - Only if seletor1=0 and selector2=0, we return MulTorus(c, t1) decompressed.
             //   - Otherwise, we return 1.
-            let c = ct.0; // rip out the E6s out of the torus elements
+            let c = ct.0; // rip out the Fp6s out of the torus elements
             let t1 = t1.0;
             let sum = c.add(&mut cs.namespace(|| "sum <- c + t1 (e6)"), &t1)?;
             let sel2: AllocatedBit =

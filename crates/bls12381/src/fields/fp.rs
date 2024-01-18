@@ -191,9 +191,7 @@ impl<F: PrimeField + PrimeFieldBits> FpElement<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let res = self
-            .0
-            .add(&mut cs.namespace(|| "compute a add b"), &value.0)?;
+        let res = self.0.add(&mut cs.namespace(|| "a + b"), &value.0)?;
         Ok(Self(res))
     }
 
@@ -201,9 +199,7 @@ impl<F: PrimeField + PrimeFieldBits> FpElement<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let res = self
-            .0
-            .sub(&mut cs.namespace(|| "compute a sub b"), &value.0)?;
+        let res = self.0.sub(&mut cs.namespace(|| "a - b"), &value.0)?;
         Ok(Self(res))
     }
 
@@ -211,9 +207,7 @@ impl<F: PrimeField + PrimeFieldBits> FpElement<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let res = self
-            .0
-            .mul(&mut cs.namespace(|| "compute a mul b"), &value.0)?;
+        let res = self.0.mul(&mut cs.namespace(|| "a * b"), &value.0)?;
         Ok(Self(res))
     }
 
@@ -229,9 +223,7 @@ impl<F: PrimeField + PrimeFieldBits> FpElement<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let res = self
-            .0
-            .divide(&mut cs.namespace(|| "compute a div b"), &value.0)?;
+        let res = self.0.divide(&mut cs.namespace(|| "a div b"), &value.0)?;
         Ok(Self(res))
     }
 
@@ -255,7 +247,7 @@ impl<F: PrimeField + PrimeFieldBits> FpElement<F> {
     {
         let res = self
             .0
-            .mul_const(&mut cs.namespace(|| "compute a * constval"), value)?;
+            .mul_const(&mut cs.namespace(|| "a * constval"), value)?;
         Ok(Self(res))
     }
 
@@ -263,7 +255,7 @@ impl<F: PrimeField + PrimeFieldBits> FpElement<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let res = self.0.neg(&mut cs.namespace(|| "compute -a"))?;
+        let res = self.0.neg(&mut cs.namespace(|| "-a"))?;
         Ok(Self(res))
     }
 

@@ -16,7 +16,7 @@ pub struct Torus<F: PrimeField + PrimeFieldBits>(pub Fp6Element<F>);
 ///  Torus-based arithmetic:
 ///
 /// After the easy part of the final exponentiation the elements are in a proper
-/// subgroup of Fpk (E12) that coincides with some algebraic tori. The elements
+/// subgroup of Fpk (Fp12) that coincides with some algebraic tori. The elements
 /// are in the torus Tk(Fp) and thus in each torus Tk/d(Fp^d) for d|k, d≠k.  We
 /// take d=6. So the elements are in T2(Fp6).
 /// Let G_{q,2} = {m ∈ Fq^2 | m^(q+1) = 1} where q = p^6.
@@ -28,7 +28,7 @@ pub struct Torus<F: PrimeField + PrimeFieldBits>(pub Fp6Element<F>);
 ///    𝔽p⁶[v] = 𝔽p²/v³-1-u
 ///    𝔽p¹²[w] = 𝔽p⁶/w²-v
 impl<F: PrimeField + PrimeFieldBits> Torus<F> {
-    /// compress_torus compresses x ∈ E12 to (x.C0 + 1)/x.C1 ∈ E6
+    /// compress_torus compresses x ∈ Fp12 to (x.C0 + 1)/x.C1 ∈ Fp6
     pub fn compress<CS>(cs: &mut CS, x: &Fp12Element<F>) -> Result<Torus<F>, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -53,7 +53,7 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
         Ok(y)
     }
 
-    /// decompress_torus decompresses y ∈ E6 to (y+w)/(y-w) ∈ E12
+    /// decompress_torus decompresses y ∈ Fp6 to (y+w)/(y-w) ∈ Fp12
     pub fn decompress<CS>(&self, cs: &mut CS) -> Result<Fp12Element<F>, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -95,7 +95,7 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
         Ok(x)
     }
 
-    /// mul_torus multiplies two compressed elements y1, y2 ∈ E6
+    /// mul_torus multiplies two compressed elements y1, y2 ∈ Fp6
     /// and returns (y1 * y2 + v)/(y1 + y2)
     /// N.B.: we use mul_torus in the final exponentiation throughout y1 ≠ -y2 always.
     pub fn mul<CS>(&self, cs: &mut CS, value: &Self) -> Result<Self, SynthesisError>
@@ -112,7 +112,7 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
         Ok(Torus(y3))
     }
 
-    /// inverse_torus inverses a compressed elements y ∈ E6
+    /// inverse_torus inverses a compressed elements y ∈ Fp6
     /// and returns -y
     pub fn inverse<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
     where
@@ -121,10 +121,10 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
         Ok(Torus(self.0.neg(&mut cs.namespace(|| "inverse_torus"))?))
     }
 
-    /// square_torus squares a compressed elements y ∈ E6
+    /// square_torus squares a compressed elements y ∈ Fp6
     /// and returns (y + v/y)/2
     ///
-    /// It uses a hint to verify that (2x-y)y = v saving one E6 AssertIsEqual.
+    /// It uses a hint to verify that (2x-y)y = v saving one Fp6 AssertIsEqual.
     pub fn square<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -155,14 +155,14 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
         Ok(Torus(sq_alloc))
     }
 
-    /// frobenius_torus raises a compressed elements y ∈ E6 to the modulus p
+    /// frobenius_torus raises a compressed elements y ∈ Fp6 to the modulus p
     /// and returns y^p / v^((p-1)/2)
     pub fn frobenius<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
         let y = &self.0;
-        let mut cs = cs.namespace(|| "compute frobenius_torus(y)");
+        let mut cs = cs.namespace(|| "Torus::frobenius(y)");
         let t0 =
             y.b0.conjugate(&mut cs.namespace(|| "t0 <- y.b0.conjugate()"))?;
         let t1 =
@@ -170,9 +170,9 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
         let t2 =
             y.b2.conjugate(&mut cs.namespace(|| "t2 <- y.b1.conjugate()"))?;
         let t1 =
-            t1.mul_by_nonresidue_1pow2(&mut cs.namespace(|| "t1 <- t1.mul_by_nonresidue_1pow2"))?;
+            t1.mul_by_nonresidue_1pow2(&mut cs.namespace(|| "t1 <- t1.mul_by_nonresidue_1pow2()"))?;
         let t2 =
-            t2.mul_by_nonresidue_1pow4(&mut cs.namespace(|| "t2 <- t2.mul_by_nonresidue_1pow4"))?;
+            t2.mul_by_nonresidue_1pow4(&mut cs.namespace(|| "t2 <- t2.mul_by_nonresidue_1pow4()"))?;
 
         let v0 = Fp2Element::<F>::from_dec(("877076961050607968509681729531255177986764537961432449499635504522207616027455086505066378536590128544573588734230", "877076961050607968509681729531255177986764537961432449499635504522207616027455086505066378536590128544573588734230")).unwrap();
         let res = Fp6Element {
@@ -185,14 +185,14 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
         Ok(Torus(res))
     }
 
-    /// frobenius_square_torus raises a compressed elements y ∈ E6 to the square modulus p^2
+    /// frobenius_square_torus raises a compressed elements y ∈ Fp6 to the square modulus p^2
     /// and returns y^(p^2) / v^((p^2-1)/2)
     pub fn frobenius_square<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
         let y = &self.0;
-        let mut cs = cs.namespace(|| "compute frobenius_square_torus(y)");
+        let mut cs = cs.namespace(|| "Torus::frobenius_square(y)");
         let v0 = FpElement::<F>::from_dec("4002409555221667392624310435006688643935503118305586438271171395842971157480381377015405980053539358417135540939437").unwrap();
         let t0 =
             y.b0.mul_element(&mut cs.namespace(|| "t0 <- y.b0 * elm(v0)"), &v0)?;
@@ -218,7 +218,7 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
     {
         let mut x = Some(self);
         let mut tmp = None;
-        let mut cs = cs.namespace(|| format!("compute x.n_square({n})"));
+        let mut cs = cs.namespace(|| format!("Torus::n_square(x, {n})"));
         for i in 0..n {
             if let Some(x_val) = x {
                 tmp = Some(x_val.square(&mut cs.namespace(|| format!("x <- x.square() ({i})")))?);
@@ -229,14 +229,14 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
         Ok(tmp.unwrap())
     }
 
-    /// expt_half_torus set z to x^(t/2) in E6 and return z
+    /// expt_half_torus set z to x^(t/2) in Fp6 and return z
     /// const t/2 uint64 = 7566188111470821376 // negative
     pub fn expt_half<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
         let x = self;
-        let mut cs = cs.namespace(|| "compute z = expt_half_torus(x)");
+        let mut cs = cs.namespace(|| "Torus::expt_half(x)");
 
         // FixedExp computation is derived from the addition chain:
         //
@@ -284,14 +284,14 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
         Ok(z)
     }
 
-    /// expt set z to xᵗ in E6 and return z
+    /// expt set z to xᵗ in Fp6 and return z
     /// const t uint64 = 15132376222941642752 // negative
     pub fn expt<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
         let x = self;
-        let mut cs = cs.namespace(|| "compute z = expt_torus(x)");
+        let mut cs = cs.namespace(|| "Torus::expt(x)");
         let z = x.expt_half(&mut cs.namespace(|| "z <- x.expt_half()"))?;
         let z = z.square(&mut cs.namespace(|| "z <- z.square()"))?;
         Ok(z)
