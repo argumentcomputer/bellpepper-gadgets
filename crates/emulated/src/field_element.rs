@@ -242,6 +242,11 @@ where
         }
     }
 
+    /// Allocates an `AllocatedBit` that is set if and only if the element is
+    /// congruent to 0 modulo the field prime.
+    ///
+    /// First reduces the field element, then allocates a bit per limb using
+    /// `alloc_num_equals_constant` and `AND`s them all together.
     pub fn alloc_is_zero<CS>(&self, cs: &mut CS) -> Result<AllocatedBit, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -255,11 +260,7 @@ where
         let mut prev_allocated_limb_bit: Option<AllocatedBit> = None;
         let mut final_bit: Option<AllocatedBit> = None;
 
-        // we need to calculate the remainder of self and the modulus since the element is not necessarily reduced at this point
-        // and alloc_num_equals_constant does not do the reduction itself
-
-        // TODO: do we actually need to reduce here (and add the width constraints and etc) or would compute_rem be enough?
-        // or is there a better way of checking equality to 0 mod P without reducing?
+        // explicitly reduce so we can use `alloc_num_equals_constant` on every limb and directly compare against 0
         let k = self.reduce(&mut cs.namespace(|| "self mod P"))?;
 
         if let EmulatedLimbs::Allocated(alloc_limbs) = &k.limbs {
