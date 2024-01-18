@@ -5,6 +5,7 @@ members = [
     "crates/ed25519",
     "crates/sha512",
     "crates/sha1",
+    "crates/keccak",
 ]
 
 [workspace.package]
@@ -13,9 +14,12 @@ repository = "https://github.com/lurk-lab/bellpepper-gadgets"
 
 [workspace.dependencies]
 bellpepper-core = { version="0.4.0", default-features = false }
-bellpepper = { version="0.4.0", default-features = false }
+bellpepper = { version="0.4.1", default-features = false }
 ff = "0.13.0"
 pasta_curves = { version = "0.5", features = ["repr-c", "serde"] }
+rand = "0.8.5"
+rand_core = "0.6.4"
+rand_xorshift = "0.3.0"
 
 [profile.dev-ci]
 inherits = "dev"
