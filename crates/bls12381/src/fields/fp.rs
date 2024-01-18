@@ -125,11 +125,12 @@ where
 }
 
 impl<F: PrimeField + PrimeFieldBits> AllocatedFieldElement<F> {
-    pub fn from_dec(val: &str) -> Result<Self, SynthesisError> {
-        let bigint =
-            BigInt::parse_bytes(val.as_bytes(), 10).ok_or(SynthesisError::Unsatisfiable)?;
-        let elm = bigint_to_fpelem(&bigint).ok_or(SynthesisError::Unsatisfiable)?;
-        Ok(Self::from(&elm))
+    pub fn from_dec(val: &str) -> Option<Self> {
+        BigInt::parse_bytes(val.as_bytes(), 10)
+            .as_ref()
+            .and_then(bigint_to_fpelem)
+            .as_ref()
+            .map(Self::from)
     }
 
     pub fn zero() -> Self {
