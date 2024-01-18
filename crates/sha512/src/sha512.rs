@@ -105,6 +105,18 @@ const IV: [u64; 8] = [
     0x5be0cd19137e2179,
 ];
 
+#[allow(clippy::unreadable_literal)]
+const IV_256T: [u64; 8] = [
+    0x22312194fc2bf72c,
+    0x9f555fa3c84c64c2,
+    0x2393b86b6f53b151,
+    0x963877195940eabd,
+    0x96283ee2a88effe3,
+    0xbe5e1e2553863992,
+    0x2b0199fc2c85b8aa,
+    0x0eb72ddc81c52ca2,
+];
+
 pub fn sha512_block_no_padding<Scalar, CS>(
     mut cs: CS,
     input: &[Boolean],
@@ -152,8 +164,48 @@ where
     Ok(cur.into_iter().flat_map(|e| e.into_bits_be()).collect())
 }
 
+pub fn sha512_256t<Scalar, CS>(
+    mut cs: CS,
+    input: &[Boolean],
+) -> Result<Vec<Boolean>, SynthesisError>
+where
+    Scalar: PrimeField,
+    CS: ConstraintSystem<Scalar>,
+{
+    assert!(input.len() % 8 == 0);
+
+    let mut padded = input.to_vec();
+    let plen = padded.len() as u128;
+    // append a single '1' bit
+    padded.push(Boolean::constant(true));
+    // append K '0' bits, where K is the minimum number >= 0 such that L + 1 + K + 128 is a multiple of 1024
+    while (padded.len() + 128) % 1024 != 0 {
+        padded.push(Boolean::constant(false));
+    }
+    // append L as a 128-bit big-endian integer, making the total post-processed length a multiple of 1024 bits
+    for b in (0..128).rev().map(|i| (plen >> i) & 1 == 1) {
+        padded.push(Boolean::constant(b));
+    }
+    assert!(padded.len() % 1024 == 0);
+
+    let mut cur = get_sha512_256t_iv();
+    for (i, block) in padded.chunks(1024).enumerate() {
+        cur = sha512_compression_function(cs.namespace(|| format!("block {}", i)), block, &cur)?;
+    }
+
+    Ok(cur
+        .into_iter()
+        .flat_map(|e| e.into_bits_be())
+        .take(256)
+        .collect())
+}
+
 fn get_sha512_iv() -> Vec<UInt64> {
     IV.iter().map(|&v| UInt64::constant(v)).collect()
+}
+
+fn get_sha512_256t_iv() -> Vec<UInt64> {
+    IV_256T.iter().map(|&v| UInt64::constant(v)).collect()
 }
 
 pub fn sha512_compression_function<Scalar, CS>(
@@ -351,14 +403,15 @@ where
 mod test {
     use super::*;
     use bellpepper_core::{boolean::AllocatedBit, test_cs::TestConstraintSystem};
+    use bitvec::{order::Msb0, vec::BitVec};
     use blstrs::Scalar as Fr;
+    use proptest::prelude::*;
     use rand::Rng;
     use rand_core::{RngCore, SeedableRng};
     use rand_xorshift::XorShiftRng;
-    use sha2::{Digest, Sha512};
+    use sha2::{Digest, Sha512, Sha512_256};
 
     #[test]
-    #[allow(clippy::needless_collect)]
     fn test_hash() {
         for _ in 0..50 {
             let length: u8 = rand::thread_rng().gen();
@@ -394,6 +447,62 @@ mod test {
             for (i, j) in r.into_iter().zip(s) {
                 assert_eq!(i.get_value(), Some(j));
             }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn test_sha512(preimage in "[0-9a-f]{128}") {
+            let preimage = hex::decode(preimage).unwrap();
+
+            let expected = {
+                let mut h = Sha512::new();
+                h.update(&preimage);
+                h.finalize()
+            };
+
+            let preimage: Vec<Boolean> = {
+                let bits = BitVec::<Msb0, u8>::from_slice(&preimage);
+                bits.iter().map(|b| Boolean::constant(*b)).collect()
+            };
+
+            let cs = TestConstraintSystem::<Fr>::new();
+            let result = sha512(cs, &preimage).unwrap();
+
+            let result = {
+                let mut bv = BitVec::<Msb0, u8>::new();
+                bv.extend(result.iter().map(|b| b.get_value().unwrap()));
+                bv.as_slice().to_vec()
+            };
+
+            assert_eq!(hex::encode(result), hex::encode(expected));
+        }
+
+        #[test]
+        fn test_sha512_256t(preimage in "[0-9a-f]{128}") {
+            let preimage = hex::decode(preimage).unwrap();
+
+            let expected = {
+                let mut h = Sha512_256::new();
+                h.update(&preimage);
+                h.finalize()
+            };
+
+            let preimage: Vec<Boolean> = {
+                let bits = BitVec::<Msb0, u8>::from_slice(&preimage);
+                bits.iter().map(|b| Boolean::constant(*b)).collect()
+            };
+
+            let cs = TestConstraintSystem::<Fr>::new();
+            let result = sha512_256t(cs, &preimage).unwrap();
+
+            let result = {
+                let mut bv = BitVec::<Msb0, u8>::new();
+                bv.extend(result.iter().map(|b| b.get_value().unwrap()));
+                bv.as_slice().to_vec()
+            };
+
+            assert_eq!(hex::encode(result), hex::encode(expected));
         }
     }
 
