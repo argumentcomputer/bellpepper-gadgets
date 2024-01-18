@@ -3,13 +3,13 @@ use bls12_381::fp12::Fp12 as BlsFp12;
 use bls12_381::fp6::Fp6 as BlsFp6;
 use ff::{PrimeField, PrimeFieldBits};
 
-use super::e12::AllocatedE12Element;
-use super::e2::AllocatedE2Element;
-use super::e6::AllocatedE6Element;
-use super::fp::AllocatedFieldElement;
+use super::fp::FpElement;
+use super::fp12::Fp12Element;
+use super::fp2::Fp2Element;
+use super::fp6::Fp6Element;
 
 #[derive(Clone)]
-pub struct Torus<F: PrimeField + PrimeFieldBits>(pub AllocatedE6Element<F>);
+pub struct Torus<F: PrimeField + PrimeFieldBits>(pub Fp6Element<F>);
 
 /// From gnark's std/algebra/emulated/fields_bls12381/e12_pairing.go:
 ///
@@ -29,15 +29,13 @@ pub struct Torus<F: PrimeField + PrimeFieldBits>(pub AllocatedE6Element<F>);
 ///    𝔽p¹²[w] = 𝔽p⁶/w²-v
 impl<F: PrimeField + PrimeFieldBits> Torus<F> {
     /// compress_torus compresses x ∈ E12 to (x.C0 + 1)/x.C1 ∈ E6
-    pub fn compress<CS>(cs: &mut CS, x: &AllocatedE12Element<F>) -> Result<Torus<F>, SynthesisError>
+    pub fn compress<CS>(cs: &mut CS, x: &Fp12Element<F>) -> Result<Torus<F>, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
         // self ∈ G_{q,2} \ {-1,1}
-        let y = x.c0.add(
-            &mut cs.namespace(|| "y <- x.c0 + 1"),
-            &AllocatedE6Element::one(),
-        )?;
+        let y =
+            x.c0.add(&mut cs.namespace(|| "y <- x.c0 + 1"), &Fp6Element::one())?;
         let y = y.div_unchecked(&mut cs.namespace(|| "y <- y div x.c1"), &x.c1)?;
         Ok(Torus(y))
     }
@@ -56,20 +54,19 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
     }
 
     /// decompress_torus decompresses y ∈ E6 to (y+w)/(y-w) ∈ E12
-    pub fn decompress<CS>(&self, cs: &mut CS) -> Result<AllocatedE12Element<F>, SynthesisError>
+    pub fn decompress<CS>(&self, cs: &mut CS) -> Result<Fp12Element<F>, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
-        // NOTE: if we don't alloc_element and try to just use AllocatedE6Element::one() instead, this fails
+        // NOTE: if we don't alloc_element and try to just use Fp6Element::one() instead, this fails
         // (presumably because one() returns a non-allocated constant)
-        let alloc_one =
-            AllocatedE6Element::alloc_element(&mut cs.namespace(|| "alloc 1"), &BlsFp6::one())?;
+        let alloc_one = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc 1"), &BlsFp6::one())?;
         let neg_one = alloc_one.neg(&mut cs.namespace(|| "-1"))?;
-        let n = AllocatedE12Element {
+        let n = Fp12Element {
             c0: self.0.clone(),
             c1: alloc_one,
         };
-        let d = AllocatedE12Element {
+        let d = Fp12Element {
             c0: self.0.clone(),
             c1: neg_one,
         };
@@ -107,10 +104,8 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
     {
         let (y1, y2) = (&self.0, &value.0);
         let mut n = y1.mul(&mut cs.namespace(|| "n <- y1 * y2"), y2)?;
-        n.b1 = n.b1.add(
-            &mut cs.namespace(|| "n.b1 <- n.b1 + 1"),
-            &AllocatedE2Element::one(),
-        )?;
+        n.b1 =
+            n.b1.add(&mut cs.namespace(|| "n.b1 <- n.b1 + 1"), &Fp2Element::one())?;
         let d = y1.add(&mut cs.namespace(|| "d <- y1 + y2"), y2)?;
         let y3 = n.div_unchecked(&mut cs.namespace(|| "y3 <- n div d"), &d)?;
 
@@ -142,26 +137,20 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
 
         let val = Self::compress_native(&val)?;
 
-        let sq_alloc = AllocatedE6Element::<F>::alloc_element(
-            &mut cs.namespace(|| "alloc torus square"),
-            &val,
-        )?; // x
+        let sq_alloc =
+            Fp6Element::<F>::alloc_element(&mut cs.namespace(|| "alloc torus square"), &val)?; // x
 
         // v = (2x-y)y
         let v = sq_alloc.double(&mut cs.namespace(|| "v <- v.double()"))?;
         let v = v.sub(&mut cs.namespace(|| "v <- v - y"), y)?;
         let v = v.mul(&mut cs.namespace(|| "v <- v * y"), y)?;
 
-        let expected = AllocatedE6Element {
-            b0: AllocatedE2Element::zero(),
-            b1: AllocatedE2Element::one(),
-            b2: AllocatedE2Element::zero(),
+        let expected = Fp6Element {
+            b0: Fp2Element::zero(),
+            b1: Fp2Element::one(),
+            b2: Fp2Element::zero(),
         };
-        AllocatedE6Element::assert_is_equal(
-            &mut cs.namespace(|| "v = Fp6(0, 1, 0)"),
-            &v,
-            &expected,
-        )?;
+        Fp6Element::assert_is_equal(&mut cs.namespace(|| "v = Fp6(0, 1, 0)"), &v, &expected)?;
 
         Ok(Torus(sq_alloc))
     }
@@ -185,8 +174,8 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
         let t2 =
             t2.mul_by_nonresidue_1pow4(&mut cs.namespace(|| "t2 <- t2.mul_by_nonresidue_1pow4"))?;
 
-        let v0 = AllocatedE2Element::<F>::from_dec(("877076961050607968509681729531255177986764537961432449499635504522207616027455086505066378536590128544573588734230", "877076961050607968509681729531255177986764537961432449499635504522207616027455086505066378536590128544573588734230")).unwrap();
-        let res = AllocatedE6Element {
+        let v0 = Fp2Element::<F>::from_dec(("877076961050607968509681729531255177986764537961432449499635504522207616027455086505066378536590128544573588734230", "877076961050607968509681729531255177986764537961432449499635504522207616027455086505066378536590128544573588734230")).unwrap();
+        let res = Fp6Element {
             b0: t0,
             b1: t1,
             b2: t2,
@@ -204,7 +193,7 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
     {
         let y = &self.0;
         let mut cs = cs.namespace(|| "compute frobenius_square_torus(y)");
-        let v0 = AllocatedFieldElement::<F>::from_dec("4002409555221667392624310435006688643935503118305586438271171395842971157480381377015405980053539358417135540939437").unwrap();
+        let v0 = FpElement::<F>::from_dec("4002409555221667392624310435006688643935503118305586438271171395842971157480381377015405980053539358417135540939437").unwrap();
         let t0 =
             y.b0.mul_element(&mut cs.namespace(|| "t0 <- y.b0 * elm(v0)"), &v0)?;
         let t1 = y
@@ -216,7 +205,7 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
             .mul_by_nonresidue_2pow4(&mut cs.namespace(|| "t2 <- y.b2.mul_by_nonresidue_2pow2"))?;
         let t2 = t2.mul_element(&mut cs.namespace(|| "t2 <- t2 * elm(v0)"), &v0)?;
 
-        Ok(Torus(AllocatedE6Element {
+        Ok(Torus(Fp6Element {
             b0: t0,
             b1: t1,
             b2: t2,
@@ -327,12 +316,10 @@ mod tests {
         let c = Torus::<Fp>::compress_native(&a).unwrap();
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc =
-            AllocatedE12Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc =
-            AllocatedE6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
         let res_alloc = Torus::compress(&mut cs.namespace(|| "a.torus()"), &a_alloc).unwrap();
-        AllocatedE6Element::assert_is_equal(
+        Fp6Element::assert_is_equal(
             &mut cs.namespace(|| "a.torus() = c"),
             &res_alloc.0,
             &c_alloc,
@@ -354,15 +341,13 @@ mod tests {
         let c = Torus::<Fp>::decompress_native(&a).unwrap();
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc =
-            AllocatedE6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc =
-            AllocatedE12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
         let res = Torus(a_alloc);
         let res_alloc = res
             .decompress(&mut cs.namespace(|| "a.decompress()"))
             .unwrap();
-        AllocatedE12Element::assert_is_equal(
+        Fp12Element::assert_is_equal(
             &mut cs.namespace(|| "a.decompress() = c"),
             &res_alloc,
             &c_alloc,
@@ -397,21 +382,14 @@ mod tests {
         };
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc =
-            AllocatedE12Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc =
-            AllocatedE12Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc =
-            AllocatedE6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let b_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
         let a_alloc = Torus::compress(&mut cs.namespace(|| "a <- a.torus()"), &a_alloc).unwrap();
         let b_alloc = Torus::compress(&mut cs.namespace(|| "b <- b.torus()"), &b_alloc).unwrap();
         let res_alloc = a_alloc.mul(&mut cs.namespace(|| "a*b"), &b_alloc).unwrap();
-        AllocatedE6Element::assert_is_equal(
-            &mut cs.namespace(|| "a*b = c"),
-            &res_alloc.0,
-            &c_alloc,
-        )
-        .unwrap();
+        Fp6Element::assert_is_equal(&mut cs.namespace(|| "a*b = c"), &res_alloc.0, &c_alloc)
+            .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }

@@ -10,11 +10,9 @@ use bls12_381::fp6::Fp6 as BlsFp6;
 use ff::{PrimeField, PrimeFieldBits};
 use num_bigint::BigInt;
 
-use crate::fields::{
-    e12::AllocatedE12Element, e2::AllocatedE2Element, e6::AllocatedE6Element, torus::Torus,
-};
+use crate::fields::{fp12::Fp12Element, fp2::Fp2Element, fp6::Fp6Element, torus::Torus};
 
-use super::{g1::AllocatedG1Point, g2::AllocatedG2Point};
+use super::{g1::G1Point, g2::G2Point};
 
 pub trait EmulatedPairing<F, G1Element, G2Element, GtElement>
 where
@@ -53,14 +51,14 @@ pub struct EmulatedBls12381Pairing<F> {
 /// line: 1 + R0(x/y) + R1(1/y) = 0 instead of R0'*y + R1'*x + R2' = 0 This
 /// makes the multiplication by lines (MulBy014)
 pub struct LineEval<F: PrimeField + PrimeFieldBits> {
-    pub(crate) r0: AllocatedE2Element<F>,
-    pub(crate) r1: AllocatedE2Element<F>,
+    pub(crate) r0: Fp2Element<F>,
+    pub(crate) r1: Fp2Element<F>,
 }
 impl<F: PrimeField + PrimeFieldBits> LineEval<F> {
     fn zero() -> Self {
         Self {
-            r0: AllocatedE2Element::zero(),
-            r1: AllocatedE2Element::zero(),
+            r0: Fp2Element::zero(),
+            r1: Fp2Element::zero(),
         }
     }
 }
@@ -94,7 +92,7 @@ const LOOP_COUNTER: [u8; 64] = [
 impl<F: PrimeField + PrimeFieldBits> EmulatedBls12381Pairing<F> {
     pub fn compute_lines<CS: ConstraintSystem<F>>(
         cs: &mut CS,
-        q: &AllocatedG2Point<F>,
+        q: &G2Point<F>,
     ) -> Result<LineEvals<F>, SynthesisError> {
         let cs = &mut cs.namespace(|| "compute_lines(q)");
         let mut res = LineEvals::<F>::new();
@@ -147,8 +145,8 @@ impl<F: PrimeField + PrimeFieldBits> EmulatedBls12381Pairing<F> {
     /// triple_step triples p1 in affine coordinates, and evaluates the line in Miller loop
     pub fn triple_step<CS: ConstraintSystem<F>>(
         cs: &mut CS,
-        p: &AllocatedG2Point<F>,
-    ) -> Result<(AllocatedG2Point<F>, LineEval<F>, LineEval<F>), SynthesisError> {
+        p: &G2Point<F>,
+    ) -> Result<(G2Point<F>, LineEval<F>, LineEval<F>), SynthesisError> {
         let cs = &mut cs.namespace(|| "triple_step(p)");
         // λ1 = 3x²/2y
         let n = p.x.square(&mut cs.namespace(|| "n <- p.x.square()"))?;
@@ -189,14 +187,14 @@ impl<F: PrimeField + PrimeFieldBits> EmulatedBls12381Pairing<F> {
         let l2pxrx = l2.mul(&mut cs.namespace(|| "l2pxrx <- l2 * pxrx"), &pxrx)?;
         let yr = l2pxrx.sub(&mut cs.namespace(|| "yr <- l2pxrx - p.y"), &p.y)?;
 
-        Ok((AllocatedG2Point { x: xr, y: yr }, line1, line2))
+        Ok((G2Point { x: xr, y: yr }, line1, line2))
     }
 
     /// double_step doubles a point in affine coordinates, and evaluates the line in Miller loop
     pub fn double_step<CS: ConstraintSystem<F>>(
         cs: &mut CS,
-        p: &AllocatedG2Point<F>,
-    ) -> Result<(AllocatedG2Point<F>, LineEval<F>), SynthesisError> {
+        p: &G2Point<F>,
+    ) -> Result<(G2Point<F>, LineEval<F>), SynthesisError> {
         let cs = &mut cs.namespace(|| "double_step(p)");
         // λ = 3x²/2y
         let n = p.x.square(&mut cs.namespace(|| "n <- p.x.square()"))?;
@@ -218,7 +216,7 @@ impl<F: PrimeField + PrimeFieldBits> EmulatedBls12381Pairing<F> {
         let r1 = l.mul(&mut cs.namespace(|| "r1 <- l * p.x"), &p.x)?;
         let r1 = r1.sub(&mut cs.namespace(|| "r1 <- r1 - p.y"), &p.y)?;
 
-        Ok((AllocatedG2Point { x: xr, y: yr }, LineEval { r0, r1 }))
+        Ok((G2Point { x: xr, y: yr }, LineEval { r0, r1 }))
     }
 
     #[allow(clippy::type_complexity)]
@@ -226,9 +224,9 @@ impl<F: PrimeField + PrimeFieldBits> EmulatedBls12381Pairing<F> {
     /// https://eprint.iacr.org/2022/1162 (Section 6.1)/
     pub fn double_and_add_step<CS: ConstraintSystem<F>>(
         cs: &mut CS,
-        p1: &AllocatedG2Point<F>,
-        p2: &AllocatedG2Point<F>,
-    ) -> Result<(AllocatedG2Point<F>, LineEval<F>, LineEval<F>), SynthesisError> {
+        p1: &G2Point<F>,
+        p2: &G2Point<F>,
+    ) -> Result<(G2Point<F>, LineEval<F>, LineEval<F>), SynthesisError> {
         let cs = &mut cs.namespace(|| "double_and_add_step(p1, p2)");
         // compute λ1 = (y2-y1)/(x2-x1)
         let n = p1.y.sub(&mut cs.namespace(|| "n <- p1.y - p2.y"), &p2.y)?;
@@ -271,13 +269,13 @@ impl<F: PrimeField + PrimeFieldBits> EmulatedBls12381Pairing<F> {
         let l2r1 = l2r1.sub(&mut cs.namespace(|| "l2r1 <- l2r1 - p1.y"), &p1.y)?;
         let line2 = LineEval { r0: l2r0, r1: l2r1 };
 
-        Ok((AllocatedG2Point { x: x4, y: y4 }, line1, line2))
+        Ok((G2Point { x: x4, y: y4 }, line1, line2))
     }
 
     /// tangent_compute computes the line that goes through p1 and p2 but does not compute p1+p2
     pub fn tangent_compute<CS: ConstraintSystem<F>>(
         cs: &mut CS,
-        p: &AllocatedG2Point<F>,
+        p: &G2Point<F>,
     ) -> Result<LineEval<F>, SynthesisError> {
         let cs = &mut cs.namespace(|| "tangent_compute(p)");
         // λ = 3x²/2y
@@ -296,9 +294,9 @@ impl<F: PrimeField + PrimeFieldBits> EmulatedBls12381Pairing<F> {
     /// miller_loop_lines computes the multi-Miller loop from points in G1 and precomputed lines in G2
     fn miller_loop_lines<CS: ConstraintSystem<F>>(
         cs: &mut CS,
-        g1: impl AsRef<[AllocatedG1Point<F>]>,
+        g1: impl AsRef<[G1Point<F>]>,
         g2_lines: impl AsRef<[LineEvals<F>]>,
-    ) -> Result<AllocatedE12Element<F>, SynthesisError> {
+    ) -> Result<Fp12Element<F>, SynthesisError> {
         let cs = &mut cs.namespace(|| "miller_loop_lines(p, l)");
         let (p, lines) = (g1.as_ref(), g2_lines.as_ref());
         assert!(
@@ -330,7 +328,7 @@ impl<F: PrimeField + PrimeFieldBits> EmulatedBls12381Pairing<F> {
 
         // TODO: there should be some unnecessary allocs due to how we're overwriting some res values below, double check
         let mut res =
-            AllocatedE12Element::alloc_element(&mut cs.namespace(|| "res <- 1"), &BlsFp12::one())?;
+            Fp12Element::alloc_element(&mut cs.namespace(|| "res <- 1"), &BlsFp12::one())?;
 
         // Compute ∏ᵢ { fᵢ_{x₀,Q}(P) }
 
@@ -351,10 +349,8 @@ impl<F: PrimeField + PrimeFieldBits> EmulatedBls12381Pairing<F> {
                 &x_neg_over_y[0],
             )?
             .clone();
-        res.c1.b1 = AllocatedE2Element::alloc_element(
-            &mut cs.namespace(|| "res.c1.b1 <- 1"),
-            &BlsFp2::one(),
-        )?;
+        res.c1.b1 =
+            Fp2Element::alloc_element(&mut cs.namespace(|| "res.c1.b1 <- 1"), &BlsFp2::one())?;
 
         let tmp0 = lines[0].v1[62].r1.mul_element(
             &mut cs.namespace(|| "tmp0 <- l[0][1][62].r1 * y_inv[0]"),
@@ -364,7 +360,7 @@ impl<F: PrimeField + PrimeFieldBits> EmulatedBls12381Pairing<F> {
             &mut cs.namespace(|| "tmp1 <- l[0][1][62].r0 * x_neg_over_y[0]"),
             &x_neg_over_y[0],
         )?;
-        let mut res = AllocatedE12Element::mul_014_by_014(
+        let mut res = Fp12Element::mul_014_by_014(
             &mut cs.namespace(|| "res <- mul_014_by_014(tmp0, tmp1, res.c0.b0, res.c0.b1"),
             &tmp0,
             &tmp1,
@@ -447,8 +443,7 @@ impl<F: PrimeField + PrimeFieldBits> EmulatedBls12381Pairing<F> {
     }
 }
 
-impl<F> EmulatedPairing<F, AllocatedG1Point<F>, AllocatedG2Point<F>, AllocatedE12Element<F>>
-    for EmulatedBls12381Pairing<F>
+impl<F> EmulatedPairing<F, G1Point<F>, G2Point<F>, Fp12Element<F>> for EmulatedBls12381Pairing<F>
 where
     F: PrimeField + PrimeFieldBits,
 {
@@ -456,9 +451,9 @@ where
     /// ∏ᵢ { fᵢ_{u,Q}(P) }
     fn miller_loop<CS: ConstraintSystem<F>>(
         cs: &mut CS,
-        g1: impl AsRef<[AllocatedG1Point<F>]>,
-        g2: impl AsRef<[AllocatedG2Point<F>]>,
-    ) -> Result<AllocatedE12Element<F>, SynthesisError> {
+        g1: impl AsRef<[G1Point<F>]>,
+        g2: impl AsRef<[G2Point<F>]>,
+    ) -> Result<Fp12Element<F>, SynthesisError> {
         let (p, q) = (g1.as_ref(), g2.as_ref());
         if p.is_empty() || p.len() != q.len() {
             return Err(SynthesisError::IncompatibleLengthVector(format!(
@@ -482,13 +477,13 @@ where
 
     fn final_exponentiation<CS: ConstraintSystem<F>>(
         cs: &mut CS,
-        gt: &AllocatedE12Element<F>,
+        gt: &Fp12Element<F>,
         is_single_pairing: bool,
-    ) -> Result<AllocatedE12Element<F>, SynthesisError> {
+    ) -> Result<Fp12Element<F>, SynthesisError> {
         let cs = &mut cs.namespace(|| format!("final_exponentiation(e, {is_single_pairing})"));
         let mut e = gt.clone();
         let mut sel1: Option<AllocatedBit> = None;
-        let mut dummy: Option<AllocatedE6Element<F>> = None;
+        let mut dummy: Option<Fp6Element<F>> = None;
 
         // 1. Easy part
         // (p⁶-1)(p²+1)
@@ -502,14 +497,14 @@ where
             // However, for a product of Miller loops (n>=2) this might happen.  If this is
             // the case, the result is 1 in the torus. We assign a dummy value (1) to e.C1
             // and proceed further.
-            dummy = Some(AllocatedE6Element::<F>::alloc_element(
+            dummy = Some(Fp6Element::<F>::alloc_element(
                 &mut cs.namespace(|| "alloc dummy"),
                 &BlsFp6::one(),
             )?); // TODO: do we need to explicit alloc here or could this be a constant?
             sel1 = Some(e.c1.alloc_is_zero(&mut cs.namespace(|| "sel1 <- e.c1.is_zero()"))?);
-            e = AllocatedE12Element {
+            e = Fp12Element {
                 c0: e.c0,
-                c1: AllocatedE6Element::conditionally_select(
+                c1: Fp6Element::conditionally_select(
                     &mut cs.namespace(|| "e.c1 <- select(dummy, e.c1, sel1)"),
                     dummy.as_ref().unwrap(),
                     &e.c1,
@@ -572,7 +567,7 @@ where
             let sum = c.add(&mut cs.namespace(|| "sum <- c + t1 (e6)"), &t1)?;
             let sel2: AllocatedBit =
                 sum.alloc_is_zero(&mut cs.namespace(|| "sel2 <- sum.is_zero()"))?;
-            let t1 = AllocatedE6Element::conditionally_select(
+            let t1 = Fp6Element::conditionally_select(
                 &mut cs.namespace(|| "t1 <- select(dummy, t1, sel2)"),
                 &dummy.unwrap(),
                 &t1,
@@ -587,11 +582,11 @@ where
             let t1 = Torus(t1);
             let res = ct.mul(&mut cs.namespace(|| "res <- ct * t1"), &t1)?;
             let res = res.decompress(&mut cs.namespace(|| "res <- res.decompress()"))?;
-            let dummy2 = AllocatedE12Element::<F>::alloc_element(
+            let dummy2 = Fp12Element::<F>::alloc_element(
                 &mut cs.namespace(|| "alloc dummy2"),
                 &BlsFp12::one(),
             )?; // TODO: does this need an explicit alloc or could this be a constant?
-            let res = AllocatedE12Element::conditionally_select(
+            let res = Fp12Element::conditionally_select(
                 &mut cs.namespace(|| "res <- select(res, 1, selector)"),
                 &res,
                 &dummy2,
@@ -603,9 +598,9 @@ where
 
     fn pair<CS: ConstraintSystem<F>>(
         cs: &mut CS,
-        g1: impl AsRef<[AllocatedG1Point<F>]>,
-        g2: impl AsRef<[AllocatedG2Point<F>]>,
-    ) -> Result<AllocatedE12Element<F>, SynthesisError> {
+        g1: impl AsRef<[G1Point<F>]>,
+        g2: impl AsRef<[G2Point<F>]>,
+    ) -> Result<Fp12Element<F>, SynthesisError> {
         let p_len = g1.as_ref().len();
         let res = Self::miller_loop(cs, g1, g2)?;
         let res = Self::final_exponentiation(cs, &res, p_len == 1)?;
@@ -614,12 +609,12 @@ where
 
     fn assert_pairing_check<CS: ConstraintSystem<F>>(
         cs: &mut CS,
-        g1: impl AsRef<[AllocatedG1Point<F>]>,
-        g2: impl AsRef<[AllocatedG2Point<F>]>,
+        g1: impl AsRef<[G1Point<F>]>,
+        g2: impl AsRef<[G2Point<F>]>,
     ) -> Result<(), SynthesisError> {
         let res = Self::pair(cs, g1, g2)?;
-        let one = AllocatedE12Element::<F>::one();
-        AllocatedE12Element::assert_is_equal(&mut cs.namespace(|| "pair(p, q) =? 1"), &res, &one)?;
+        let one = Fp12Element::<F>::one();
+        Fp12Element::assert_is_equal(&mut cs.namespace(|| "pair(p, q) =? 1"), &res, &one)?;
         Ok(())
     }
 }
@@ -638,7 +633,7 @@ mod tests {
     //     expected.assert_eq(&computed.to_string());
     // }
 
-    // NOTE: this test currently takes ~100GB of ram and a few minutes to run, might be good to disable by default
+    // NOTE: this test currently takes ~100GB of ram and a few minutes to run, so it's commented out
     // #[test]
     // fn test_random_pairing() {
     //     let mut rng = rand::thread_rng();
@@ -650,22 +645,17 @@ mod tests {
     //     let c = c.0;
 
     //     let mut cs = TestConstraintSystem::<Fp>::new();
-    //     let a_alloc = AllocatedG1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-    //     let b_alloc = AllocatedG2Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-    //     let c_alloc =
-    //         AllocatedE12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+    //     let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+    //     let b_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+    //     let c_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
     //     let res_alloc = EmulatedBls12381Pairing::pair(
     //         &mut cs.namespace(|| "pair(a, b)"),
     //         &[a_alloc],
     //         &[b_alloc],
     //     )
     //     .unwrap();
-    //     AllocatedE12Element::assert_is_equal(
-    //         &mut cs.namespace(|| "pair(a, b) = c"),
-    //         &res_alloc,
-    //         &c_alloc,
-    //     )
-    //     .unwrap();
+    //     Fp12Element::assert_is_equal(&mut cs.namespace(|| "pair(a, b) = c"), &res_alloc, &c_alloc)
+    //         .unwrap();
     //     if !cs.is_satisfied() {
     //         eprintln!("{:?}", cs.which_is_unsatisfied())
     //     }

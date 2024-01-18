@@ -5,30 +5,30 @@ use bls12_381::fp2::Fp2 as BlsFp2;
 use ff::{PrimeField, PrimeFieldBits};
 use num_bigint::BigInt;
 
-use super::fp::{bigint_to_fpelem, AllocatedFieldElement};
+use super::fp::{bigint_to_fpelem, FpElement};
 
 #[derive(Clone)]
-pub struct AllocatedE2Element<F: PrimeField + PrimeFieldBits> {
-    pub(crate) a0: AllocatedFieldElement<F>,
-    pub(crate) a1: AllocatedFieldElement<F>,
+pub struct Fp2Element<F: PrimeField + PrimeFieldBits> {
+    pub(crate) a0: FpElement<F>,
+    pub(crate) a1: FpElement<F>,
 }
 
-impl<F> From<&BlsFp2> for AllocatedE2Element<F>
+impl<F> From<&BlsFp2> for Fp2Element<F>
 where
     F: PrimeField + PrimeFieldBits,
 {
     fn from(value: &BlsFp2) -> Self {
-        let a0 = AllocatedFieldElement::<F>::from(&value.c0);
-        let a1 = AllocatedFieldElement::<F>::from(&value.c1);
+        let a0 = FpElement::<F>::from(&value.c0);
+        let a1 = FpElement::<F>::from(&value.c1);
         Self { a0, a1 }
     }
 }
 
-impl<F> From<&AllocatedE2Element<F>> for BlsFp2
+impl<F> From<&Fp2Element<F>> for BlsFp2
 where
     F: PrimeField + PrimeFieldBits,
 {
-    fn from(value: &AllocatedE2Element<F>) -> Self {
+    fn from(value: &Fp2Element<F>) -> Self {
         let c0 = BlsFp::from(&value.a0);
         let c1 = BlsFp::from(&value.a1);
         BlsFp2 { c0, c1 }
@@ -41,10 +41,10 @@ pub fn bigint_to_e2elem(val: (&BigInt, &BigInt)) -> Option<BlsFp2> {
     Some(BlsFp2 { c0, c1 })
 }
 
-impl<F: PrimeField + PrimeFieldBits> AllocatedE2Element<F> {
+impl<F: PrimeField + PrimeFieldBits> Fp2Element<F> {
     pub fn from_dec(val: (&str, &str)) -> Option<Self> {
-        let c0 = AllocatedFieldElement::from_dec(val.0);
-        let c1 = AllocatedFieldElement::from_dec(val.1);
+        let c0 = FpElement::from_dec(val.0);
+        let c1 = FpElement::from_dec(val.1);
         if let (Some(c0), Some(c1)) = (c0, c1) {
             Some(Self { a0: c0, a1: c1 })
         } else {
@@ -54,22 +54,22 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedE2Element<F> {
 
     pub fn zero() -> Self {
         Self {
-            a0: AllocatedFieldElement::zero(),
-            a1: AllocatedFieldElement::zero(),
+            a0: FpElement::zero(),
+            a1: FpElement::zero(),
         }
     }
 
     pub fn one() -> Self {
         Self {
-            a0: AllocatedFieldElement::one(),
-            a1: AllocatedFieldElement::zero(),
+            a0: FpElement::one(),
+            a1: FpElement::zero(),
         }
     }
 
     pub fn non_residue() -> Self {
         Self {
-            a0: AllocatedFieldElement::one(),
-            a1: AllocatedFieldElement::one(),
+            a0: FpElement::one(),
+            a1: FpElement::one(),
         }
     }
 
@@ -77,14 +77,8 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedE2Element<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let a0 = AllocatedFieldElement::<F>::alloc_element(
-            &mut cs.namespace(|| "allocate a0"),
-            &value.c0,
-        )?;
-        let a1 = AllocatedFieldElement::<F>::alloc_element(
-            &mut cs.namespace(|| "allocate a1"),
-            &value.c1,
-        )?;
+        let a0 = FpElement::<F>::alloc_element(&mut cs.namespace(|| "allocate a0"), &value.c0)?;
+        let a1 = FpElement::<F>::alloc_element(&mut cs.namespace(|| "allocate a1"), &value.c1)?;
 
         Ok(Self { a0, a1 })
     }
@@ -93,16 +87,8 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedE2Element<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        AllocatedFieldElement::<F>::assert_is_equal(
-            &mut cs.namespace(|| "a0 =? a0"),
-            &a.a0,
-            &b.a0,
-        )?;
-        AllocatedFieldElement::<F>::assert_is_equal(
-            &mut cs.namespace(|| "a1 =? a1"),
-            &a.a1,
-            &b.a1,
-        )?;
+        FpElement::<F>::assert_is_equal(&mut cs.namespace(|| "a0 =? a0"), &a.a0, &b.a0)?;
+        FpElement::<F>::assert_is_equal(&mut cs.namespace(|| "a1 =? a1"), &a.a1, &b.a1)?;
         Ok(())
     }
 
@@ -226,7 +212,7 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedE2Element<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let elm = AllocatedFieldElement::from_dec("4002409555221667392624310435006688643935503118305586438271171395842971157480381377015405980053539358417135540939436").unwrap();
+        let elm = FpElement::from_dec("4002409555221667392624310435006688643935503118305586438271171395842971157480381377015405980053539358417135540939436").unwrap();
         let a = self.a1.mul(&mut cs.namespace(|| "a <- x.a1 * elm"), &elm)?;
         let a = a.neg(&mut cs.namespace(|| "a <- a.neg()"))?;
         let b = self.a0.mul(&mut cs.namespace(|| "b <- x.a0 * elm"), &elm)?;
@@ -247,7 +233,7 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedE2Element<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let elm = AllocatedFieldElement::from_dec("4002409555221667392624310435006688643935503118305586438271171395842971157480381377015405980053539358417135540939437").unwrap();
+        let elm = FpElement::from_dec("4002409555221667392624310435006688643935503118305586438271171395842971157480381377015405980053539358417135540939437").unwrap();
         self.mul_element(&mut cs.namespace(|| "e2.mul_by_nonresidue_1pow4"), &elm)
     }
 
@@ -265,7 +251,7 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedE2Element<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let elm = AllocatedFieldElement::from_dec("793479390729215512621379701633421447060886740281060493010456487427281649075476305620758731620351").unwrap();
+        let elm = FpElement::from_dec("793479390729215512621379701633421447060886740281060493010456487427281649075476305620758731620351").unwrap();
         self.mul_element(&mut cs.namespace(|| "e2.mul_by_nonresidue_2pow1"), &elm)
     }
 
@@ -274,7 +260,7 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedE2Element<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let elm = AllocatedFieldElement::from_dec("793479390729215512621379701633421447060886740281060493010456487427281649075476305620758731620350").unwrap();
+        let elm = FpElement::from_dec("793479390729215512621379701633421447060886740281060493010456487427281649075476305620758731620350").unwrap();
         self.mul_element(&mut cs.namespace(|| "e2.mul_by_nonresidue_2pow2"), &elm)
     }
 
@@ -283,7 +269,7 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedE2Element<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let elm = AllocatedFieldElement::from_dec("4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559786").unwrap();
+        let elm = FpElement::from_dec("4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559786").unwrap();
         self.mul_element(&mut cs.namespace(|| "e2.mul_by_nonresidue_2pow3"), &elm)
     }
 
@@ -292,7 +278,7 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedE2Element<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let elm = AllocatedFieldElement::from_dec("4002409555221667392624310435006688643935503118305586438271171395842971157480381377015405980053539358417135540939436").unwrap();
+        let elm = FpElement::from_dec("4002409555221667392624310435006688643935503118305586438271171395842971157480381377015405980053539358417135540939436").unwrap();
         self.mul_element(&mut cs.namespace(|| "e2.mul_by_nonresidue_2pow4"), &elm)
     }
 
@@ -301,7 +287,7 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedE2Element<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let elm = AllocatedFieldElement::from_dec("4002409555221667392624310435006688643935503118305586438271171395842971157480381377015405980053539358417135540939437").unwrap();
+        let elm = FpElement::from_dec("4002409555221667392624310435006688643935503118305586438271171395842971157480381377015405980053539358417135540939437").unwrap();
         self.mul_element(&mut cs.namespace(|| "e2.mul_by_nonresidue_2pow5"), &elm)
     }
 
@@ -318,11 +304,7 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedE2Element<F> {
         Ok(Self { a0, a1 })
     }
 
-    pub fn mul_element<CS>(
-        &self,
-        cs: &mut CS,
-        value: &AllocatedFieldElement<F>,
-    ) -> Result<Self, SynthesisError>
+    pub fn mul_element<CS>(&self, cs: &mut CS, value: &FpElement<F>) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
@@ -437,13 +419,13 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedE2Element<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let a0 = AllocatedFieldElement::<F>::conditionally_select(
+        let a0 = FpElement::<F>::conditionally_select(
             &mut cs.namespace(|| "cond a0"),
             &z0.a0,
             &z1.a0,
             condition,
         )?;
-        let a1 = AllocatedFieldElement::<F>::conditionally_select(
+        let a1 = FpElement::<F>::conditionally_select(
             &mut cs.namespace(|| "cond a1"),
             &z0.a1,
             &z1.a1,
@@ -474,15 +456,11 @@ mod tests {
         let c = a + b;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let b_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+        let c_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
         let res_alloc = a_alloc.add(&mut cs.namespace(|| "a+b"), &b_alloc).unwrap();
-        AllocatedE2Element::assert_is_equal(&mut cs.namespace(|| "a+b = c"), &res_alloc, &c_alloc)
-            .unwrap();
+        Fp2Element::assert_is_equal(&mut cs.namespace(|| "a+b = c"), &res_alloc, &c_alloc).unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
@@ -500,15 +478,11 @@ mod tests {
         let c = a - b;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let b_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+        let c_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
         let res_alloc = a_alloc.sub(&mut cs.namespace(|| "a-b"), &b_alloc).unwrap();
-        AllocatedE2Element::assert_is_equal(&mut cs.namespace(|| "a-b = c"), &res_alloc, &c_alloc)
-            .unwrap();
+        Fp2Element::assert_is_equal(&mut cs.namespace(|| "a-b = c"), &res_alloc, &c_alloc).unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
@@ -525,13 +499,10 @@ mod tests {
         let c = a + a;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
         let res_alloc = a_alloc.double(&mut cs.namespace(|| "2a")).unwrap();
-        AllocatedE2Element::assert_is_equal(&mut cs.namespace(|| "2a = c"), &res_alloc, &c_alloc)
-            .unwrap();
+        Fp2Element::assert_is_equal(&mut cs.namespace(|| "2a = c"), &res_alloc, &c_alloc).unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
@@ -549,15 +520,11 @@ mod tests {
         let c = a * b;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let b_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+        let c_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
         let res_alloc = a_alloc.mul(&mut cs.namespace(|| "a*b"), &b_alloc).unwrap();
-        AllocatedE2Element::assert_is_equal(&mut cs.namespace(|| "a*b = c"), &res_alloc, &c_alloc)
-            .unwrap();
+        Fp2Element::assert_is_equal(&mut cs.namespace(|| "a*b = c"), &res_alloc, &c_alloc).unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
@@ -574,19 +541,13 @@ mod tests {
         let c = a.mul_by_nonresidue();
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
         let res_alloc = a_alloc
             .mul_by_nonresidue(&mut cs.namespace(|| "a*(1+u)"))
             .unwrap();
-        AllocatedE2Element::assert_is_equal(
-            &mut cs.namespace(|| "a*(1+u) = c"),
-            &res_alloc,
-            &c_alloc,
-        )
-        .unwrap();
+        Fp2Element::assert_is_equal(&mut cs.namespace(|| "a*(1+u) = c"), &res_alloc, &c_alloc)
+            .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
@@ -603,13 +564,10 @@ mod tests {
         let c = a * a;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
         let res_alloc = a_alloc.square(&mut cs.namespace(|| "a²")).unwrap();
-        AllocatedE2Element::assert_is_equal(&mut cs.namespace(|| "a² = c"), &res_alloc, &c_alloc)
-            .unwrap();
+        Fp2Element::assert_is_equal(&mut cs.namespace(|| "a² = c"), &res_alloc, &c_alloc).unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
@@ -630,21 +588,14 @@ mod tests {
         let c = a * b.invert().unwrap();
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let b_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+        let c_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
         let res_alloc = a_alloc
             .div_unchecked(&mut cs.namespace(|| "a div b"), &b_alloc)
             .unwrap();
-        AllocatedE2Element::assert_is_equal(
-            &mut cs.namespace(|| "a div b = c"),
-            &res_alloc,
-            &c_alloc,
-        )
-        .unwrap();
+        Fp2Element::assert_is_equal(&mut cs.namespace(|| "a div b = c"), &res_alloc, &c_alloc)
+            .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
@@ -662,16 +613,13 @@ mod tests {
         let c = a * BlsFp2::from(b);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_elem: AllocatedFieldElement<Fp> = (&b).into();
-        let c_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let b_elem: FpElement<Fp> = (&b).into();
+        let c_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
         let res_alloc = a_alloc
             .mul_element(&mut cs.namespace(|| "a*b (elm)"), &b_elem)
             .unwrap();
-        AllocatedE2Element::assert_is_equal(&mut cs.namespace(|| "a*b = c"), &res_alloc, &c_alloc)
-            .unwrap();
+        Fp2Element::assert_is_equal(&mut cs.namespace(|| "a*b = c"), &res_alloc, &c_alloc).unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
@@ -694,17 +642,14 @@ mod tests {
         let c = a * BlsFp2::from(b);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_elem: AllocatedFieldElement<Fp> = (&b).into();
+        let a_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let b_elem: FpElement<Fp> = (&b).into();
         let b_val: BigInt = (&b_elem.0).into();
-        let c_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let c_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
         let res_alloc = a_alloc
             .mul_const(&mut cs.namespace(|| "a*b (const)"), &b_val)
             .unwrap();
-        AllocatedE2Element::assert_is_equal(&mut cs.namespace(|| "a*b = c"), &res_alloc, &c_alloc)
-            .unwrap();
+        Fp2Element::assert_is_equal(&mut cs.namespace(|| "a*b = c"), &res_alloc, &c_alloc).unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
@@ -721,13 +666,10 @@ mod tests {
         let c = -&a;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
         let res_alloc = a_alloc.neg(&mut cs.namespace(|| "-a")).unwrap();
-        AllocatedE2Element::assert_is_equal(&mut cs.namespace(|| "-a = c"), &res_alloc, &c_alloc)
-            .unwrap();
+        Fp2Element::assert_is_equal(&mut cs.namespace(|| "-a = c"), &res_alloc, &c_alloc).unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
@@ -744,17 +686,11 @@ mod tests {
         let c = a.conjugate();
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
         let res_alloc = a_alloc.conjugate(&mut cs.namespace(|| "conj(a)")).unwrap();
-        AllocatedE2Element::assert_is_equal(
-            &mut cs.namespace(|| "conj(a) = c"),
-            &res_alloc,
-            &c_alloc,
-        )
-        .unwrap();
+        Fp2Element::assert_is_equal(&mut cs.namespace(|| "conj(a) = c"), &res_alloc, &c_alloc)
+            .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
@@ -771,12 +707,10 @@ mod tests {
         let c = a.invert().unwrap_or_else(BlsFp2::zero);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
         let res_alloc = a_alloc.inverse(&mut cs.namespace(|| "a^-1")).unwrap();
-        AllocatedE2Element::assert_is_equal(&mut cs.namespace(|| "a^-1 = c"), &res_alloc, &c_alloc)
+        Fp2Element::assert_is_equal(&mut cs.namespace(|| "a^-1 = c"), &res_alloc, &c_alloc)
             .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
@@ -794,27 +728,23 @@ mod tests {
         let b = BlsFp2::random(&mut rng);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+        let a_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let b_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
         let res_alloc = a_alloc.sub(&mut cs.namespace(|| "a-a"), &a_alloc).unwrap();
         let z_alloc =
-            AllocatedE2Element::alloc_element(&mut cs.namespace(|| "alloc zero"), &BlsFp2::zero())
-                .unwrap();
-        AllocatedE2Element::assert_is_equal(&mut cs.namespace(|| "a-a = z"), &res_alloc, &z_alloc)
-            .unwrap();
+            Fp2Element::alloc_element(&mut cs.namespace(|| "alloc zero"), &BlsFp2::zero()).unwrap();
+        Fp2Element::assert_is_equal(&mut cs.namespace(|| "a-a = z"), &res_alloc, &z_alloc).unwrap();
         let zbit_alloc = res_alloc
             .alloc_is_zero(&mut cs.namespace(|| "z <- a-a ?= 0"))
             .unwrap();
-        let cond_alloc = AllocatedE2Element::conditionally_select(
+        let cond_alloc = Fp2Element::conditionally_select(
             &mut cs.namespace(|| "select(a, b, z)"),
             &a_alloc,
             &b_alloc,
             &Boolean::Is(zbit_alloc),
         )
         .unwrap();
-        AllocatedE2Element::assert_is_equal(
+        Fp2Element::assert_is_equal(
             &mut cs.namespace(|| "select(a, b, z) = b"),
             &cond_alloc,
             &b_alloc,
