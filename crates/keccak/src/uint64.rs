@@ -33,7 +33,7 @@ impl UInt64 {
             tmp >>= 1;
         }
 
-        UInt64 {
+        Self {
             bits,
             value: Some(value),
         }
@@ -71,7 +71,7 @@ impl UInt64 {
             })
             .collect::<Result<Vec<_>, SynthesisError>>()?;
 
-        Ok(UInt64 { bits, value })
+        Ok(Self { bits, value })
     }
 
     #[allow(dead_code)]
@@ -104,7 +104,7 @@ impl UInt64 {
             }
         }
 
-        UInt64 {
+        Self {
             value,
             bits: bits.iter().rev().cloned().collect(),
         }
@@ -157,7 +157,7 @@ impl UInt64 {
             }
         }
 
-        UInt64 {
+        Self {
             value,
             bits: new_bits,
         }
@@ -176,7 +176,7 @@ impl UInt64 {
             .cloned()
             .collect();
 
-        UInt64 {
+        Self {
             bits: new_bits,
             value: self.value.map(|v| v.rotate_right(by as u32)),
         }
@@ -195,7 +195,7 @@ impl UInt64 {
             .cloned()
             .collect();
 
-        UInt64 {
+        Self {
             bits: new_bits,
             value: self.value.map(|v| v.rotate_right(by as u32)),
         }
@@ -220,7 +220,7 @@ impl UInt64 {
             .map(|(i, (a, b))| Boolean::xor(cs.namespace(|| format!("xor of bit {}", i)), a, b))
             .collect::<Result<_, _>>()?;
 
-        Ok(UInt64 {
+        Ok(Self {
             bits,
             value: new_value,
         })
@@ -245,7 +245,7 @@ impl UInt64 {
             .map(|(i, (a, b))| Boolean::and(cs.namespace(|| format!("and of bit {}", i)), a, b))
             .collect::<Result<_, _>>()?;
 
-        Ok(UInt64 {
+        Ok(Self {
             bits,
             value: new_value,
         })
@@ -257,7 +257,7 @@ impl UInt64 {
 
         let bits = self.bits.iter().map(|a| a.not()).collect();
 
-        UInt64 {
+        Self {
             bits,
             value: new_value,
         }

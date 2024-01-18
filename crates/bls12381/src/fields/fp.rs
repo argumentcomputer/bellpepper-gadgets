@@ -143,7 +143,7 @@ impl<F: PrimeField + PrimeFieldBits> FpElement<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let val_alloc = FpElement::<F>::from(value);
+        let val_alloc = Self::from(value);
         let alloc = val_alloc
             .0
             .allocate_field_element_unchecked(&mut cs.namespace(|| "alloc fp elm"))?;
@@ -285,7 +285,7 @@ mod tests {
     use pasta_curves::Fp;
 
     use expect_test::{expect, Expect};
-    fn expect_eq(computed: usize, expected: Expect) {
+    fn expect_eq(computed: usize, expected: &Expect) {
         expected.assert_eq(&computed.to_string());
     }
 
@@ -306,9 +306,9 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        expect_eq(cs.num_inputs(), expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), expect!["277"]);
-        expect_eq(cs.num_constraints(), expect!["262"]);
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["277"]);
+        expect_eq(cs.num_constraints(), &expect!["262"]);
     }
 
     #[test]
@@ -328,9 +328,9 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        expect_eq(cs.num_inputs(), expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), expect!["277"]);
-        expect_eq(cs.num_constraints(), expect!["262"]);
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["277"]);
+        expect_eq(cs.num_constraints(), &expect!["262"]);
     }
 
     #[test]
@@ -350,9 +350,9 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        expect_eq(cs.num_inputs(), expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), expect!["681"]);
-        expect_eq(cs.num_constraints(), expect!["666"]);
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["681"]);
+        expect_eq(cs.num_constraints(), &expect!["666"]);
     }
 
     #[test]
@@ -380,9 +380,9 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        expect_eq(cs.num_inputs(), expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), expect!["271"]);
-        expect_eq(cs.num_constraints(), expect!["262"]);
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["271"]);
+        expect_eq(cs.num_constraints(), &expect!["262"]);
     }
 
     #[test]
@@ -400,9 +400,9 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        expect_eq(cs.num_inputs(), expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), expect!["271"]);
-        expect_eq(cs.num_constraints(), expect!["262"]);
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["271"]);
+        expect_eq(cs.num_constraints(), &expect!["262"]);
     }
 
     #[test]
@@ -438,8 +438,8 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        expect_eq(cs.num_inputs(), expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), expect!["1199"]);
-        expect_eq(cs.num_constraints(), expect!["1196"]);
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["1199"]);
+        expect_eq(cs.num_constraints(), &expect!["1196"]);
     }
 }

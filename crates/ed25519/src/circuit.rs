@@ -51,7 +51,7 @@ where
     F: PrimeField + PrimeFieldBits,
 {
     fn from(value: &Fe25519) -> Self {
-        Ed25519Fp::<F>::from(&value.0)
+        Self::from(&value.0)
     }
 }
 
@@ -310,7 +310,7 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedAffinePoint<F> {
     pub fn ed25519_scalar_multiplication_windowed<CS>(
         &self,
         cs: &mut CS,
-        scalar: Vec<Boolean>,
+        scalar: &[Boolean],
         window_size: i32,
     ) -> Result<Self, SynthesisError>
     where
@@ -450,7 +450,7 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedAffinePoint<F> {
     pub fn ed25519_scalar_multiplication<CS>(
         &self,
         cs: &mut CS,
-        scalar: Vec<Boolean>,
+        scalar: &[Boolean],
     ) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -577,7 +577,7 @@ mod tests {
 
         let p_alloc = b_al.ed25519_scalar_multiplication(
             &mut cs.namespace(|| "scalar multiplication"),
-            scalar_vec,
+            &scalar_vec,
         );
         assert!(p_alloc.is_ok());
         let p_al = p_alloc.unwrap();
@@ -627,7 +627,7 @@ mod tests {
 
         let p_alloc = b_al.ed25519_scalar_multiplication_windowed(
             &mut cs.namespace(|| "scalar multiplication"),
-            scalar_vec,
+            &scalar_vec,
             window_size,
         );
         assert!(p_alloc.is_ok());

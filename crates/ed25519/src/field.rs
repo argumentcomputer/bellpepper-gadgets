@@ -24,24 +24,24 @@ impl From<BigInt> for Fe25519 {
     }
 }
 
-impl Add<Fe25519> for Fe25519 {
-    type Output = Fe25519;
+impl Add<Self> for Fe25519 {
+    type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
         Self((&self.0 + &rhs.0).rem(Self::modulus()))
     }
 }
 
-impl AddAssign<Fe25519> for Fe25519 {
+impl AddAssign<Self> for Fe25519 {
     fn add_assign(&mut self, rhs: Self) {
         self.0 = (&self.0 + &rhs.0).rem(Self::modulus())
     }
 }
 
-impl<'a> Add<&'a Fe25519> for Fe25519 {
-    type Output = Fe25519;
+impl<'a> Add<&'a Self> for Fe25519 {
+    type Output = Self;
 
-    fn add(self, rhs: &'a Fe25519) -> Self::Output {
+    fn add(self, rhs: &'a Self) -> Self::Output {
         Self((&self.0 + &rhs.0).rem(Self::modulus()))
     }
 }
@@ -54,29 +54,29 @@ impl<'a> Add<&'a Fe25519> for &Fe25519 {
     }
 }
 
-impl<'a> AddAssign<&'a Fe25519> for Fe25519 {
-    fn add_assign(&mut self, rhs: &'a Fe25519) {
+impl<'a> AddAssign<&'a Self> for Fe25519 {
+    fn add_assign(&mut self, rhs: &'a Self) {
         self.0 = (&self.0 + &rhs.0).rem(Self::modulus())
     }
 }
 
-impl Sub<Fe25519> for Fe25519 {
-    type Output = Fe25519;
+impl Sub<Self> for Fe25519 {
+    type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
         Self((&self.0 + Self::modulus() - &rhs.0).rem(Self::modulus()))
     }
 }
 
-impl<'a> Sub<&'a Fe25519> for Fe25519 {
-    type Output = Fe25519;
+impl<'a> Sub<&'a Self> for Fe25519 {
+    type Output = Self;
 
-    fn sub(self, rhs: &'a Fe25519) -> Self::Output {
+    fn sub(self, rhs: &'a Self) -> Self::Output {
         Self((&self.0 + Self::modulus() - &rhs.0).rem(Self::modulus()))
     }
 }
 
-impl SubAssign<Fe25519> for Fe25519 {
+impl SubAssign<Self> for Fe25519 {
     fn sub_assign(&mut self, rhs: Self) {
         self.0 = (&self.0 + Self::modulus() - &rhs.0).rem(Self::modulus())
     }
@@ -89,24 +89,24 @@ impl<'a> Sub<&'a Fe25519> for &Fe25519 {
         Fe25519((self.0.clone() + Fe25519::modulus() - rhs.0.clone()).rem(Fe25519::modulus()))
     }
 }
-impl<'a> SubAssign<&'a Fe25519> for Fe25519 {
-    fn sub_assign(&mut self, rhs: &'a Fe25519) {
+impl<'a> SubAssign<&'a Self> for Fe25519 {
+    fn sub_assign(&mut self, rhs: &'a Self) {
         self.0 = (&self.0 + Self::modulus() - &rhs.0).rem(Self::modulus())
     }
 }
 
-impl Mul<Fe25519> for Fe25519 {
-    type Output = Fe25519;
+impl Mul<Self> for Fe25519 {
+    type Output = Self;
 
     fn mul(self, rhs: Self) -> Self::Output {
         Self((&self.0 * &rhs.0).rem(Self::modulus()))
     }
 }
 
-impl<'a> Mul<&'a Fe25519> for Fe25519 {
-    type Output = Fe25519;
+impl<'a> Mul<&'a Self> for Fe25519 {
+    type Output = Self;
 
-    fn mul(self, rhs: &'a Fe25519) -> Self::Output {
+    fn mul(self, rhs: &'a Self) -> Self::Output {
         Self((&self.0 * &rhs.0).rem(Self::modulus()))
     }
 }
@@ -119,8 +119,8 @@ impl<'a> Mul<&'a Fe25519> for &Fe25519 {
     }
 }
 
-impl<'a> MulAssign<&'a Fe25519> for Fe25519 {
-    fn mul_assign(&mut self, rhs: &'a Fe25519) {
+impl<'a> MulAssign<&'a Self> for Fe25519 {
+    fn mul_assign(&mut self, rhs: &'a Self) {
         self.0 = (&self.0 * &rhs.0).rem(Self::modulus())
     }
 }
@@ -128,7 +128,7 @@ impl<'a> MulAssign<&'a Fe25519> for Fe25519 {
 impl Neg for Fe25519 {
     type Output = Self;
     fn neg(self) -> Self::Output {
-        let p = Fe25519::modulus();
+        let p = Self::modulus();
         Self(p - self.0)
     }
 }
@@ -143,19 +143,19 @@ impl<'a> Neg for &'a Fe25519 {
 
 impl<T> Sum<T> for Fe25519
 where
-    T: Borrow<Fe25519>,
+    T: Borrow<Self>,
 {
     fn sum<I: Iterator<Item = T>>(iter: I) -> Self {
-        iter.fold(Fe25519::zero(), |acc, item| acc + item.borrow())
+        iter.fold(Self::zero(), |acc, item| acc + item.borrow())
     }
 }
 
 impl<T> Product<T> for Fe25519
 where
-    T: Borrow<Fe25519>,
+    T: Borrow<Self>,
 {
     fn product<I: Iterator<Item = T>>(iter: I) -> Self {
-        iter.fold(Fe25519::one(), |acc, item| acc * item.borrow())
+        iter.fold(Self::one(), |acc, item| acc * item.borrow())
     }
 }
 

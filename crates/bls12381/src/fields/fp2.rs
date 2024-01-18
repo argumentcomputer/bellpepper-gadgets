@@ -31,7 +31,7 @@ where
     fn from(value: &Fp2Element<F>) -> Self {
         let c0 = BlsFp::from(&value.a0);
         let c1 = BlsFp::from(&value.a1);
-        BlsFp2 { c0, c1 }
+        Self { c0, c1 }
     }
 }
 
@@ -457,7 +457,7 @@ mod tests {
     use bls12_381::fp::Fp as BlsFp;
 
     use expect_test::{expect, Expect};
-    fn expect_eq(computed: usize, expected: Expect) {
+    fn expect_eq(computed: usize, expected: &Expect) {
         expected.assert_eq(&computed.to_string());
     }
 
@@ -478,9 +478,9 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        expect_eq(cs.num_inputs(), expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), expect!["554"]);
-        expect_eq(cs.num_constraints(), expect!["524"]);
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["554"]);
+        expect_eq(cs.num_constraints(), &expect!["524"]);
     }
 
     #[test]
@@ -500,9 +500,9 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        expect_eq(cs.num_inputs(), expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), expect!["554"]);
-        expect_eq(cs.num_constraints(), expect!["524"]);
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["554"]);
+        expect_eq(cs.num_constraints(), &expect!["524"]);
     }
 
     #[test]
@@ -520,9 +520,9 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        expect_eq(cs.num_inputs(), expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), expect!["542"]);
-        expect_eq(cs.num_constraints(), expect!["524"]);
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["542"]);
+        expect_eq(cs.num_constraints(), &expect!["524"]);
     }
 
     #[test]
@@ -542,9 +542,9 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        expect_eq(cs.num_inputs(), expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), expect!["1385"]);
-        expect_eq(cs.num_constraints(), expect!["1355"]);
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["1385"]);
+        expect_eq(cs.num_constraints(), &expect!["1355"]);
     }
 
     #[test]
@@ -565,9 +565,9 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        expect_eq(cs.num_inputs(), expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), expect!["542"]);
-        expect_eq(cs.num_constraints(), expect!["524"]);
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["542"]);
+        expect_eq(cs.num_constraints(), &expect!["524"]);
     }
 
     #[test]
@@ -585,9 +585,9 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        expect_eq(cs.num_inputs(), expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), expect!["1365"]);
-        expect_eq(cs.num_constraints(), expect!["1347"]);
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["1365"]);
+        expect_eq(cs.num_constraints(), &expect!["1347"]);
     }
 
     #[test]
@@ -613,9 +613,9 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        expect_eq(cs.num_inputs(), expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), expect!["1915"]);
-        expect_eq(cs.num_constraints(), expect!["1879"]);
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["1915"]);
+        expect_eq(cs.num_constraints(), &expect!["1879"]);
     }
 
     #[test]
@@ -637,9 +637,9 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        expect_eq(cs.num_inputs(), expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), expect!["1328"]);
-        expect_eq(cs.num_constraints(), expect!["1310"]);
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["1328"]);
+        expect_eq(cs.num_constraints(), &expect!["1310"]);
     }
 
     #[test]
@@ -667,9 +667,9 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        expect_eq(cs.num_inputs(), expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), expect!["542"]);
-        expect_eq(cs.num_constraints(), expect!["524"]);
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["542"]);
+        expect_eq(cs.num_constraints(), &expect!["524"]);
     }
 
     #[test]
@@ -687,9 +687,9 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        expect_eq(cs.num_inputs(), expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), expect!["542"]);
-        expect_eq(cs.num_constraints(), expect!["524"]);
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["542"]);
+        expect_eq(cs.num_constraints(), &expect!["524"]);
     }
 
     #[test]
@@ -708,9 +708,9 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        expect_eq(cs.num_inputs(), expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), expect!["542"]);
-        expect_eq(cs.num_constraints(), expect!["524"]);
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["542"]);
+        expect_eq(cs.num_constraints(), &expect!["524"]);
     }
 
     #[test]
@@ -729,9 +729,9 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        expect_eq(cs.num_inputs(), expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), expect!["1903"]);
-        expect_eq(cs.num_constraints(), expect!["1879"]);
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["1903"]);
+        expect_eq(cs.num_constraints(), &expect!["1879"]);
     }
 
     #[test]
@@ -767,8 +767,8 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        expect_eq(cs.num_inputs(), expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), expect!["2399"]);
-        expect_eq(cs.num_constraints(), expect!["2393"]);
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["2399"]);
+        expect_eq(cs.num_constraints(), &expect!["2393"]);
     }
 }

@@ -63,7 +63,7 @@ where
     a.xor(cs.namespace(|| "xor_not_and third"), &nbc)
 }
 
-fn round_1600<E, CS>(mut cs: CS, a: Vec<UInt64>, rc: u64) -> Result<Vec<UInt64>, SynthesisError>
+fn round_1600<E, CS>(mut cs: CS, a: &[UInt64], rc: u64) -> Result<Vec<UInt64>, SynthesisError>
 where
     E: PrimeField,
     CS: ConstraintSystem<E>,
@@ -145,7 +145,7 @@ where
     Ok(a_new2)
 }
 
-fn keccak_f_1600<E, CS>(mut cs: CS, input: Vec<Boolean>) -> Result<Vec<Boolean>, SynthesisError>
+fn keccak_f_1600<E, CS>(mut cs: CS, input: &[Boolean]) -> Result<Vec<Boolean>, SynthesisError>
 where
     E: PrimeField,
     CS: ConstraintSystem<E>,
@@ -157,7 +157,7 @@ where
     for (i, round_constant) in ROUND_CONSTANTS.iter().enumerate() {
         let cs = &mut cs.namespace(|| format!("keccack round {}", i));
 
-        a = round_1600(cs, a, *round_constant)?;
+        a = round_1600(cs, &a, *round_constant)?;
     }
 
     let a_new = a.into_iter().flat_map(|e| e.into_bits()).collect();
@@ -198,7 +198,7 @@ where
     //   S[x,y] = S[x,y] xor Pi[x+5*y],          for (x,y) such that x+5*y < r/w
     //   S = Keccak-f[r+c](S)
 
-    let m = keccak_f_1600(cs, m)?;
+    let m = keccak_f_1600(cs, &m)?;
 
     // # Squeezing phase
     // Z = empty string
@@ -248,7 +248,7 @@ where
     //   S[x,y] = S[x,y] xor Pi[x+5*y],          for (x,y) such that x+5*y < r/w
     //   S = Keccak-f[r+c](S)
 
-    let m = keccak_f_1600(cs, m)?;
+    let m = keccak_f_1600(cs, &m)?;
 
     // # Squeezing phase
     // Z = empty string

@@ -214,8 +214,8 @@ where
             M: ConstraintSystem<Scalar, Root = MultiEq<Scalar, CS>>,
         {
             Ok(match self {
-                Maybe::Concrete(ref v) => return Ok(v.clone()),
-                Maybe::Deferred(mut v) => {
+                Self::Concrete(ref v) => return Ok(v.clone()),
+                Self::Deferred(mut v) => {
                     v.extend(others.iter().cloned());
                     UInt64::addmany(cs, &v)?
                 }

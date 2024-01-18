@@ -33,7 +33,7 @@ impl UInt64 {
             tmp >>= 1;
         }
 
-        UInt64 {
+        Self {
             bits,
             value: Some(value),
         }
@@ -70,7 +70,7 @@ impl UInt64 {
             })
             .collect::<Result<Vec<_>, SynthesisError>>()?;
 
-        Ok(UInt64 { bits, value })
+        Ok(Self { bits, value })
     }
 
     pub fn into_bits_be(self) -> Vec<Boolean> {
@@ -101,7 +101,7 @@ impl UInt64 {
             }
         }
 
-        UInt64 {
+        Self {
             value,
             bits: bits.iter().rev().cloned().collect(),
         }
@@ -154,7 +154,7 @@ impl UInt64 {
             }
         }
 
-        UInt64 {
+        Self {
             value,
             bits: new_bits,
         }
@@ -172,7 +172,7 @@ impl UInt64 {
             .cloned()
             .collect();
 
-        UInt64 {
+        Self {
             bits: new_bits,
             value: self.value.map(|v| v.rotate_right(by as u32)),
         }
@@ -192,7 +192,7 @@ impl UInt64 {
             .cloned()
             .collect();
 
-        UInt64 {
+        Self {
             bits: new_bits,
             value: self.value.map(|v| v >> by as u32),
         }
@@ -226,7 +226,7 @@ impl UInt64 {
             .map(|(i, ((a, b), c))| circuit_fn(&mut cs, i, a, b, c))
             .collect::<Result<_, _>>()?;
 
-        Ok(UInt64 {
+        Ok(Self {
             bits,
             value: new_value,
         })
@@ -299,7 +299,7 @@ impl UInt64 {
             .map(|(i, (a, b))| Boolean::xor(cs.namespace(|| format!("xor of bit {}", i)), a, b))
             .collect::<Result<_, _>>()?;
 
-        Ok(UInt64 {
+        Ok(Self {
             bits,
             value: new_value,
         })
@@ -380,7 +380,7 @@ impl UInt64 {
             // unpacking the result into allocated bits.
 
             if let Some(mv) = modular_value {
-                return Ok(UInt64::constant(mv));
+                return Ok(Self::constant(mv));
             }
         }
 
@@ -417,7 +417,7 @@ impl UInt64 {
         // Discard carry bits that we don't care about
         result_bits.truncate(64);
 
-        Ok(UInt64 {
+        Ok(Self {
             bits: result_bits,
             value: modular_value,
         })
