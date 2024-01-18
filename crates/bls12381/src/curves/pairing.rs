@@ -502,12 +502,14 @@ where
                 &BlsFp6::one(),
             )?); // TODO: do we need to explicit alloc here or could this be a constant?
             sel1 = Some(e.c1.alloc_is_zero(&mut cs.namespace(|| "sel1 <- e.c1.is_zero()"))?);
+            // reduce e.c1 explicitly so both e.c1 and dummy have the same number of limbs (for conditionally_select)
+            let ec1 = e.c1.reduce(&mut cs.namespace(|| "e.c1 <- e.c1.reduce()"))?;
             e = Fp12Element {
                 c0: e.c0,
                 c1: Fp6Element::conditionally_select(
-                    &mut cs.namespace(|| "e.c1 <- select(dummy, e.c1, sel1)"),
+                    &mut cs.namespace(|| "e.c1 <- select(e.c1, dummy, sel1)"),
+                    &ec1,
                     dummy.as_ref().unwrap(),
-                    &e.c1,
                     &Boolean::Is(sel1.clone().unwrap()),
                 )?,
             };
@@ -564,13 +566,13 @@ where
             //   - Otherwise, we return 1.
             let c = ct.0; // rip out the Fp6s out of the torus elements
             let t1 = t1.0;
-            let sum = c.add(&mut cs.namespace(|| "sum <- c + t1 (e6)"), &t1)?;
+            let sum = c.add(&mut cs.namespace(|| "sum <- c + t1 (Fp6)"), &t1)?;
             let sel2: AllocatedBit =
                 sum.alloc_is_zero(&mut cs.namespace(|| "sel2 <- sum.is_zero()"))?;
             let t1 = Fp6Element::conditionally_select(
-                &mut cs.namespace(|| "t1 <- select(dummy, t1, sel2)"),
-                &dummy.unwrap(),
+                &mut cs.namespace(|| "t1 <- select(t1, dummy, sel2)"),
                 &t1,
+                &dummy.unwrap(),
                 &Boolean::Is(sel2.clone()),
             )?;
             let selector = AllocatedBit::nor(
@@ -587,9 +589,9 @@ where
                 &BlsFp12::one(),
             )?; // TODO: does this need an explicit alloc or could this be a constant?
             let res = Fp12Element::conditionally_select(
-                &mut cs.namespace(|| "res <- select(res, 1, selector)"),
-                &res,
+                &mut cs.namespace(|| "res <- select(1, res, selector)"),
                 &dummy2,
+                &res,
                 &Boolean::Is(selector),
             )?;
             Ok(res)
@@ -626,7 +628,7 @@ mod tests {
     // use pasta_curves::group::Group;
     // use pasta_curves::Fp;
 
-    // use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective};
+    // use bls12_381::{G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective};
 
     // use expect_test::{expect, Expect};
     // fn expect_eq(computed: usize, expected: Expect) {
@@ -663,5 +665,58 @@ mod tests {
     //     expect_eq(cs.num_inputs(), expect!["1"]);
     //     expect_eq(cs.scalar_aux().len(), expect!["27479875"]);
     //     expect_eq(cs.num_constraints(), expect!["27589382"]);
+    // }
+
+    // NOTE: this test currently takes ~140GB of ram and a lot of minutes to run, so it's commented out (but it works!)
+    // #[test]
+    // fn test_random_multi_pairing() {
+    //     let mut rng = rand::thread_rng();
+    //     let a = vec![
+    //         G1Projective::random(&mut rng),
+    //         G1Projective::random(&mut rng),
+    //     ];
+    //     let b = vec![
+    //         G2Projective::random(&mut rng),
+    //         G2Projective::random(&mut rng),
+    //     ];
+    //     let a: Vec<G1Affine> = a.into_iter().map(G1Affine::from).collect();
+    //     let b: Vec<G2Affine> = b.iter().map(G2Affine::from).collect();
+    //     let b_prep: Vec<G2Prepared> = b.iter().cloned().map(G2Prepared::from).collect();
+    //     let terms: Vec<(&G1Affine, &G2Prepared)> = a
+    //         .iter()
+    //         .zip(b_prep.iter())
+    //         .map(|(g1, g2)| (g1, g2))
+    //         .collect();
+    //     let c = bls12_381::multi_miller_loop(&terms).final_exponentiation();
+    //     let c = c.0;
+
+    //     let mut cs = TestConstraintSystem::<Fp>::new();
+    //     let a_allocs: Vec<G1Point<Fp>> = a
+    //         .iter()
+    //         .enumerate()
+    //         .map(|(idx, a)| {
+    //             G1Point::alloc_element(&mut cs.namespace(|| format!("alloc a {idx}")), &a).unwrap()
+    //         })
+    //         .collect();
+    //     let b_allocs: Vec<G2Point<Fp>> = b
+    //         .iter()
+    //         .enumerate()
+    //         .map(|(idx, b)| {
+    //             G2Point::alloc_element(&mut cs.namespace(|| format!("alloc b {idx}")), &b).unwrap()
+    //         })
+    //         .collect();
+    //     let c_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+    //     let res_alloc =
+    //         EmulatedBls12381Pairing::pair(&mut cs.namespace(|| "pair(a, b)"), &a_allocs, &b_allocs)
+    //             .unwrap();
+    //     Fp12Element::assert_is_equal(&mut cs.namespace(|| "pair(a, b) = c"), &res_alloc, &c_alloc)
+    //         .unwrap();
+    //     if !cs.is_satisfied() {
+    //         eprintln!("{:?}", cs.which_is_unsatisfied())
+    //     }
+    //     assert!(cs.is_satisfied());
+    //     expect_eq(cs.num_inputs(), expect!["1"]);
+    //     expect_eq(cs.scalar_aux().len(), expect!["42514420"]);
+    //     expect_eq(cs.num_constraints(), expect!["42690960"]);
     // }
 }

@@ -777,7 +777,7 @@ mod tests {
         let res_alloc = a_alloc.sub(&mut cs.namespace(|| "a-a"), &a_alloc).unwrap();
         let z_alloc =
             Fp6Element::alloc_element(&mut cs.namespace(|| "alloc zero"), &BlsFp6::zero()).unwrap();
-        Fp6Element::assert_is_equal(&mut cs.namespace(|| "a-a = z"), &res_alloc, &z_alloc).unwrap();
+        Fp6Element::assert_is_equal(&mut cs.namespace(|| "a-a = 0"), &res_alloc, &z_alloc).unwrap();
         let zbit_alloc = res_alloc
             .alloc_is_zero(&mut cs.namespace(|| "z <- a-a ?= 0"))
             .unwrap();

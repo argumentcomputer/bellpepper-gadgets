@@ -391,13 +391,13 @@ impl<F: PrimeField + PrimeFieldBits> Fp12Element<F> {
         CS: ConstraintSystem<F>,
     {
         let c0 = Fp6Element::<F>::conditionally_select(
-            &mut cs.namespace(|| "cond b0"),
+            &mut cs.namespace(|| "cond c0"),
             &z0.c0,
             &z1.c0,
             condition,
         )?;
         let c1 = Fp6Element::<F>::conditionally_select(
-            &mut cs.namespace(|| "cond b1"),
+            &mut cs.namespace(|| "cond c1"),
             &z0.c1,
             &z1.c1,
             condition,
@@ -756,7 +756,7 @@ mod tests {
         let z_alloc =
             Fp12Element::alloc_element(&mut cs.namespace(|| "alloc zero"), &BlsFp12::zero())
                 .unwrap();
-        Fp12Element::assert_is_equal(&mut cs.namespace(|| "a-a = z"), &res_alloc, &z_alloc)
+        Fp12Element::assert_is_equal(&mut cs.namespace(|| "a-a = 0"), &res_alloc, &z_alloc)
             .unwrap();
         let zbit_alloc = res_alloc
             .alloc_is_zero(&mut cs.namespace(|| "z <- a-a ?= 0"))
