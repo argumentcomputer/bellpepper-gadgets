@@ -100,9 +100,7 @@ pub(crate) fn bigint_to_fpelem(val: &BigInt) -> Option<BlsFp> {
     }
     let mut bytes: Vec<u8> = be_bytes.1;
     assert!(bytes.len() <= 48);
-    while bytes.len() < 48 {
-        bytes.insert(0, 0);
-    } // TODO: here we pad with 0 bytes up to 48 bytes, but maybe something better could be done instead
+    bytes.splice(0..0, vec![0; 48 - bytes.len()]);
     let bytes: [u8; 48] = bytes.try_into().unwrap();
     Some(BlsFp::from_bytes(&bytes).unwrap())
 }
