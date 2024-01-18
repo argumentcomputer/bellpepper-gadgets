@@ -274,10 +274,10 @@ where
                     v,
                     F::ZERO,
                 )?;
-                if i > 0 {
+                if let Some(prev_allocated_limb_bit) = prev_allocated_limb_bit {
                     final_bit = Some(AllocatedBit::and(
                         &mut cs.namespace(|| format!("alloc and bit {i}")),
-                        &prev_allocated_limb_bit.unwrap(),
+                        &prev_allocated_limb_bit,
                         &new_allocated_limb_bit,
                     )?);
                 }

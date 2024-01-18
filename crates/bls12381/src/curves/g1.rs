@@ -181,16 +181,15 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedG1Point<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let mut p = Some(self);
-        let mut tmp = None;
+        let mut p: Option<&Self> = Some(self);
+        let mut tmp: Option<Self> = None;
         let mut cs = cs.namespace(|| format!("compute p.double_n({n})"));
         for i in 0..n {
-            let val = p
-                .unwrap()
-                .double(&mut cs.namespace(|| format!("p <- p.double() ({i})")))?;
-            let val = val.reduce(&mut cs.namespace(|| format!("p <- p.reduce() ({i})")))?;
-            tmp = Some(val);
-            p = tmp.as_ref();
+            if let Some(cur_p) = p {
+                let val = cur_p.double(&mut cs.namespace(|| format!("p <- p.double() ({i})")))?;
+                tmp = Some(val);
+                p = tmp.as_ref();
+            }
         }
 
         Ok(tmp.unwrap())

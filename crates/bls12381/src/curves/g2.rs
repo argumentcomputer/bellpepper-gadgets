@@ -205,16 +205,19 @@ impl<F: PrimeField + PrimeFieldBits> AllocatedG2Point<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let mut p = Some(self);
-        let mut tmp = None;
+        let mut p: Option<&Self> = Some(self);
+        let mut tmp: Option<Self> = None;
         let mut cs = cs.namespace(|| format!("compute p.double_n({n})"));
         for i in 0..n {
-            let val = p
-                .unwrap()
-                .double(&mut cs.namespace(|| format!("p <- p.double() ({i})")))?;
-            let val = val.reduce(&mut cs.namespace(|| format!("p <- p.reduce() ({i})")))?;
-            tmp = Some(val);
-            p = tmp.as_ref();
+            if let Some(cur_p) = p {
+                let val = cur_p.double(&mut cs.namespace(|| format!("p <- p.double() ({i})")))?;
+                // TODO: This fails with an overflow without an explicit reduce call every few iterations, even though theoretically this should be happening automatically. needs further investigation
+                // even weirder, the constraint count for `scalar_mul_by_seed` goes up if this reduce is called less often
+                // currently this function is unused except for `scalar_mul_by_seed` which will be used for an `assert_is_on_g2` implementation
+                let val = val.reduce(&mut cs.namespace(|| format!("p <- p.reduce() ({i})")))?;
+                tmp = Some(val);
+                p = tmp.as_ref();
+            }
         }
 
         Ok(tmp.unwrap())
