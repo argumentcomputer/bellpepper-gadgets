@@ -462,7 +462,7 @@ mod test {
             };
 
             let preimage: Vec<Boolean> = {
-                let bits = BitVec::<Msb0, u8>::from_slice(&preimage);
+                let bits = BitVec::<u8, Msb0>::from_slice(&preimage);
                 bits.iter().map(|b| Boolean::constant(*b)).collect()
             };
 
@@ -470,9 +470,9 @@ mod test {
             let result = sha512(cs, &preimage).unwrap();
 
             let result = {
-                let mut bv = BitVec::<Msb0, u8>::new();
+                let mut bv = BitVec::<u8, Msb0>::new();
                 bv.extend(result.iter().map(|b| b.get_value().unwrap()));
-                bv.as_slice().to_vec()
+                bv.as_raw_slice().to_vec()
             };
 
             assert_eq!(hex::encode(result), hex::encode(expected));
@@ -489,7 +489,7 @@ mod test {
             };
 
             let preimage: Vec<Boolean> = {
-                let bits = BitVec::<Msb0, u8>::from_slice(&preimage);
+                let bits = BitVec::<u8, Msb0>::from_slice(&preimage);
                 bits.iter().map(|b| Boolean::constant(*b)).collect()
             };
 
@@ -497,9 +497,9 @@ mod test {
             let result = sha512_256t(cs, &preimage).unwrap();
 
             let result = {
-                let mut bv = BitVec::<Msb0, u8>::new();
+                let mut bv = BitVec::<u8, Msb0>::new();
                 bv.extend(result.iter().map(|b| b.get_value().unwrap()));
-                bv.as_slice().to_vec()
+                bv.as_raw_slice().to_vec()
             };
 
             assert_eq!(hex::encode(result), hex::encode(expected));

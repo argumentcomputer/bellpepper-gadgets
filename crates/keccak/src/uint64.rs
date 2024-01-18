@@ -301,7 +301,7 @@ mod test {
 
         #[test]
         fn test_uint64_from_bits_be(a: u64) {
-            let a_bv = BitVec::<Msb0, u64>::from_element(a);
+            let a_bv = BitVec::<u64, Msb0>::from_element(a);
             let a_bits: Vec<Boolean> = a_bv.iter().map(|b| Boolean::constant(*b)).collect();
             let b = UInt64::from_bits_be(&a_bits);
             assert_eq!(a, b.value.unwrap());
@@ -309,7 +309,7 @@ mod test {
 
         #[test]
         fn test_uint64_from_bits(a: u64) {
-            let a_bv = BitVec::<Lsb0, u64>::from_element(a);
+            let a_bv = BitVec::<u64, Lsb0>::from_element(a);
             let a_bits: Vec<Boolean> = a_bv.iter().map(|b| Boolean::constant(*b)).collect();
             let b = UInt64::from_bits(&a_bits);
             assert_eq!(a, b.value.unwrap());
