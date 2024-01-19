@@ -78,7 +78,7 @@ fn verify_non_existing_leaf<GD: GadgetDigest<Scalar>, O: BitOrder>() {
     );
 
     let cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
-    let res = verify_proof::<_, _, GD>(cs, bytes_to_bitvec::<O>(&simple_tree.root()), proof);
+    let res = verify_proof::<_, _, GD>(cs, bytes_to_bitvec::<O>(simple_tree.root()), proof);
 
     assert!(
         res.is_err(),
@@ -168,7 +168,7 @@ fn check_number_constraints<GD: GadgetDigest<Scalar>, O: BitOrder>(hasher_constr
                             .unwrap(),
                         );
                     } else {
-                        return Boolean::Constant(false);
+                        Boolean::Constant(false)
                     }
                 })
                 .collect(),
