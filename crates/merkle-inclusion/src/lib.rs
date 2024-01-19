@@ -79,14 +79,14 @@ where
     GD: GadgetDigest<E>,
 {
     assert_eq!(expected_root.len(), GD::output_size() * 8);
-    assert_eq!(proof.leaf().key().len(), GD::output_size() * 8);
-    //Assert that we do not have more siblings than the length of our hash (otherwise cannot know which path to go)
+
     assert!(
-        proof.siblings.len() <= GD::output_size() * 8,
-        "Merkle Tree proof has more than {} ({}) siblings.",
-        GD::output_size() * 8,
+        proof.siblings.len() <= proof.leaf().key().len(),
+        "Merkle Tree proof has more siblings ({}) than the key length ({}).",
         proof.siblings.len(),
+        proof.leaf().key().len(),
     );
+    //Assert that we do not have more siblings than the length of our hash (otherwise cannot know which path to go)
 
     // Reconstruct the root hash from the leaf and sibling hashes
     let mut actual_root_hash = proof.leaf().hash().to_vec();
