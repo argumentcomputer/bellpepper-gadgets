@@ -15,9 +15,19 @@ use sha2::Sha512 as rSha512;
 use sha3::{Keccak256, Sha3_256};
 
 // Example use of the macro with OutOfCircuitHasher specified
-create_gadget_digest_impl!(Sha3, sha3, 32, Sha3_256);
-create_gadget_digest_impl!(Keccak, keccak256, 32, Keccak256);
-create_gadget_digest_impl!(Sha512, sha512, 64, rSha512);
+create_gadget_digest_impl!(Sha3, sha3, 32, Sha3_256, true);
+create_gadget_digest_impl!(Keccak, keccak256, 32, Keccak256, true);
+create_gadget_digest_impl!(Sha512, sha512, 64, rSha512, false);
+// Utility to help us in calculated expected number of constraints for the hashing circuit.
+const SHA3_CONSTRAINTS: usize = 151424;
+const SHA_512_CONSTRAINTS: usize = 113105;
+
+fn expected_circuit_constraints<GD: GadgetDigest<Scalar>>(
+    hasher_constraints: usize,
+    nbr_siblings: usize,
+) -> usize {
+    3 * GD::output_size() * 8 + (GD::output_size() * 8 + hasher_constraints + 1) * nbr_siblings
+}
 
 fn verify_inclusion_merkle<GD: GadgetDigest<Scalar>, O: BitOrder>() {
     // Construct the Merkle tree
@@ -52,7 +62,7 @@ fn verify_non_existing_leaf<GD: GadgetDigest<Scalar>, O: BitOrder>() {
     let simple_tree = construct_merkle_tree::<<GD as GadgetDigest<Scalar>>::OutOfCircuitHasher>();
 
     let mut non_existing_key: Vec<Boolean> = Vec::with_capacity(GD::OUTPUT_SIZE * 8);
-    for i in 0..<GD as GadgetDigest<Scalar>>::OUTPUT_SIZE * 8 {
+    for _ in 0..<GD as GadgetDigest<Scalar>>::OUTPUT_SIZE * 8 {
         non_existing_key.push(Boolean::constant(false));
     }
 
@@ -110,7 +120,7 @@ fn verify_single_leaf_merkle<GD: GadgetDigest<Scalar>, O: BitOrder>() {
         hash::<<GD as GadgetDigest<Scalar>>::OutOfCircuitHasher>(b"single_leaf").to_vec();
 
     let mut leaf_key: Vec<Boolean> = Vec::with_capacity(GD::OUTPUT_SIZE * 8);
-    for i in 0..GD::OUTPUT_SIZE * 8 {
+    for _ in 0..GD::OUTPUT_SIZE * 8 {
         leaf_key.push(Boolean::constant(false));
     }
 
@@ -133,7 +143,7 @@ fn verify_single_leaf_merkle<GD: GadgetDigest<Scalar>, O: BitOrder>() {
     );
 }
 
-fn check_number_constraints<GD: GadgetDigest<Scalar>, O: BitOrder>() {
+fn check_number_constraints<GD: GadgetDigest<Scalar>, O: BitOrder>(hasher_constraints: usize) {
     // Construct the Merkle tree
     let simple_tree = construct_merkle_tree::<<GD as GadgetDigest<Scalar>>::OutOfCircuitHasher>();
 
@@ -219,7 +229,7 @@ fn check_number_constraints<GD: GadgetDigest<Scalar>, O: BitOrder>() {
         ],
     );
 
-    let constrained_expected_root = bytes_to_bitvec::<O>(simple_tree.root())
+    let constrained_expected_root: Vec<Boolean> = bytes_to_bitvec::<O>(simple_tree.root())
         .iter()
         .enumerate()
         .map(|(i, b)| {
@@ -236,7 +246,7 @@ fn check_number_constraints<GD: GadgetDigest<Scalar>, O: BitOrder>() {
     let res = verify_proof::<_, _, GD>(
         cs.namespace(|| "verify_proof"),
         constrained_expected_root,
-        proof,
+        proof.clone(),
     );
 
     assert_eq!(
@@ -249,8 +259,9 @@ fn check_number_constraints<GD: GadgetDigest<Scalar>, O: BitOrder>() {
 
     assert_eq!(
         cs.num_constraints(),
-        455811,
-        "Expected 455811 constraints, got {}",
+        expected_circuit_constraints::<GD>(hasher_constraints, proof.siblings().len()),
+        "Expected {} constraints, got {}",
+        expected_circuit_constraints::<GD>(hasher_constraints, proof.siblings().len()),
         cs.num_constraints()
     );
 }
@@ -281,9 +292,9 @@ fn test_verify_single_leaf_merkle() {
 }
 #[test]
 fn test_check_number_constraints() {
-    check_number_constraints::<Sha3, Lsb0>();
-    check_number_constraints::<Keccak, Lsb0>();
-    check_number_constraints::<Sha512, Msb0>();
+    check_number_constraints::<Sha3, Lsb0>(SHA3_CONSTRAINTS);
+    check_number_constraints::<Keccak, Lsb0>(SHA3_CONSTRAINTS);
+    check_number_constraints::<Sha512, Msb0>(SHA_512_CONSTRAINTS);
 }
 
 /**************************************************************

@@ -28,6 +28,8 @@ pub trait GadgetDigest<E: PrimeField> {
         cs: CS,
         input: &[Boolean],
     ) -> Result<Vec<Boolean>, SynthesisError>;
+
+    fn is_little_endian() -> bool;
 }
 
 /// A macro for creating implementations of the `GadgetDigest` trait.
@@ -40,9 +42,10 @@ pub trait GadgetDigest<E: PrimeField> {
 /// * `digest_method` - The digest method to be used in the implementation.
 /// * `output_size` - The output size of the hasher, in bytes.
 /// * `out_of_circuit_hasher` - Rust hasher to use out of circuit along with the GadgetDigest we are referring to.
+/// * `is_little_endian` - Boolean to tell us if the hashing algorithm is little or big endian.
 #[macro_export]
 macro_rules! create_gadget_digest_impl {
-    ($struct_name:ident, $digest_method:path, $output_size:expr, $out_of_circuit_hasher:ty) => {
+    ($struct_name:ident, $digest_method:path, $output_size:expr, $out_of_circuit_hasher:ty, $is_little_endian:expr) => {
         pub struct $struct_name {}
 
         impl<E: PrimeField> GadgetDigest<E> for $struct_name {
@@ -54,6 +57,10 @@ macro_rules! create_gadget_digest_impl {
                 input: &[Boolean],
             ) -> Result<Vec<Boolean>, SynthesisError> {
                 $digest_method(cs, input)
+            }
+
+            fn is_little_endian() -> bool {
+                $is_little_endian
             }
         }
     };

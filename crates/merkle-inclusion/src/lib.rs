@@ -13,6 +13,7 @@ pub type Key = Vec<Boolean>;
 ///
 /// Each leaf node contains a key-value pair, where the key is used to determine the position in the tree and the value
 /// is the data stored.
+#[derive(Debug, Clone)]
 pub struct Leaf {
     key: Key,
     value_hash: HashValue,
@@ -35,6 +36,7 @@ impl Leaf {
 ///
 /// The `Proof` struct is essential for the Merkle Tree's cryptographic verification process, providing the necessary
 /// information to verify the integrity and authenticity of the data.
+#[derive(Debug, Clone)]
 pub struct Proof {
     leaf: Leaf,
     siblings: Vec<HashValue>,
@@ -77,7 +79,7 @@ where
     GD: GadgetDigest<E>,
 {
     assert_eq!(expected_root.len(), GD::output_size() * 8);
-
+    assert_eq!(proof.leaf().key().len(), GD::output_size() * 8);
     //Assert that we do not have more siblings than the length of our hash (otherwise cannot know which path to go)
     assert!(
         proof.siblings.len() <= GD::output_size() * 8,
@@ -89,18 +91,12 @@ where
     // Reconstruct the root hash from the leaf and sibling hashes
     let mut actual_root_hash = proof.leaf().hash().to_vec();
 
+    let key_iterator = conditional_reverse::<_, _, GD>(proof.leaf().key().iter());
+
     for (i, (sibling_hash, bit)) in proof
         .siblings()
-        .to_vec()
-        .iter()
-        .zip(
-            proof
-                .leaf()
-                .key()
-                .iter()
-                .rev()
-                .skip(GD::output_size() * 8 - proof.siblings().len()),
-        )
+        .into_iter()
+        .zip(key_iterator.skip(proof.leaf().key().len() - proof.siblings().len()))
         .enumerate()
     {
         if let Some(b) = bit.get_value() {
@@ -153,6 +149,42 @@ where
             &actual[i],
         )?;
     }
-    dbg!("qq");
+
     Ok(actual)
+}
+
+/// Conditionally reverses the order of elements in an iterator based on the endianness specified in [`GadgetDigest`].
+///
+/// This function is used to ensure that the data is correctly aligned for the hashing process in cryptographic circuits.
+/// It takes an iterator over `Boolean` values and reverses it if the [`GadgetDigest`] associated with the provided field
+/// `E` indicates little-endian order.
+///
+/// # Type Parameters
+///
+/// * `I`: A type that implements [`DoubleEndedIterator`] over references to [`Boolean`].
+/// * `E`: The prime field associated with the [`GadgetDigest`].
+/// * `GD`: The [`GadgetDigest`] implementation, which includes an endianness indicator.
+///
+/// # Arguments
+///
+/// * `iter`: An iterator over references to [`Boolean`]. This iterator is double-ended, allowing for efficient reversal
+/// if needed.
+///
+/// # Returns
+///
+/// Returns a boxed double-ended iterator over references to [`Boolean`]. The order of elements in the iterator will be
+/// reversed if [`GadgetDigest`] indicates little-endian order.
+fn conditional_reverse<
+    'a,
+    I: DoubleEndedIterator<Item = &'a Boolean> + 'a,
+    E: PrimeField,
+    GD: GadgetDigest<E>,
+>(
+    iter: I,
+) -> Box<dyn DoubleEndedIterator<Item = &'a Boolean> + 'a> {
+    if GD::is_little_endian() {
+        Box::new(iter.rev())
+    } else {
+        Box::new(iter)
+    }
 }
