@@ -91,14 +91,10 @@ where
     // Reconstruct the root hash from the leaf and sibling hashes
     let mut actual_root_hash = proof.leaf().hash().to_vec();
 
-    let key_iterator = conditional_reverse::<_, _, GD>(proof.leaf().key().iter());
+    let key_iterator =
+        conditional_reverse::<_, _, GD>(proof.leaf().key().iter().take(proof.siblings().len()));
 
-    for (i, (sibling_hash, bit)) in proof
-        .siblings()
-        .into_iter()
-        .zip(key_iterator.skip(proof.leaf().key().len() - proof.siblings().len()))
-        .enumerate()
-    {
+    for (i, (sibling_hash, bit)) in proof.siblings().iter().zip(key_iterator).enumerate() {
         if let Some(b) = bit.get_value() {
             if b {
                 actual_root_hash = GD::digest(

@@ -31,18 +31,18 @@ fn expected_circuit_constraints<GD: GadgetDigest<Scalar>>(
 
 fn verify_inclusion_merkle<GD: GadgetDigest<Scalar>, O: BitOrder>() {
     // Construct the Merkle tree
-    let simple_tree = construct_merkle_tree::<<GD as GadgetDigest<Scalar>>::OutOfCircuitHasher>();
+    let simple_tree = construct_merkle_tree::<GD>();
 
     // Get key for d
     let cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
 
     let proof = Proof::new(
         Leaf::new(
-            simple_tree.get_leaf_key(0).to_vec(),
-            bytes_to_bitvec::<O>(simple_tree.get_leaf_hash(0)),
+            simple_tree.get_leaf_key(1).to_vec(),
+            bytes_to_bitvec::<O>(simple_tree.get_leaf_hash(1)),
         ),
         vec![
-            bytes_to_bitvec::<O>(simple_tree.get_leaf_hash(1)),
+            bytes_to_bitvec::<O>(simple_tree.get_leaf_hash(0)),
             bytes_to_bitvec::<O>(simple_tree.get_leaf_hash(9)),
             bytes_to_bitvec::<O>(simple_tree.get_leaf_hash(13)),
         ],
@@ -59,7 +59,7 @@ fn verify_inclusion_merkle<GD: GadgetDigest<Scalar>, O: BitOrder>() {
 
 fn verify_non_existing_leaf<GD: GadgetDigest<Scalar>, O: BitOrder>() {
     // Construct the Merkle tree
-    let simple_tree = construct_merkle_tree::<<GD as GadgetDigest<Scalar>>::OutOfCircuitHasher>();
+    let simple_tree = construct_merkle_tree::<GD>();
 
     let mut non_existing_key: Vec<Boolean> = Vec::with_capacity(GD::OUTPUT_SIZE * 8);
     for _ in 0..<GD as GadgetDigest<Scalar>>::OUTPUT_SIZE * 8 {
@@ -88,7 +88,7 @@ fn verify_non_existing_leaf<GD: GadgetDigest<Scalar>, O: BitOrder>() {
 
 fn verify_incorrect_sibling_hashes<GD: GadgetDigest<Scalar>, O: BitOrder>() {
     // Construct the Merkle tree
-    let simple_tree = construct_merkle_tree::<<GD as GadgetDigest<Scalar>>::OutOfCircuitHasher>();
+    let simple_tree = construct_merkle_tree::<GD>();
 
     let incorrect_sibling =
         hash::<<GD as GadgetDigest<Scalar>>::OutOfCircuitHasher>(b"incorrect").to_vec();
@@ -145,7 +145,7 @@ fn verify_single_leaf_merkle<GD: GadgetDigest<Scalar>, O: BitOrder>() {
 
 fn check_number_constraints<GD: GadgetDigest<Scalar>, O: BitOrder>(hasher_constraints: usize) {
     // Construct the Merkle tree
-    let simple_tree = construct_merkle_tree::<<GD as GadgetDigest<Scalar>>::OutOfCircuitHasher>();
+    let simple_tree = construct_merkle_tree::<GD>();
 
     // Get key for d
     let mut cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
@@ -374,16 +374,21 @@ impl SimpleMerkleTree {
 ///     // Process each leaf and intermediary node's hash and key...
 /// }
 /// ```
-pub fn construct_merkle_tree<D: Digest>() -> SimpleMerkleTree {
+pub fn construct_merkle_tree<GD: GadgetDigest<Scalar>>() -> SimpleMerkleTree {
     let predefined_leaves = [b"a", b"b", b"c", b"d", b"e", b"f", b"g", b"h"]
         .iter()
-        .map(|d| hash::<D>(d.to_owned()).to_vec())
+        .map(|d| hash::<GD::OutOfCircuitHasher>(d.to_owned()).to_vec())
         .collect::<Vec<Vec<u8>>>();
 
     let mut leaves = predefined_leaves.clone();
 
     for j in (0..12).step_by(2) {
-        leaves.push(hash::<D>(&[leaves[j].to_owned(), leaves[j + 1].to_owned()].concat()).to_vec());
+        leaves.push(
+            hash::<GD::OutOfCircuitHasher>(
+                &[leaves[j].to_owned(), leaves[j + 1].to_owned()].concat(),
+            )
+            .to_vec(),
+        );
     }
     // Generate keys
     let mut leaf_key_vec = Vec::new();
@@ -404,19 +409,23 @@ pub fn construct_merkle_tree<D: Digest>() -> SimpleMerkleTree {
             node_index >>= 1;
         }
 
-        // Reverse to get the path from root to the node
-        path.reverse();
+        // Reverse based on endianness, because we always read the key from MSB (bottom) to LSB (root)
+        if GD::is_little_endian() {
+            path.reverse();
+        }
 
         // Pad the path to ensure it's sized as Digest output
-        while path.len() < <D as Digest>::output_size() * 8 {
+        while path.len() < <GD::OutOfCircuitHasher as Digest>::output_size() * 8 {
             path.push(Boolean::constant(false));
         }
+
         leaf_key_vec.push((item.to_owned(), path));
     }
 
     // Compute expected root hash
     let expected_root =
-        hash::<D>(&[leaves[12].to_owned(), leaves[13].to_owned()].concat()).to_vec();
+        hash::<GD::OutOfCircuitHasher>(&[leaves[12].to_owned(), leaves[13].to_owned()].concat())
+            .to_vec();
 
     SimpleMerkleTree {
         root: expected_root.to_owned(),
