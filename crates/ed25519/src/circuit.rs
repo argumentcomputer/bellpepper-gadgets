@@ -494,19 +494,36 @@ mod tests {
     use num_traits::Zero;
     use pasta_curves::Fp;
 
+    fn random_point() -> AffinePoint {
+        let mut rng = rand::thread_rng();
+        let mut point = AffinePoint::default();
+        loop {
+            let y = Fe25519::random(&mut rng);
+            let y_sq = &y.square();
+            let x_sq = (y_sq - &Fe25519::one())
+                * (Ed25519Curve::d() * y_sq + Fe25519::one())
+                    .invert()
+                    .unwrap();
+
+            let x = x_sq.sqrt();
+            if let Some(x) = x {
+                point.x = x;
+                point.y = y;
+                break;
+            }
+        }
+        point
+    }
+
     #[test]
     fn alloc_affine_point_equality() {
-        for _ in 0..100 {
-            let b = Ed25519Curve::basepoint();
-            let mut rng = rand::thread_rng();
-            let scalar = rng.gen_biguint_range(&BigUint::zero(), &Ed25519Curve::order());
-            let p = Ed25519Curve::scalar_multiplication(&b, &scalar);
+        for _ in 0..50 {
+            let p = random_point();
 
             let mut cs = TestConstraintSystem::<Fp>::new();
 
             let p_alloc =
                 AllocatedAffinePoint::alloc_affine_point(&mut cs.namespace(|| "alloc point p"), &p);
-            assert!(p_alloc.is_ok());
             let p_al = p_alloc.unwrap();
 
             let _ =
@@ -516,6 +533,36 @@ mod tests {
                 eprintln!("{:?}", cs.which_is_unsatisfied())
             }
             assert!(cs.is_satisfied());
+            assert_eq!(cs.num_constraints(), 314);
+            assert_eq!(cs.num_inputs(), 1);
+        }
+
+        for _ in 0..50 {
+            let p = random_point();
+            assert!(Ed25519Curve::is_on_curve(&p));
+            let q = random_point();
+            assert!(Ed25519Curve::is_on_curve(&q));
+
+            let mut cs = TestConstraintSystem::<Fp>::new();
+
+            let p_alloc =
+                AllocatedAffinePoint::alloc_affine_point(&mut cs.namespace(|| "alloc point p"), &p);
+            let p_al = p_alloc.unwrap();
+
+            let q_alloc =
+                AllocatedAffinePoint::alloc_affine_point(&mut cs.namespace(|| "alloc point q"), &q);
+            let q_al = q_alloc.unwrap();
+
+            let _ =
+                AllocatedAffinePoint::assert_equality(&mut cs.namespace(|| "p == q"), &p_al, &q_al);
+
+            if cs.is_satisfied() {
+                assert!(
+                    Ed25519Curve::check_equality(&p_al.value, &q_al.value),
+                    "p and q are equal"
+                );
+            }
+
             assert_eq!(cs.num_constraints(), 314);
             assert_eq!(cs.num_inputs(), 1);
         }
