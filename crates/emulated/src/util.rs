@@ -173,7 +173,7 @@ where
 }
 
 /// Construct a [BigInt] from a vector of [BigInt] limbs with base equal to 2^num_bits_per_limb
-pub fn recompose(limbs: &Vec<BigInt>, num_bits_per_limb: usize) -> Result<BigInt, SynthesisError> {
+pub fn recompose(limbs: &[BigInt], num_bits_per_limb: usize) -> Result<BigInt, SynthesisError> {
     if limbs.is_empty() {
         eprintln!("Empty input");
         return Err(SynthesisError::Unsatisfiable);

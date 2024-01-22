@@ -11,18 +11,18 @@ pub struct AffinePoint {
     pub y: Fe25519,
 }
 
-impl Add<AffinePoint> for AffinePoint {
-    type Output = AffinePoint;
+impl Add<Self> for AffinePoint {
+    type Output = Self;
 
-    fn add(self, rhs: AffinePoint) -> Self::Output {
+    fn add(self, rhs: Self) -> Self::Output {
         Ed25519Curve::add_points(&self, &rhs)
     }
 }
 
-impl Add<&AffinePoint> for AffinePoint {
-    type Output = AffinePoint;
+impl Add<&Self> for AffinePoint {
+    type Output = Self;
 
-    fn add(self, rhs: &AffinePoint) -> Self::Output {
+    fn add(self, rhs: &Self) -> Self::Output {
         Ed25519Curve::add_points(&self, rhs)
     }
 }
@@ -35,19 +35,19 @@ impl Add<&AffinePoint> for &AffinePoint {
     }
 }
 
-impl Sub<AffinePoint> for AffinePoint {
-    type Output = AffinePoint;
+impl Sub<Self> for AffinePoint {
+    type Output = Self;
 
-    fn sub(self, rhs: AffinePoint) -> Self::Output {
+    fn sub(self, rhs: Self) -> Self::Output {
         let rhs_neg = -rhs;
         Ed25519Curve::add_points(&self, &rhs_neg)
     }
 }
 
-impl Sub<&AffinePoint> for AffinePoint {
-    type Output = AffinePoint;
+impl Sub<&Self> for AffinePoint {
+    type Output = Self;
 
-    fn sub(self, rhs: &AffinePoint) -> Self::Output {
+    fn sub(self, rhs: &Self) -> Self::Output {
         let rhs_neg = -rhs;
         Ed25519Curve::add_points(&self, &rhs_neg)
     }
@@ -66,7 +66,7 @@ impl Neg for AffinePoint {
     type Output = Self;
 
     fn neg(self) -> Self::Output {
-        AffinePoint {
+        Self {
             x: self.x.neg(),
             y: self.y,
         }

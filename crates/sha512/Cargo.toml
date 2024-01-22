@@ -13,11 +13,14 @@ repository.workspace = true
 bellpepper-core = { workspace = true }
 bellpepper = { workspace = true }
 ff = { workspace = true }
+proptest = "1.4.0"
 
 [dev-dependencies]
 blstrs = "0.7.0"
+bitvec = "1.0.1"
 rand = { workspace = true }
 hex-literal = "0.4.1"
 rand_core = { workspace = true }
 rand_xorshift = { workspace = true }
 sha2 = "0.10.6"
+hex = "0.4.3"

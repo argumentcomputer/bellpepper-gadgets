@@ -24,15 +24,15 @@ where
     F: PrimeField + PrimeFieldBits,
 {
     fn from(value: Vec<F>) -> Self {
-        EmulatedLimbs::Constant(value)
+        Self::Constant(value)
     }
 }
 
-impl<F> AsRef<EmulatedLimbs<F>> for EmulatedLimbs<F>
+impl<F> AsRef<Self> for EmulatedLimbs<F>
 where
     F: PrimeField + PrimeFieldBits,
 {
-    fn as_ref(&self) -> &EmulatedLimbs<F> {
+    fn as_ref(&self) -> &Self {
         self
     }
 }
@@ -62,7 +62,7 @@ where
             num_vec.push(Num::<F>::from(allocated_limb));
         }
 
-        Ok(EmulatedLimbs::Allocated(num_vec))
+        Ok(Self::Allocated(num_vec))
     }
 }
 
@@ -182,7 +182,7 @@ where
             res += base.clone() * BigUint::from_bytes_le(limb.to_repr().as_ref());
             base *= one << P::bits_per_limb();
         }
-        BigInt::from(res)
+        Self::from(res)
     }
 }
 
@@ -191,16 +191,16 @@ where
     F: PrimeField + PrimeFieldBits,
     P: EmulatedFieldParams,
 {
-    pub fn zero() -> EmulatedFieldElement<F, P> {
-        EmulatedFieldElement::<F, P>::from(&BigInt::zero())
+    pub fn zero() -> Self {
+        Self::from(&BigInt::zero())
     }
 
-    pub fn one() -> EmulatedFieldElement<F, P> {
-        EmulatedFieldElement::<F, P>::from(&BigInt::one())
+    pub fn one() -> Self {
+        Self::from(&BigInt::one())
     }
 
-    pub fn modulus() -> EmulatedFieldElement<F, P> {
-        EmulatedFieldElement::<F, P>::from(&P::modulus())
+    pub fn modulus() -> Self {
+        Self::from(&P::modulus())
     }
 
     pub fn max_overflow() -> usize {

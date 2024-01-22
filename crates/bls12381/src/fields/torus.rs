@@ -29,7 +29,7 @@ pub struct Torus<F: PrimeField + PrimeFieldBits>(pub Fp6Element<F>);
 ///    𝔽p¹²[w] = 𝔽p⁶/w²-v
 impl<F: PrimeField + PrimeFieldBits> Torus<F> {
     /// compress_torus compresses x ∈ Fp12 to (x.C0 + 1)/x.C1 ∈ Fp6
-    pub fn compress<CS>(cs: &mut CS, x: &Fp12Element<F>) -> Result<Torus<F>, SynthesisError>
+    pub fn compress<CS>(cs: &mut CS, x: &Fp12Element<F>) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
@@ -37,7 +37,7 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
         let y =
             x.c0.add(&mut cs.namespace(|| "y <- x.c0 + 1"), &Fp6Element::one())?;
         let y = y.div_unchecked(&mut cs.namespace(|| "y <- y div x.c1"), &x.c1)?;
-        Ok(Torus(y))
+        Ok(Self(y))
     }
 
     fn compress_native(x: &BlsFp12) -> Result<BlsFp6, SynthesisError> {
@@ -109,7 +109,7 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
         let d = y1.add(&mut cs.namespace(|| "d <- y1 + y2"), y2)?;
         let y3 = n.div_unchecked(&mut cs.namespace(|| "y3 <- n div d"), &d)?;
 
-        Ok(Torus(y3))
+        Ok(Self(y3))
     }
 
     /// inverse_torus inverses a compressed elements y ∈ Fp6
@@ -118,7 +118,7 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        Ok(Torus(self.0.neg(&mut cs.namespace(|| "inverse_torus"))?))
+        Ok(Self(self.0.neg(&mut cs.namespace(|| "inverse_torus"))?))
     }
 
     /// square_torus squares a compressed elements y ∈ Fp6
@@ -152,7 +152,7 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
         };
         Fp6Element::assert_is_equal(&mut cs.namespace(|| "v = Fp6(0, 1, 0)"), &v, &expected)?;
 
-        Ok(Torus(sq_alloc))
+        Ok(Self(sq_alloc))
     }
 
     /// frobenius_torus raises a compressed elements y ∈ Fp6 to the modulus p
@@ -182,7 +182,7 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
         };
         let res = res.mul_by_0(&mut cs.namespace(|| "res <- res.mul_by_0(v0)"), &v0)?;
 
-        Ok(Torus(res))
+        Ok(Self(res))
     }
 
     /// frobenius_square_torus raises a compressed elements y ∈ Fp6 to the square modulus p^2
@@ -205,7 +205,7 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
             .mul_by_nonresidue_2pow4(&mut cs.namespace(|| "t2 <- y.b2.mul_by_nonresidue_2pow2"))?;
         let t2 = t2.mul_element(&mut cs.namespace(|| "t2 <- t2 * elm(v0)"), &v0)?;
 
-        Ok(Torus(Fp6Element {
+        Ok(Self(Fp6Element {
             b0: t0,
             b1: t1,
             b2: t2,
@@ -305,7 +305,7 @@ mod tests {
     use pasta_curves::Fp;
 
     use expect_test::{expect, Expect};
-    fn expect_eq(computed: usize, expected: Expect) {
+    fn expect_eq(computed: usize, expected: &Expect) {
         expected.assert_eq(&computed.to_string());
     }
 
@@ -329,9 +329,9 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        expect_eq(cs.num_inputs(), expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), expect!["5907"]);
-        expect_eq(cs.num_constraints(), expect!["5799"]);
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["5907"]);
+        expect_eq(cs.num_constraints(), &expect!["5799"]);
     }
 
     #[test]
@@ -357,9 +357,9 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        expect_eq(cs.num_inputs(), expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), expect!["12075"]);
-        expect_eq(cs.num_constraints(), expect!["11931"]);
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["12075"]);
+        expect_eq(cs.num_constraints(), &expect!["11931"]);
     }
 
     #[test]
@@ -394,8 +394,8 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        expect_eq(cs.num_inputs(), expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), expect!["14709"]);
-        expect_eq(cs.num_constraints(), expect!["14493"]);
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["14709"]);
+        expect_eq(cs.num_constraints(), &expect!["14493"]);
     }
 }

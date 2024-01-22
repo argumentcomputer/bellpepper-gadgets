@@ -229,7 +229,7 @@ where
 
         let kp = Self::reduce_and_apply_op(
             &mut cs.namespace(|| "computing product of quotient and modulus"),
-            Optype::Mul,
+            &Optype::Mul,
             &k,
             &Self::modulus(),
         )?;
@@ -326,7 +326,7 @@ where
         }
     }
 
-    fn add_op<CS>(a: &Self, b: &Self, next_overflow: usize) -> Result<Self, SynthesisError>
+    fn add_op<CS>(a: &Self, b: &Self, next_overflow: usize) -> Self
     where
         CS: ConstraintSystem<F>,
     {
@@ -334,7 +334,7 @@ where
             let a_int = BigInt::from(a);
             let b_int = BigInt::from(b);
             let res_int = (a_int + b_int).rem(P::modulus());
-            return Ok(Self::from(&res_int));
+            return Self::from(&res_int);
         }
 
         let num_res_limbs = a.len().max(b.len());
@@ -371,10 +371,7 @@ where
             }
         }
 
-        Ok(Self::new_internal_element(
-            EmulatedLimbs::Allocated(res),
-            next_overflow,
-        ))
+        Self::new_internal_element(EmulatedLimbs::Allocated(res), next_overflow)
     }
 
     pub fn add<CS>(&self, cs: &mut CS, other: &Self) -> Result<Self, SynthesisError>
@@ -383,7 +380,7 @@ where
     {
         Self::reduce_and_apply_op(
             &mut cs.namespace(|| "compute a + b"),
-            Optype::Add,
+            &Optype::Add,
             self,
             other,
         )
@@ -511,7 +508,7 @@ where
     {
         Self::reduce_and_apply_op(
             &mut cs.namespace(|| "compute a - b"),
-            Optype::Sub,
+            &Optype::Sub,
             self,
             other,
         )
@@ -661,7 +658,7 @@ where
     {
         let mut prod = Self::reduce_and_apply_op(
             &mut cs.namespace(|| "compute a * b"),
-            Optype::Mul,
+            &Optype::Mul,
             self,
             other,
         )?;
@@ -763,7 +760,7 @@ where
         }
 
         let num_chunks = (self.len() + P::num_limbs() - 1) / P::num_limbs();
-        let mut chunks: Vec<EmulatedFieldElement<F, P>> = vec![];
+        let mut chunks: Vec<Self> = vec![];
 
         match &self.limbs {
             EmulatedLimbs::Allocated(var) => {
@@ -817,7 +814,7 @@ where
 
     fn reduce_and_apply_op<CS>(
         cs: &mut CS,
-        op_type: Optype,
+        op_type: &Optype,
         a: &Self,
         b: &Self,
     ) -> Result<Self, SynthesisError>
@@ -852,7 +849,7 @@ where
         };
 
         let res = match op_type {
-            Optype::Add => Self::add_op::<CS>(&a_r, &b_r, next_overflow),
+            Optype::Add => Ok(Self::add_op::<CS>(&a_r, &b_r, next_overflow)),
             Optype::Sub => Self::sub_op::<CS>(&a_r, &b_r, next_overflow),
             Optype::Mul => Self::mul_op(&mut cs.namespace(|| "mul_op"), &a_r, &b_r, next_overflow),
         };

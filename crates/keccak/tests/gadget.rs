@@ -34,18 +34,18 @@ fn sha3(preimage: &[u8]) -> [u8; 32] {
 }
 
 fn bytes_to_bitvec(bytes: &[u8]) -> Vec<Boolean> {
-    let bits = BitVec::<Lsb0, u8>::from_slice(bytes);
+    let bits = BitVec::<u8, Lsb0>::from_slice(bytes);
     let bits: Vec<Boolean> = bits.iter().map(|b| Boolean::constant(*b)).collect();
     bits
 }
 
 fn bits_to_bytevec(bits: &[Boolean]) -> Vec<u8> {
     let result: Vec<bool> = bits.iter().map(|b| b.get_value().unwrap()).collect();
-    let mut bv = BitVec::<Lsb0, u8>::new();
+    let mut bv = BitVec::<u8, Lsb0>::new();
     for bit in result {
         bv.push(bit);
     }
-    bv.as_slice().to_vec()
+    bv.as_raw_slice().to_vec()
 }
 
 proptest! {
