@@ -1,0 +1,8 @@
+# Show progress
+progress = false
+
+# Exclude URLs from checking (supports regex)
+exclude = [
+    # rate-limit doesn't play well with our crate structure
+    "http://opensource.org/licenses/MIT",
+]
