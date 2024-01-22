@@ -106,7 +106,7 @@ const IV: [u64; 8] = [
 ];
 
 #[allow(clippy::unreadable_literal)]
-const IV_256T: [u64; 8] = [
+const IV_512_256: [u64; 8] = [
     0x22312194fc2bf72c,
     0x9f555fa3c84c64c2,
     0x2393b86b6f53b151,
@@ -135,33 +135,62 @@ where
     )
 }
 
+/// Gadget for the SHA-512 hash function (see FIPS 180-4). The output is returned in BE.
 pub fn sha512<Scalar, CS>(mut cs: CS, input: &[Boolean]) -> Result<Vec<Boolean>, SynthesisError>
 where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
 {
-    let padded = pad_input(input)?;
-    let mut cur  = get_sha512_iv();
+    let padded = pad_input(input);
+    let mut cur = get_sha512_iv();
     for (i, block) in padded.chunks(1024).enumerate() {
         cur = sha512_compression_function(cs.namespace(|| format!("block {}", i)), block, &cur)?;
     }
     Ok(cur.into_iter().flat_map(|e| e.into_bits_be()).collect())
 }
 
-pub fn sha512_256t<Scalar, CS>(mut cs: CS, input: &[Boolean]) -> Result<Vec<Boolean>, SynthesisError>
+/// Gadget for the SHA-512/256 hash function (see FIPS 180-4). The output is returned in BE.
+pub fn sha512_256<Scalar, CS>(mut cs: CS, input: &[Boolean]) -> Result<Vec<Boolean>, SynthesisError>
 where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
 {
-    let padded = pad_input(input)?;
-    let mut cur = get_sha512_256t_iv();
+    let padded = pad_input(input);
+    let mut cur = get_sha512_256_iv();
     for (i, block) in padded.chunks(1024).enumerate() {
         cur = sha512_compression_function(cs.namespace(|| format!("block {}", i)), block, &cur)?;
     }
-    Ok(cur.into_iter().flat_map(|e| e.into_bits_be()).take(256).collect())
+    Ok(cur
+        .into_iter()
+        .flat_map(|e| e.into_bits_be())
+        .take(256)
+        .collect())
 }
 
-fn pad_input(input: &[Boolean]) -> Result<Vec<Boolean>, SynthesisError> {
+/// Gadget for the SHA512/256t hash function, aka "truncated SHA-512", a widely deployed hash function in practice.
+/// This hash funcion is the same as the SHA-512 hash function, truncated to the first 256 bits. It operates with the same IVs as the SHA-512 hash function.
+/// This is not to be confused with the SHA-512/256 hash function, which has its own IVs. The output is returned in BE.
+pub fn sha512_256t<Scalar, CS>(
+    mut cs: CS,
+    input: &[Boolean],
+) -> Result<Vec<Boolean>, SynthesisError>
+where
+    Scalar: PrimeField,
+    CS: ConstraintSystem<Scalar>,
+{
+    let padded = pad_input(input);
+    let mut cur = get_sha512_iv();
+    for (i, block) in padded.chunks(1024).enumerate() {
+        cur = sha512_compression_function(cs.namespace(|| format!("block {}", i)), block, &cur)?;
+    }
+    Ok(cur
+        .into_iter()
+        .flat_map(|e| e.into_bits_be())
+        .take(256)
+        .collect())
+}
+
+fn pad_input(input: &[Boolean]) -> Vec<Boolean> {
     assert!(input.len() % 8 == 0);
     let mut padded = input.to_vec();
     let plen = padded.len() as u128;
@@ -176,15 +205,15 @@ fn pad_input(input: &[Boolean]) -> Result<Vec<Boolean>, SynthesisError> {
     }
     assert!(padded.len() % 1024 == 0);
 
-    Ok(padded)
+    padded
 }
 
 fn get_sha512_iv() -> Vec<UInt64> {
     IV.iter().map(|&v| UInt64::constant(v)).collect()
 }
 
-fn get_sha512_256t_iv() -> Vec<UInt64> {
-    IV_256T.iter().map(|&v| UInt64::constant(v)).collect()
+fn get_sha512_256_iv() -> Vec<UInt64> {
+    IV_512_256.iter().map(|&v| UInt64::constant(v)).collect()
 }
 
 pub fn sha512_compression_function<Scalar, CS>(
@@ -458,13 +487,41 @@ mod test {
         }
 
         #[test]
-        fn test_sha512_256t(preimage in "[0-9a-f]{128}") {
+        fn test_sha512_256(preimage in "[0-9a-f]{128}") {
             let preimage = hex::decode(preimage).unwrap();
 
             let expected = {
                 let mut h = Sha512_256::new();
                 h.update(&preimage);
                 h.finalize()
+            };
+
+            let preimage: Vec<Boolean> = {
+                let bits = BitVec::<u8, Msb0>::from_slice(&preimage);
+                bits.iter().map(|b| Boolean::constant(*b)).collect()
+            };
+
+            let cs = TestConstraintSystem::<Fr>::new();
+            let result = sha512_256(cs, &preimage).unwrap();
+
+            let result = {
+                let mut bv = BitVec::<u8, Msb0>::new();
+                bv.extend(result.iter().map(|b| b.get_value().unwrap()));
+                bv.as_raw_slice().to_vec()
+            };
+
+            assert_eq!(hex::encode(result), hex::encode(expected));
+        }
+
+        #[test]
+        fn test_sha512_256t(preimage in "[0-9a-f]{128}") {
+            let preimage = hex::decode(preimage).unwrap();
+
+            let expected = {
+                let mut h = Sha512::new();
+                h.update(&preimage);
+                let res = h.finalize();
+                res[..32].to_vec()
             };
 
             let preimage: Vec<Boolean> = {
