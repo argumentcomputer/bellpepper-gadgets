@@ -75,7 +75,7 @@ impl Proof {
 /// A result containing the reconstructed root hash if successful, or a `SynthesisError` otherwise.
 pub fn verify_proof<E, CS, GD>(
     mut cs: CS,
-    expected_root: Vec<Boolean>,
+    expected_root: &[Boolean],
     proof: &Proof,
 ) -> Result<Vec<Boolean>, SynthesisError>
 where
