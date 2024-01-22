@@ -140,64 +140,43 @@ where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
 {
-    assert!(input.len() % 8 == 0);
-
-    let mut padded = input.to_vec();
-    let plen = padded.len() as u128;
-    // append a single '1' bit
-    padded.push(Boolean::constant(true));
-    // append K '0' bits, where K is the minimum number >= 0 such that L + 1 + K + 128 is a multiple of 1024
-    while (padded.len() + 128) % 1024 != 0 {
-        padded.push(Boolean::constant(false));
-    }
-    // append L as a 128-bit big-endian integer, making the total post-processed length a multiple of 1024 bits
-    for b in (0..128).rev().map(|i| (plen >> i) & 1 == 1) {
-        padded.push(Boolean::constant(b));
-    }
-    assert!(padded.len() % 1024 == 0);
-
-    let mut cur = get_sha512_iv();
+    let padded = pad_input(input)?;
+    let mut cur  = get_sha512_iv();
     for (i, block) in padded.chunks(1024).enumerate() {
         cur = sha512_compression_function(cs.namespace(|| format!("block {}", i)), block, &cur)?;
     }
-
     Ok(cur.into_iter().flat_map(|e| e.into_bits_be()).collect())
 }
 
-pub fn sha512_256t<Scalar, CS>(
-    mut cs: CS,
-    input: &[Boolean],
-) -> Result<Vec<Boolean>, SynthesisError>
+pub fn sha512_256t<Scalar, CS>(mut cs: CS, input: &[Boolean]) -> Result<Vec<Boolean>, SynthesisError>
 where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
 {
-    assert!(input.len() % 8 == 0);
+    let padded = pad_input(input)?;
+    let mut cur = get_sha512_256t_iv();
+    for (i, block) in padded.chunks(1024).enumerate() {
+        cur = sha512_compression_function(cs.namespace(|| format!("block {}", i)), block, &cur)?;
+    }
+    Ok(cur.into_iter().flat_map(|e| e.into_bits_be()).take(256).collect())
+}
 
+fn pad_input(input: &[Boolean]) -> Result<Vec<Boolean>, SynthesisError> {
+    assert!(input.len() % 8 == 0);
     let mut padded = input.to_vec();
     let plen = padded.len() as u128;
-    // append a single '1' bit
+
+    // Common padding logic
     padded.push(Boolean::constant(true));
-    // append K '0' bits, where K is the minimum number >= 0 such that L + 1 + K + 128 is a multiple of 1024
     while (padded.len() + 128) % 1024 != 0 {
         padded.push(Boolean::constant(false));
     }
-    // append L as a 128-bit big-endian integer, making the total post-processed length a multiple of 1024 bits
     for b in (0..128).rev().map(|i| (plen >> i) & 1 == 1) {
         padded.push(Boolean::constant(b));
     }
     assert!(padded.len() % 1024 == 0);
 
-    let mut cur = get_sha512_256t_iv();
-    for (i, block) in padded.chunks(1024).enumerate() {
-        cur = sha512_compression_function(cs.namespace(|| format!("block {}", i)), block, &cur)?;
-    }
-
-    Ok(cur
-        .into_iter()
-        .flat_map(|e| e.into_bits_be())
-        .take(256)
-        .collect())
+    Ok(padded)
 }
 
 fn get_sha512_iv() -> Vec<UInt64> {
