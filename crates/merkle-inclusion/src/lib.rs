@@ -118,7 +118,7 @@ where
         )?;
     }
 
-    hash_equality(cs, &expected_root, actual_root_hash)
+    hash_equality(cs, expected_root, actual_root_hash)
 }
 
 /// Compares two hash values for equality bit by bit.
@@ -132,7 +132,7 @@ where
 /// A result containing the actual hash value if the hashes are equal, or a `SynthesisError` otherwise.
 fn hash_equality<E, CS>(
     mut cs: CS,
-    expected: &HashValue,
+    expected: &[Boolean],
     actual: HashValue,
 ) -> Result<HashValue, SynthesisError>
 where

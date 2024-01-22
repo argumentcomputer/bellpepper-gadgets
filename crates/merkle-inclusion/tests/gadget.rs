@@ -48,7 +48,7 @@ fn verify_inclusion_merkle<GD: GadgetDigest<Scalar>, O: BitOrder>() {
         ],
     );
 
-    let res = verify_proof::<_, _, GD>(cs, bytes_to_bitvec::<O>(simple_tree.root()), &proof);
+    let res = verify_proof::<_, _, GD>(cs, &bytes_to_bitvec::<O>(simple_tree.root()), &proof);
 
     assert_eq!(
         bits_to_bytevec::<O>(&res.unwrap()),
@@ -78,7 +78,7 @@ fn verify_non_existing_leaf<GD: GadgetDigest<Scalar>, O: BitOrder>() {
     );
 
     let cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
-    let res = verify_proof::<_, _, GD>(cs, bytes_to_bitvec::<O>(simple_tree.root()), &proof);
+    let res = verify_proof::<_, _, GD>(cs, &bytes_to_bitvec::<O>(simple_tree.root()), &proof);
 
     assert!(
         res.is_err(),
@@ -106,7 +106,7 @@ fn verify_incorrect_sibling_hashes<GD: GadgetDigest<Scalar>, O: BitOrder>() {
     );
 
     let cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
-    let res = verify_proof::<_, _, GD>(cs, bytes_to_bitvec::<O>(simple_tree.root()), &proof);
+    let res = verify_proof::<_, _, GD>(cs, &bytes_to_bitvec::<O>(simple_tree.root()), &proof);
 
     assert!(
         res.is_err(),
@@ -130,7 +130,7 @@ fn verify_single_leaf_merkle<GD: GadgetDigest<Scalar>, O: BitOrder>() {
     );
 
     let cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
-    let res = verify_proof::<_, _, GD>(cs, bytes_to_bitvec::<O>(&single_leaf), &proof);
+    let res = verify_proof::<_, _, GD>(cs, &bytes_to_bitvec::<O>(&single_leaf), &proof);
 
     assert!(
         res.is_ok(),
@@ -245,7 +245,7 @@ fn check_number_constraints<GD: GadgetDigest<Scalar>, O: BitOrder>(hasher_constr
 
     let res = verify_proof::<_, _, GD>(
         cs.namespace(|| "verify_proof"),
-        constrained_expected_root,
+        &constrained_expected_root,
         &proof.clone(),
     );
 
