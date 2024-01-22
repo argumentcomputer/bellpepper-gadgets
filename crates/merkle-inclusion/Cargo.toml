@@ -1,0 +1,26 @@
+[package]
+name = "bellpepper-merkle-inclusion"
+version = "0.1.0"
+edition = "2021"
+authors = ["Lurk Lab Engineering <engineering@lurk-lab.com>"]
+license = "MIT OR Apache-2.0"
+description = "Merkle proof of inclusion using Bellpepper"
+homepage.workspace = true
+repository.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bellpepper-core = { workspace = true }
+bellpepper = { workspace = true }
+digest = "0.11.0-pre.4"
+ff = { workspace = true }
+
+[dev-dependencies]
+bellpepper-keccak = { path="../keccak", version = "0.1.0" }
+bellpepper-sha512 = { path="../sha512", version = "0.2.0" }
+bitvec = "1.0.1"
+bls12_381 = "0.8.0"
+pairing = "0.23.0"
+sha2 = "0.11.0-pre.2"
+sha3 = "0.11.0-pre.1"

@@ -7,9 +7,11 @@ members = [
     "crates/sha512",
     "crates/sha1",
     "crates/keccak",
+    "crates/merkle-inclusion"
 ]
 
 [workspace.package]
+license = "MIT OR Apache-2.0"
 homepage = "https://github.com/lurk-lab/bellpepper-gadgets"
 repository = "https://github.com/lurk-lab/bellpepper-gadgets"
 
