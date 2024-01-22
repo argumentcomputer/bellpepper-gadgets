@@ -66,6 +66,11 @@ impl Proof {
 /// * `expected_root` - The expected root hash of the Merkle Tree.
 /// * `proof` - The proof containing the leaf and its sibling hashes.
 ///
+/// # Notes
+///
+/// To reconstruct the root from the proof, the method iterate over the provided proof.leaf.key and the proof.siblings
+/// in the same order. The order is from the bottom of the tree to its root, so from the first sibling to the last.
+///
 /// # Returns
 /// A result containing the reconstructed root hash if successful, or a `SynthesisError` otherwise.
 pub fn verify_proof<E, CS, GD>(
@@ -83,33 +88,34 @@ where
     assert!(
         proof.siblings.len() <= proof.leaf().key().len(),
         "Merkle Tree proof has more siblings ({}) than the key length ({}).",
-        proof.siblings.len(),
+        proof.siblings().len(),
         proof.leaf().key().len(),
     );
-    //Assert that we do not have more siblings than the length of our hash (otherwise cannot know which path to go)
 
-    // Reconstruct the root hash from the leaf and sibling hashes
     let mut actual_root_hash = proof.leaf().hash().to_vec();
 
-    let key_iterator =
-        conditional_reverse::<_, _, GD>(proof.leaf().key().iter().take(proof.siblings().len()));
+    for (i, (bit, sibling_hash)) in proof
+        .leaf()
+        .key()
+        .iter()
+        .take(proof.siblings().len())
+        .zip(proof.siblings().iter())
+        .enumerate()
+    {
+        let b = bit.get_value().ok_or(SynthesisError::Unsatisfiable)?;
 
-    for (i, (sibling_hash, bit)) in proof.siblings().iter().zip(key_iterator).enumerate() {
-        if let Some(b) = bit.get_value() {
-            if b {
-                actual_root_hash = GD::digest(
-                    cs.namespace(|| format!("sibling {}", i)),
-                    &[sibling_hash.to_owned(), actual_root_hash].concat(),
-                )?
-            } else {
-                actual_root_hash = GD::digest(
-                    cs.namespace(|| format!("sibling {}", i)),
-                    &[actual_root_hash, sibling_hash.to_owned()].concat(),
-                )?
-            }
+        // Determine the order of hashing based on the bit value.
+        let hash_order = if b {
+            vec![sibling_hash.to_owned(), actual_root_hash]
         } else {
-            return Err(SynthesisError::Unsatisfiable);
-        }
+            vec![actual_root_hash, sibling_hash.to_owned()]
+        };
+
+        // Compute the new hash.
+        actual_root_hash = GD::digest(
+            cs.namespace(|| format!("sibling {}", i)),
+            &hash_order.concat(),
+        )?;
     }
 
     hash_equality(cs, expected_root, actual_root_hash)
@@ -147,40 +153,4 @@ where
     }
 
     Ok(actual)
-}
-
-/// Conditionally reverses the order of elements in an iterator based on the endianness specified in [`GadgetDigest`].
-///
-/// This function is used to ensure that the data is correctly aligned for the hashing process in cryptographic circuits.
-/// It takes an iterator over `Boolean` values and reverses it if the [`GadgetDigest`] associated with the provided field
-/// `E` indicates little-endian order.
-///
-/// # Type Parameters
-///
-/// * `I`: A type that implements [`DoubleEndedIterator`] over references to [`Boolean`].
-/// * `E`: The prime field associated with the [`GadgetDigest`].
-/// * `GD`: The [`GadgetDigest`] implementation, which includes an endianness indicator.
-///
-/// # Arguments
-///
-/// * `iter`: An iterator over references to [`Boolean`]. This iterator is double-ended, allowing for efficient reversal
-/// if needed.
-///
-/// # Returns
-///
-/// Returns a boxed double-ended iterator over references to [`Boolean`]. The order of elements in the iterator will be
-/// reversed if [`GadgetDigest`] indicates little-endian order.
-fn conditional_reverse<
-    'a,
-    I: DoubleEndedIterator<Item = &'a Boolean> + 'a,
-    E: PrimeField,
-    GD: GadgetDigest<E>,
->(
-    iter: I,
-) -> Box<dyn DoubleEndedIterator<Item = &'a Boolean> + 'a> {
-    if GD::is_little_endian() {
-        Box::new(iter.rev())
-    } else {
-        Box::new(iter)
-    }
 }

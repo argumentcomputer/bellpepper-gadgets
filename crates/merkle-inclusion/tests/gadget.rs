@@ -15,9 +15,9 @@ use sha2::Sha512 as rSha512;
 use sha3::{Keccak256, Sha3_256};
 
 // Example use of the macro with OutOfCircuitHasher specified
-create_gadget_digest_impl!(Sha3, sha3, 32, Sha3_256, true);
-create_gadget_digest_impl!(Keccak, keccak256, 32, Keccak256, true);
-create_gadget_digest_impl!(Sha512, sha512, 64, rSha512, false);
+create_gadget_digest_impl!(Sha3, sha3, 32, Sha3_256);
+create_gadget_digest_impl!(Keccak, keccak256, 32, Keccak256);
+create_gadget_digest_impl!(Sha512, sha512, 64, rSha512);
 // Utility to help us in calculated expected number of constraints for the hashing circuit.
 const SHA3_CONSTRAINTS: usize = 151424;
 const SHA_512_CONSTRAINTS: usize = 113105;
@@ -407,11 +407,6 @@ pub fn construct_merkle_tree<GD: GadgetDigest<Scalar>>() -> SimpleMerkleTree {
             let direction = (node_index & 1) != 0; // Right if odd, Left if even
             path.push(Boolean::constant(direction));
             node_index >>= 1;
-        }
-
-        // Reverse based on endianness, because we always read the key from MSB (bottom) to LSB (root)
-        if GD::is_little_endian() {
-            path.reverse();
         }
 
         // Pad the path to ensure it's sized as Digest output
