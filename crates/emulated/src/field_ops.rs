@@ -129,19 +129,18 @@ where
         CS: ConstraintSystem<F>,
     {
         let v_value = v.get_value().unwrap();
-        let mut v_bits = v_value
+        let v_booleans = v_value
             .to_le_bits()
             .into_iter()
             .skip(start_digit)
-            .collect::<Vec<_>>();
-        v_bits.truncate(end_digit - start_digit);
-
-        let mut v_booleans: Vec<Boolean> = vec![];
-        for (i, b) in v_bits.into_iter().enumerate() {
-            let alloc_bit =
-                AllocatedBit::alloc(cs.namespace(|| format!("allocate bit {i}")), Some(b))?;
-            v_booleans.push(Boolean::from(alloc_bit));
-        }
+            .take(end_digit - start_digit)
+            .enumerate()
+            .map(|(i, b)| {
+                Ok::<Boolean, SynthesisError>(Boolean::from(AllocatedBit::alloc(
+                    cs.namespace(|| format!("allocate bit {i}")),
+                    Some(b),
+                )?))
+            });
 
         let mut sum_higher_order_bits = Num::<F>::zero();
         let mut sum_shifted_bits = Num::<F>::zero();
@@ -149,6 +148,7 @@ where
         let mut coeff_shifted = F::ONE;
 
         for b in v_booleans {
+            let b = b?;
             sum_higher_order_bits = sum_higher_order_bits.add_bool_with_coeff(CS::one(), &b, coeff);
             sum_shifted_bits = sum_shifted_bits.add_bool_with_coeff(CS::one(), &b, coeff_shifted);
             coeff_shifted = coeff_shifted.double();
