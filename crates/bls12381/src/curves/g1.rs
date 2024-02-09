@@ -352,6 +352,26 @@ impl<F: PrimeFieldBits> G1Point<F> {
         Ok(Self { x: xr, y: yr })
     }
 
+    pub fn double_n<CS>(&self, cs: &mut CS, n: usize) -> Result<Self, SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        let mut p: Option<&Self> = Some(self);
+        let mut tmp: Option<Self> = None;
+        let mut cs = cs.namespace(|| format!("G1::double_n(p, {n})"));
+        for i in 0..n {
+            if let Some(cur_p) = p {
+                let val = cur_p.double(&mut cs.namespace(|| format!("p <- p.double() ({i})")))?;
+                // TODO: visit
+                let val = val.reduce(&mut cs.namespace(|| format!("p <- p.reduce() ({i})")))?;
+                tmp = Some(val);
+                p = tmp.as_ref();
+            }
+        }
+
+        Ok(tmp.unwrap())
+    }
+
     pub fn triple<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -449,12 +469,75 @@ impl<F: PrimeFieldBits> G1Point<F> {
         )?;
         Ok(Self { x, y })
     }
+
+    pub fn scalar_mul_by_seed_square<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        let cs = &mut cs.namespace(|| "G1::scalar_mul_by_seed_square(q)");
+        let z = self.double(&mut cs.namespace(|| "z <- q.double()"))?;
+        let z = self.add(&mut cs.namespace(|| "z <- q + z"), &z)?;
+        let z = z.double(&mut cs.namespace(|| "z <- z.double()"))?;
+        let z = z.double_and_add(&mut cs.namespace(|| "z <- z.double_and_add(q) 1"), self)?;
+        let z = z.double_n(&mut cs.namespace(|| "z <- z.double_n(2)"), 2)?;
+        let z = z.double_and_add(&mut cs.namespace(|| "z <- z.double_and_add(q) 2"), self)?;
+        let z = z.double_n(&mut cs.namespace(|| "z <- z.double_n(8)"), 8)?;
+        let z = z.double_and_add(&mut cs.namespace(|| "z <- z.double_and_add(q) 3"), self)?;
+        let t0 = z.double(&mut cs.namespace(|| "t0 <- z.double()"))?;
+        let t0 = z.add(&mut cs.namespace(|| "t0 <- z + t0"), &t0)?;
+        let t0 = t0.double(&mut cs.namespace(|| "t0 <- t0.double()"))?;
+        let t0 = t0.double_and_add(&mut cs.namespace(|| "t0 <- t0.double_and_add(z) 1"), &z)?;
+        let t0 = t0.double_n(&mut cs.namespace(|| "t0 <- t0.double_n(2)"), 2)?;
+        let t0 = t0.double_and_add(&mut cs.namespace(|| "t0 <- t0.double_and_add(z) 2"), &z)?;
+        let t0 = t0.double_n(&mut cs.namespace(|| "t0 <- t0.double_n(8)"), 8)?;
+        let t0 = t0.double_and_add(&mut cs.namespace(|| "t0 <- t0.double_and_add(z) 3"), &z)?;
+        let t0 = t0.double_n(&mut cs.namespace(|| "t0 <- t0.double_n(31)"), 31)?;
+        let z = t0.add(&mut cs.namespace(|| "z <- t0 + z"), &z)?;
+        let z = z.double_n(&mut cs.namespace(|| "z <- z.double_n(32) 1"), 32)?;
+        let z = z.double_and_add(&mut cs.namespace(|| "z <- z.double_and_add(q) 4"), self)?;
+        let z = z.double_n(&mut cs.namespace(|| "z <- z.double_n(32) 2"), 32)?;
+
+        Ok(z)
+    }
+
+    /// Asserts that `phi(P) == [-x^2]P`
+    pub fn assert_subgroup_check<CS>(&self, cs: &mut CS) -> Result<(), SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        // FIXME: not working -- the circom-pairing strategy and the gnark-crypto strategy seem different, should change this to the gnark approach
+        let d = |x: &Self| {
+            let tmp = G1Affine::from(x);
+            eprintln!("-> {}", tmp);
+        };
+        d(self);
+        // TODO: makes sense for this to return a bit instead of asserting?
+        let a = self.phi(&mut cs.namespace(|| "a <- p.phi()"))?;
+        d(&a);
+        let b = self.scalar_mul_by_seed_square(
+            &mut cs.namespace(|| "b <- p.scalar_mul_by_seed_square()"),
+        )?;
+        d(&b);
+        let b = b.neg(&mut cs.namespace(|| "b <- -b"))?;
+        d(&b);
+        Self::assert_is_equal(&mut cs.namespace(|| "a == b"), &a, &b)?;
+        Ok(())
+    }
+
+    pub fn assert_is_on_curve<CS>(&self, cs: &mut CS) -> Result<(), SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        todo!()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use bellpepper_core::test_cs::TestConstraintSystem;
+    use bls12_381::Scalar;
+    use ff::Field;
     use pasta_curves::group::Group;
     use pasta_curves::Fp;
 
@@ -758,4 +841,59 @@ mod tests {
         expect_eq(cs.scalar_aux().len(), &expect!["9015"]);
         expect_eq(cs.num_constraints(), &expect!["9078"]);
     }
+
+    fn test_random_mul_by_seed_square() {
+        let mut rng = rand::thread_rng();
+        let a = G1Projective::random(&mut rng);
+        let x0 = bls12_381::Scalar::from(15132376222941642752);
+        let c = a * (x0 * x0);
+        let a = G1Affine::from(a);
+        let c = G1Affine::from(c);
+
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = a_alloc
+            .scalar_mul_by_seed_square(&mut cs.namespace(|| "a.mul_by_seed_square()"))
+            .unwrap();
+        G1Point::assert_is_equal(
+            &mut cs.namespace(|| "a.mul_by_seed_square() = c"),
+            &res_alloc,
+            &c_alloc,
+        )
+        .unwrap();
+        if !cs.is_satisfied() {
+            eprintln!("{:?}", cs.which_is_unsatisfied())
+        }
+        assert!(cs.is_satisfied());
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["815445"]);
+        expect_eq(cs.num_constraints(), &expect!["818820"]);
+    }
+
+    // TODO
+    // #[test]
+    // fn test_random_subgroup_check() {
+    //     let mut rng = rand::thread_rng();
+    //     let n = Scalar::random(&mut rng);
+    //     let a = G1Affine::from(G1Projective::generator() * n);
+
+    //     let mut cs = TestConstraintSystem::<Fp>::new();
+    //     let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+    //     a_alloc
+    //         .assert_subgroup_check(&mut cs.namespace(|| "a.subgroup_check()"))
+    //         .unwrap();
+    //     if !cs.is_satisfied() {
+    //         eprintln!("{:?}", cs.which_is_unsatisfied())
+    //     }
+    //     assert!(cs.is_satisfied());
+    //     expect_eq(cs.num_inputs(), &expect!["1"]);
+    //     expect_eq(cs.scalar_aux().len(), &expect!["815445"]);
+    //     expect_eq(cs.num_constraints(), &expect!["818820"]);
+    // }
+
+    // #[test]
+    // fn test_random_subgroup_check_negative() {
+    //     todo!();
+    // }
 }
