@@ -257,7 +257,6 @@ where
         }
 
         // allocate one bit per limb of the allocated limbs and AND them all together
-        let mut prev_allocated_limb_bit: Option<AllocatedBit> = None;
         let mut final_bit: Option<AllocatedBit> = None;
 
         // explicitly reduce so we can use `alloc_num_equals_constant` on every limb and directly compare against 0
@@ -275,14 +274,15 @@ where
                     v,
                     F::ZERO,
                 )?;
-                if let Some(prev_allocated_limb_bit) = prev_allocated_limb_bit {
+                if let Some(accumulated_bit) = final_bit {
                     final_bit = Some(AllocatedBit::and(
                         &mut cs.namespace(|| format!("alloc and bit {i}")),
-                        &prev_allocated_limb_bit,
+                        &accumulated_bit,
                         &new_allocated_limb_bit,
                     )?);
+                } else {
+                    final_bit = Some(new_allocated_limb_bit);
                 }
-                prev_allocated_limb_bit = Some(new_allocated_limb_bit);
             }
         } else {
             panic!("cannot alloc is_zero for constant limbs");
@@ -715,6 +715,43 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         assert_eq!(cs.num_constraints(), 5);
+    }
+
+    #[test]
+    fn test_alloc_is_zero() {
+        let mut cs = TestConstraintSystem::<Fp>::new();
+
+        let one_const = EmulatedFieldElement::<Fp, Ed25519Fp>::one();
+        let one_alloc = one_const.allocate_field_element_unchecked(&mut cs.namespace(|| "one"));
+        assert!(one_alloc.is_ok());
+        let one = one_alloc.unwrap();
+
+        let res = one.alloc_is_zero(&mut cs.namespace(|| "check if one == zero"));
+        assert!(res.is_ok());
+        let one_is_zero = res.unwrap();
+        assert!(!one_is_zero.get_value().unwrap());
+
+        if !cs.is_satisfied() {
+            println!("{:?}", cs.which_is_unsatisfied());
+        }
+        assert!(cs.is_satisfied());
+        assert_eq!(cs.num_constraints(), 19);
+
+        let zero_const = EmulatedFieldElement::<Fp, Ed25519Fp>::zero();
+        let zero_alloc = zero_const.allocate_field_element_unchecked(&mut cs.namespace(|| "zero"));
+        assert!(zero_alloc.is_ok());
+        let zero = zero_alloc.unwrap();
+
+        let res = zero.alloc_is_zero(&mut cs.namespace(|| "check if zero == zero"));
+        assert!(res.is_ok());
+        let zero_is_zero = res.unwrap();
+        assert!(zero_is_zero.get_value().unwrap());
+
+        if !cs.is_satisfied() {
+            println!("{:?}", cs.which_is_unsatisfied());
+        }
+        assert!(cs.is_satisfied());
+        assert_eq!(cs.num_constraints(), 38);
     }
 
     #[test]
