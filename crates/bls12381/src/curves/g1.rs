@@ -135,18 +135,22 @@ impl<F: PrimeField + PrimeFieldBits> G1Point<F> {
     {
         let (a, b, c) = (self, b, c);
         let cs = &mut cs.namespace(|| "G1::collinearcheck(a, b, c)");
-        
-        // compute leftside = (y_a + y_c) * (x_b - x_a)
-        let aycy = a.y.add(&mut cs.namespace( || "aycy <- a.y + c.y"), &c.y)?;
-        let bxax = b.x.sub(&mut cs.namespace( || "bxax <- b.x - a.x"), &a.x)?;
-        let leftside = aycy.mul(&mut cs.namespace( || "leftside <- aycy * bxax"), &bxax)?;
-        
-        //compute rightside = (y_b - y_a)*(x_a - x_c)
-        let byay = b.y.sub(&mut cs.namespace( || "byay <- b.y - a.y"), &a.y)?;
-        let axcx = a.x.sub(&mut cs.namespace( || "axcx <- a.x - c.x"), &c.x)?;
-        let rightside = byay.mul(&mut cs.namespace( || "rightside <- byay * axcx"), &axcx)?;
 
-        FpElement::assert_is_equal(&mut cs.namespace( || "leftside =? rightside"), &leftside, &rightside);
+        // compute leftside = (y_a + y_c) * (x_b - x_a)
+        let aycy = a.y.add(&mut cs.namespace(|| "aycy <- a.y + c.y"), &c.y)?;
+        let bxax = b.x.sub(&mut cs.namespace(|| "bxax <- b.x - a.x"), &a.x)?;
+        let leftside = aycy.mul(&mut cs.namespace(|| "leftside <- aycy * bxax"), &bxax)?;
+
+        //compute rightside = (y_b - y_a)*(x_a - x_c)
+        let byay = b.y.sub(&mut cs.namespace(|| "byay <- b.y - a.y"), &a.y)?;
+        let axcx = a.x.sub(&mut cs.namespace(|| "axcx <- a.x - c.x"), &c.x)?;
+        let rightside = byay.mul(&mut cs.namespace(|| "rightside <- byay * axcx"), &axcx)?;
+
+        FpElement::assert_is_equal(
+            &mut cs.namespace(|| "leftside =? rightside"),
+            &leftside,
+            &rightside,
+        );
 
         Ok(())
     }
@@ -321,18 +325,20 @@ mod tests {
         let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
         let b_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
         let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
-        let res_alloc = a_alloc.collinearcheck(&mut cs.namespace(|| "a+b-c = 0"), &b_alloc, &c_alloc).unwrap();
-        
+        let res_alloc = a_alloc
+            .collinearcheck(&mut cs.namespace(|| "a+b-c = 0"), &b_alloc, &c_alloc)
+            .unwrap();
+
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        
+
         expect_eq(cs.num_inputs(), &expect!["1"]);
         expect_eq(cs.scalar_aux().len(), &expect!["728"]);
         expect_eq(cs.num_constraints(), &expect!["695"]);
     }
-    
+
     #[test]
     fn test_random_neg() {
         let mut rng = rand::thread_rng();
