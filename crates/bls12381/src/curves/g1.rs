@@ -103,6 +103,38 @@ impl<F: PrimeField + PrimeFieldBits> G1Point<F> {
         })
     }
 
+    //Implements constraint: (y_a + y_c) * (x_b - x_a) - (y_b - y_a)*(x_a - x_c) = 0 mod p
+    //used to show (x_a, y_a), (x_b, y_b), (x_c, -y_c) are co-linear
+    pub fn assert_collinear<CS>(
+        cs: &mut CS,
+        a: &Self,
+        b: &Self,
+        c: &Self,
+    ) -> Result<(), SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        let cs = &mut cs.namespace(|| "G1::assert_collinear(a, b, c)");
+
+        // compute leftside = (y_a + y_c) * (x_b - x_a)
+        let aycy = a.y.add(&mut cs.namespace(|| "aycy <- a.y + c.y"), &c.y)?;
+        let bxax = b.x.sub(&mut cs.namespace(|| "bxax <- b.x - a.x"), &a.x)?;
+        let leftside = aycy.mul(&mut cs.namespace(|| "leftside <- aycy * bxax"), &bxax)?;
+
+        //compute rightside = (y_b - y_a)*(x_a - x_c)
+        let byay = b.y.sub(&mut cs.namespace(|| "byay <- b.y - a.y"), &a.y)?;
+        let axcx = a.x.sub(&mut cs.namespace(|| "axcx <- a.x - c.x"), &c.x)?;
+        let rightside = byay.mul(&mut cs.namespace(|| "rightside <- byay * axcx"), &axcx)?;
+
+        FpElement::assert_is_equal(
+            &mut cs.namespace(|| "leftside =? rightside"),
+            &leftside,
+            &rightside,
+        )?;
+
+        Ok(())
+    }
+
     pub fn add<CS>(&self, cs: &mut CS, value: &Self) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -125,34 +157,6 @@ impl<F: PrimeField + PrimeFieldBits> G1Point<F> {
         let yr = lambdapxrx.sub(&mut cs.namespace(|| "yr <- lambdapxrx - p.y"), &p.y)?;
 
         Ok(Self { x: xr, y: yr })
-    }
-
-    //Implements constraint: (y_a + y_c) * (x_b - x_a) - (y_b - y_a)*(x_a - x_c) = 0 mod p
-    //used to show (x_a, y_a), (x_b, y_b), (x_c, -y_c) are co-linear
-    pub fn collinearcheck<CS>(&self, cs: &mut CS, b: &Self, c: &Self) -> Result<(), SynthesisError>
-    where
-        CS: ConstraintSystem<F>,
-    {
-        let (a, b, c) = (self, b, c);
-        let cs = &mut cs.namespace(|| "G1::collinearcheck(a, b, c)");
-
-        // compute leftside = (y_a + y_c) * (x_b - x_a)
-        let aycy = a.y.add(&mut cs.namespace(|| "aycy <- a.y + c.y"), &c.y)?;
-        let bxax = b.x.sub(&mut cs.namespace(|| "bxax <- b.x - a.x"), &a.x)?;
-        let leftside = aycy.mul(&mut cs.namespace(|| "leftside <- aycy * bxax"), &bxax)?;
-
-        //compute rightside = (y_b - y_a)*(x_a - x_c)
-        let byay = b.y.sub(&mut cs.namespace(|| "byay <- b.y - a.y"), &a.y)?;
-        let axcx = a.x.sub(&mut cs.namespace(|| "axcx <- a.x - c.x"), &c.x)?;
-        let rightside = byay.mul(&mut cs.namespace(|| "rightside <- byay * axcx"), &axcx)?;
-
-        FpElement::assert_is_equal(
-            &mut cs.namespace(|| "leftside =? rightside"),
-            &leftside,
-            &rightside,
-        );
-
-        Ok(())
     }
 
     pub fn neg<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
@@ -325,9 +329,13 @@ mod tests {
         let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
         let b_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
         let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
-        let res_alloc = a_alloc
-            .collinearcheck(&mut cs.namespace(|| "a+b-c = 0"), &b_alloc, &c_alloc)
-            .unwrap();
+        G1Point::assert_collinear(
+            &mut cs.namespace(|| "a+b-c = 0"),
+            &a_alloc,
+            &b_alloc,
+            &c_alloc,
+        )
+        .unwrap();
 
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
