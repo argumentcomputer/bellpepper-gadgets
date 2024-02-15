@@ -1,9 +1,13 @@
 use bellpepper_core::{
     boolean::{AllocatedBit, Boolean},
+    num::AllocatedNum,
     ConstraintSystem, SynthesisError,
 };
-use bellpepper_emulated::field_element::{
-    EmulatedFieldElement, EmulatedFieldParams, PseudoMersennePrime,
+use bellpepper_emulated::{
+    field_element::{
+        EmulatedFieldElement, EmulatedFieldParams, EmulatedLimbs, PseudoMersennePrime,
+    },
+    util::bigint_to_scalar,
 };
 use bls12_381::fp::Fp as BlsFp;
 use ff::{PrimeField, PrimeFieldBits};
@@ -16,10 +20,12 @@ impl EmulatedFieldParams for Bls12381FpParams {
     // for example, in the pasta field, 4/96 could be used instead
     fn num_limbs() -> usize {
         6
+        //4
     }
 
     fn bits_per_limb() -> usize {
         64
+        //96
     }
 
     fn modulus() -> BigInt {
@@ -119,6 +125,17 @@ where
 {
     fn from(value: &FpElement<F>) -> Self {
         emulated_to_native(&value.0)
+    }
+}
+
+impl<F> From<&FpElement<F>> for BigInt
+where
+    F: PrimeField + PrimeFieldBits,
+{
+    fn from(value: &FpElement<F>) -> Self {
+        use std::ops::Rem;
+        let p = &Bls12381FpParams::modulus();
+        BigInt::from(value).rem(p)
     }
 }
 
@@ -276,18 +293,112 @@ impl<F: PrimeField + PrimeFieldBits> FpElement<F> {
         )?;
         Ok(Self(res))
     }
+
+    // TODO: add tests
+    // https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-hash-to-curve-11#section-4.1
+    // return in % 2
+    // This requires `in` to be the unique element < p.
+    // NOTE: different from Wahby-Boneh paper https://eprint.iacr.org/2019/403.pdf and python reference code: https://github.com/algorand/bls_sigs_ref/blob/master/python-impl/opt_swu_g2.py
+    pub(crate) fn sgn0<CS>(&self, cs: &mut CS) -> Result<Boolean, SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        // TODO: cleanup
+        self.0
+            .enforce_width_conditional(&mut cs.namespace(|| "ensure bitwidths in input"))?;
+
+        // enforce that least significant limb is divisible by 2
+        let out = match &self.0.limbs {
+            EmulatedLimbs::Allocated(limbs) => {
+                let least_sig = &limbs[0];
+                let val = least_sig.get_value().unwrap();
+                let val = BigInt::from_bytes_le(Sign::Plus, val.to_repr().as_ref());
+                let out = &val % 2u64;
+                let div = &val / 2u64;
+                assert_eq!(2u64 * &div + &out, val.clone(), "sanity check");
+                let out = if &out == &BigInt::from(0u64) {
+                    false
+                } else if &out == &BigInt::from(1u64) {
+                    true
+                } else {
+                    panic!()
+                };
+
+                let out_bit =
+                    AllocatedBit::alloc(&mut cs.namespace(|| "alloc sgn0 out"), Some(out))?;
+                let div = AllocatedNum::alloc(&mut cs.namespace(|| "alloc sgn0 div"), || {
+                    Ok(bigint_to_scalar(&div))
+                })?;
+
+                let two = F::ONE + F::ONE;
+                cs.enforce(
+                    || format!("enforce sgn0 bit"),
+                    |lc| lc + CS::one(),
+                    |lc| lc + (two, div.get_variable()) + out_bit.get_variable(), // 2 * div + out
+                    |lc| lc + &least_sig.lc(F::ONE),                              // least_sig
+                );
+                out_bit
+            }
+            _ => {
+                panic!("not implemented") // FIXME
+            }
+        };
+
+        Ok(Boolean::from(out))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use bellpepper_core::test_cs::TestConstraintSystem;
+    use bls12_381::hash_to_curve::Sgn0;
     use pasta_curves::Fp;
+    // use halo2curves::bn256::Fq as Fp;
 
     use expect_test::{expect, Expect};
     fn expect_eq(computed: usize, expected: &Expect) {
         expected.assert_eq(&computed.to_string());
     }
+
+    fn big_to_circ(v: BlsFp) -> Vec<String> {
+        let mut x = blsfp_to_bigint(v);
+        let p = std::iter::repeat(BigInt::from(2))
+            .take(55)
+            .fold(BigInt::from(1), |acc, x| acc * x);
+        let mut res = vec![];
+        for _ in 0..7 {
+            let limb = &x % &p;
+            res.push(limb);
+            x = &x / &p;
+        }
+        assert!(x == BigInt::from(0));
+        res.into_iter().map(|b| format!("{}", b)).collect()
+    }
+
+    fn blsfp_to_bigint(value: BlsFp) -> BigInt {
+        let bytes = value.to_bytes();
+        assert!(bytes.len() == 48);
+        BigInt::from_bytes_be(Sign::Plus, &bytes)
+    }
+
+    // #[test]
+    // fn test_asdf() {
+    //     let mut rng = rand::thread_rng();
+    //     let a = BlsFp::random(&mut rng);
+    //     let b = BlsFp::random(&mut rng);
+    //     let c = a * b;
+    //     eprintln!("a:{:?}", a);
+    //     eprintln!("b:{:?}", b);
+    //     eprintln!("c:{:?}", c);
+    //     let a = big_to_circ(a);
+    //     let b = big_to_circ(b);
+    //     let c = big_to_circ(c);
+    //     eprintln!("\"a\":{:?},", a);
+    //     eprintln!("\"b\":{:?},", b);
+    //     eprintln!("\"out\":{:?}", c);
+    //     assert!(false);
+    // }
 
     #[test]
     fn test_random_add() {
@@ -338,21 +449,52 @@ mod tests {
         let mut rng = rand::thread_rng();
         let a = BlsFp::random(&mut rng);
         let b = BlsFp::random(&mut rng);
-        let c = a * b;
+        let mut c = a * b;
+        // for _ in 0..99 {
+        //     c *= b;
+        // }
 
         let mut cs = TestConstraintSystem::<Fp>::new();
         let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
         let b_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
         let c_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
-        let res_alloc = a_alloc.mul(&mut cs.namespace(|| "a*b"), &b_alloc).unwrap();
+        let mut res_alloc = a_alloc.mul(&mut cs.namespace(|| "a*b"), &b_alloc).unwrap();
+        // for i in 0..99 {
+        //     res_alloc = res_alloc
+        //         .mul(&mut cs.namespace(|| format!("mul {i}")), &b_alloc)
+        //         .unwrap();
+        // }
         FpElement::assert_is_equal(&mut cs.namespace(|| "a*b = c"), &res_alloc, &c_alloc).unwrap();
-        if !cs.is_satisfied() {
-            eprintln!("{:?}", cs.which_is_unsatisfied())
-        }
+        // let r = BlsFp::from(&res_alloc);
+        // eprintln!("c: {:?}\nr: {:?}", c, r);
+        // eprintln!("c overflow: {}", c_alloc.0.overflow);
+        // eprintln!("r overflow: {}", res_alloc.0.overflow);
+        // let mut buf = String::new();
+        // for mut l in cs.pretty_print_list().into_iter() {
+        //     if l.starts_with("AUX") || l.starts_with("INPUT") {
+        //         continue;
+        //     }
+        //     let l = l.replace("/", ";");
+        //     //l.retain(|c| !c.is_digit(10));
+        //     // let l = l
+        //     //     .split("/")
+        //     //     .collect::<Vec<_>>()
+        //     //     .into_iter()
+        //     //     .rev()
+        //     //     .collect::<Vec<_>>()
+        //     //     .join(";");
+        //     let l = l + " 1";
+        //     buf += &l;
+        //     buf += "\n";
+        // }
+        // std::fs::write("/home/w/out.folded", &buf).unwrap();
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
         expect_eq(cs.scalar_aux().len(), &expect!["681"]);
         expect_eq(cs.num_constraints(), &expect!["666"]);
+        if !cs.is_satisfied() {
+            eprintln!("{:?}", cs.which_is_unsatisfied())
+        }
     }
 
     #[test]
@@ -403,6 +545,31 @@ mod tests {
         expect_eq(cs.num_inputs(), &expect!["1"]);
         expect_eq(cs.scalar_aux().len(), &expect!["271"]);
         expect_eq(cs.num_constraints(), &expect!["262"]);
+    }
+
+    #[test]
+    fn test_random_sgn0() {
+        let mut rng = rand::thread_rng();
+        let a = BlsFp::random(&mut rng);
+        let c: bool = a.sgn0().into();
+
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc = AllocatedBit::alloc(&mut cs.namespace(|| "alloc c"), Some(c)).unwrap();
+        let res_alloc = a_alloc.sgn0(&mut cs.namespace(|| "a.sgn0()")).unwrap();
+        Boolean::enforce_equal(
+            &mut cs.namespace(|| "a.sgn0() = c"),
+            &res_alloc,
+            &Boolean::from(c_alloc),
+        )
+        .unwrap();
+        if !cs.is_satisfied() {
+            eprintln!("{:?}", cs.which_is_unsatisfied())
+        }
+        assert!(cs.is_satisfied());
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["9"]);
+        expect_eq(cs.num_constraints(), &expect!["4"]);
     }
 
     #[test]

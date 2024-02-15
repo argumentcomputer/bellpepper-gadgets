@@ -378,7 +378,7 @@ impl<F: PrimeField + PrimeFieldBits> Fp2Element<F> {
     {
         let val = BlsFp2::from(self);
         if val.is_zero().into() {
-            eprintln!("Inverse of zero element cannot be calculated");
+            panic!("Inverse of zero element cannot be calculated");
             return Err(SynthesisError::DivisionByZero);
         }
         let inv = val.invert().unwrap();
@@ -408,7 +408,7 @@ impl<F: PrimeField + PrimeFieldBits> Fp2Element<F> {
 
         let y = BlsFp2::from(value);
         if y.is_zero().into() {
-            eprintln!("Inverse of zero element cannot be calculated");
+            panic!("Inverse of zero element cannot be calculated");
             return Err(SynthesisError::DivisionByZero);
         }
         let y_inv = y.invert().unwrap();
@@ -446,6 +446,28 @@ impl<F: PrimeField + PrimeFieldBits> Fp2Element<F> {
         )?;
         Ok(Self { a0, a1 })
     }
+
+    // TODO: add tests
+    pub(crate) fn sgn0<CS>(&self, cs: &mut CS) -> Result<Boolean, SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        // sgn[0] || ( (in0 == 0 && sgn[1]) )
+        let sgn_0 = self.a0.sgn0(&mut cs.namespace(|| "self.a0.sgn0()"))?;
+        let sgn_1 = self.a1.sgn0(&mut cs.namespace(|| "self.a1.sgn0()"))?;
+        let is_a0_zero = self
+            .a0
+            .alloc_is_zero(&mut cs.namespace(|| "self.a0.alloc_is_zero()"))?;
+
+        let tmp = Boolean::and(
+            &mut cs.namespace(|| "tmp <- and(is_a0_zero, sgn_1)"),
+            &Boolean::from(is_a0_zero),
+            &sgn_1,
+        )?;
+        let out = Boolean::or(&mut cs.namespace(|| "out <- or(sgn_0, tmp)"), &sgn_0, &tmp)?;
+
+        Ok(out)
+    }
 }
 
 #[cfg(test)]
@@ -454,7 +476,7 @@ mod tests {
     use bellpepper_core::test_cs::TestConstraintSystem;
     use pasta_curves::Fp;
 
-    use bls12_381::fp::Fp as BlsFp;
+    use bls12_381::{fp::Fp as BlsFp, hash_to_curve::Sgn0};
 
     use expect_test::{expect, Expect};
     fn expect_eq(computed: usize, expected: &Expect) {
@@ -670,6 +692,60 @@ mod tests {
         expect_eq(cs.num_inputs(), &expect!["1"]);
         expect_eq(cs.scalar_aux().len(), &expect!["542"]);
         expect_eq(cs.num_constraints(), &expect!["524"]);
+    }
+
+    #[test]
+    fn test_random_sgn0() {
+        let mut rng = rand::thread_rng();
+        let a = BlsFp2::random(&mut rng);
+        let c: bool = a.sgn0().into();
+
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let a_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc = AllocatedBit::alloc(&mut cs.namespace(|| "alloc c"), Some(c)).unwrap();
+        let res_alloc = a_alloc.sgn0(&mut cs.namespace(|| "a.sgn0()")).unwrap();
+        Boolean::enforce_equal(
+            &mut cs.namespace(|| "a.sgn0() = c"),
+            &res_alloc,
+            &Boolean::from(c_alloc),
+        )
+        .unwrap();
+        if !cs.is_satisfied() {
+            eprintln!("{:?}", cs.which_is_unsatisfied())
+        }
+        assert!(cs.is_satisfied());
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["36"]);
+        expect_eq(cs.num_constraints(), &expect!["31"]);
+    }
+
+    #[test]
+    fn test_random_sgn0_zero_a0() {
+        let mut rng = rand::thread_rng();
+        let a = BlsFp::random(&mut rng);
+        let a = BlsFp2 {
+            c0: BlsFp::zero(),
+            c1: a,
+        };
+        let c: bool = a.sgn0().into();
+
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let a_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc = AllocatedBit::alloc(&mut cs.namespace(|| "alloc c"), Some(c)).unwrap();
+        let res_alloc = a_alloc.sgn0(&mut cs.namespace(|| "a.sgn0()")).unwrap();
+        Boolean::enforce_equal(
+            &mut cs.namespace(|| "a.sgn0() = c"),
+            &res_alloc,
+            &Boolean::from(c_alloc),
+        )
+        .unwrap();
+        if !cs.is_satisfied() {
+            eprintln!("{:?}", cs.which_is_unsatisfied())
+        }
+        assert!(cs.is_satisfied());
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["36"]);
+        expect_eq(cs.num_constraints(), &expect!["31"]);
     }
 
     #[test]
