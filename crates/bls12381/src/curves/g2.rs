@@ -387,7 +387,8 @@ impl<F: PrimeFieldBits> G2Point<F> {
         // a = (0, 240)
         // b = (1012, 1012)
         let a = Fp2Element::from_dec(("0", "240")).unwrap();
-        let a_a1_neg = a.a1.neg(&mut cs.namespace(|| "a_a1_neg <- -240"))?;
+        let a_neg = Fp2Element::from_dec(("0", "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559547")).unwrap();
+        //let a_neg = a.neg(&mut cs.namespace(|| "a_a1_neg <- -240"))?; // FIXME: see above
         let b = Fp2Element::from_dec(("1012", "1012")).unwrap();
 
         let t2 = t.square(&mut cs.namespace(|| "t2 <- t.square()"))?;
@@ -396,17 +397,18 @@ impl<F: PrimeFieldBits> G2Point<F> {
 
         let num_den_common = xi2_t4.add(&mut cs.namespace(|| "ndc <- xi2_t4 + xi_t2"), &xi_t2)?;
 
-        let x0_den_a0 = num_den_common
-            .a1
-            .mul(&mut cs.namespace(|| "x0_den_a0 <- ndc.a1 * a_a1"), &a.a1)?;
-        let x0_den_a1 = num_den_common.a0.mul(
-            &mut cs.namespace(|| "x0_den_a1 <- ndc.a0 * -a_a1"),
-            &a_a1_neg,
-        )?;
-        let x0_den = Fp2Element {
-            a0: x0_den_a0,
-            a1: x0_den_a1,
-        };
+        // let x0_den_a0 = num_den_common
+        //     .a1
+        //     .mul(&mut cs.namespace(|| "x0_den_a0 <- ndc.a1 * a_a1"), &a.a1)?;
+        // let x0_den_a1 = num_den_common.a0.mul(
+        //     &mut cs.namespace(|| "x0_den_a1 <- ndc.a0 * -a_a1"),
+        //     &a_a1_neg,
+        // )?;
+        // let x0_den = Fp2Element {
+        //     a0: x0_den_a0,
+        //     a1: x0_den_a1,
+        // };
+        let x0_den = num_den_common.mul(&mut cs.namespace(|| "x0_den <- -a * ndc"), &a_neg)?;
         let x0_den = x0_den.reduce(&mut cs.namespace(|| "x0_den <- x0_den.reduce()"))?;
         //  if X0_den = 0, replace with X1_den = a * xi; this way X1(t) = X0_num / X1_den = b / (xi * a)
         let is_den_0 = x0_den.alloc_is_zero(&mut cs.namespace(|| "is_den_0"))?;
@@ -823,7 +825,7 @@ impl<F: PrimeFieldBits> G2Point<F> {
         let z = z.iso3_map(&mut cs.namespace(|| "z <- z.iso3_map()"))?;
 
         let z = z.clear_cofactor(&mut cs.namespace(|| "z <- z.clear_cofactor()"))?;
-        // TODO: ensure z is infinity if either of the previous 2 ops is infinity
+        // TODO: ensure z is infinity if either of the previous 2 ops is infinity? needs tests around isInfinity and exceptional cases
 
         Ok(z)
     }
@@ -852,7 +854,7 @@ impl<F: PrimeFieldBits> G2Point<F> {
 mod tests {
     use super::*;
     use bellpepper_core::test_cs::TestConstraintSystem;
-    use bls12_381::Scalar;
+    use bls12_381::{hash_to_curve::MapToCurve, Scalar};
     use ff::Field;
     use num_bigint::Sign;
     use pasta_curves::group::Group;
@@ -1222,37 +1224,34 @@ mod tests {
 
     #[test]
     fn test_random_opt_simple_swu2() {
-        fn blsfp_to_bigint(value: BlsFp) -> BigInt {
-            let bytes = value.to_bytes();
-            assert!(bytes.len() == 48);
-            BigInt::from_bytes_be(Sign::Plus, &bytes)
-        }
-        fn big_to_circ(v: BlsFp) -> String {
-            let mut x = blsfp_to_bigint(v);
-            let p = std::iter::repeat(BigInt::from(2))
-                .take(55)
-                .fold(BigInt::from(1), |acc, x| acc * x);
-            let mut res = vec![];
-            for _ in 0..7 {
-                let limb = &x % &p;
-                res.push(limb);
-                x = &x / &p;
-            }
-            assert!(x == BigInt::from(0));
-            res.into_iter()
-                .map(|b| format!("{}", b))
-                .collect::<Vec<_>>()
-                .join(",")
-        }
-        // fn dump(v: &BlsFp) {
-
+        let mut rng = rand::thread_rng();
+        // fn blsfp_to_bigint(value: &BlsFp) -> BigInt {
+        //     let bytes = value.to_bytes();
+        //     assert!(bytes.len() == 48);
+        //     BigInt::from_bytes_be(num_bigint::Sign::Plus, &bytes)
         // }
-        // let mut rng = rand::thread_rng();
-        use rand::SeedableRng;
-        let mut rng = rand_xorshift::XorShiftRng::from_seed([
-            0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
-            0xbc, 0xe5,
-        ]);
+        // fn big_to_circ(v: &BlsFp) -> String {
+        //     let mut x = blsfp_to_bigint(v);
+        //     let p = std::iter::repeat(BigInt::from(2))
+        //         .take(55)
+        //         .fold(BigInt::from(1), |acc, x| acc * x);
+        //     let mut res = vec![];
+        //     for _ in 0..7 {
+        //         let limb = &x % &p;
+        //         res.push(limb);
+        //         x = &x / &p;
+        //     }
+        //     assert!(x == BigInt::from(0));
+        //     res.into_iter()
+        //         .map(|b| format!("{}", b))
+        //         .collect::<Vec<_>>()
+        //         .join(",")
+        // }
+        // use rand::SeedableRng;
+        // let mut rng = rand_xorshift::XorShiftRng::from_seed([
+        //     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
+        //     0xbc, 0xe5,
+        // ]);
         let a = BlsFp2::random(&mut rng);
         let c = bls12_381::hash_to_curve::map_g2::map_to_curve_simple_swu(&a);
         let c = G2Affine::from(c);
@@ -1262,9 +1261,6 @@ mod tests {
         let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
         let res_alloc =
             G2Point::opt_simple_swu2(&mut cs.namespace(|| "opt_simple_swu2(a)"), &a_alloc).unwrap();
-        let res_val = G2Affine::from(&res_alloc);
-        eprintln!("a: {:?}\nc: {:?}\nr: {:?}", a, c, res_val);
-        eprintln!("a = [{},{}]", big_to_circ(a.c0), big_to_circ(a.c1));
         G2Point::assert_is_equal(
             &mut cs.namespace(|| "opt_simple_swu2(a) = c"),
             &res_alloc,
@@ -1276,8 +1272,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["2704"]);
-        expect_eq(cs.num_constraints(), &expect!["2668"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["97368"]);
+        expect_eq(cs.num_constraints(), &expect!["97789"]);
     }
 
     #[test]
@@ -1310,26 +1306,29 @@ mod tests {
         expect_eq(cs.num_constraints(), &expect!["58060"]);
     }
 
-    // #[test]
-    // fn test_random_map_to_g2() {
-    //     let mut rng = rand::thread_rng();
-    //     let x = BlsFp2::random(&mut rng);
-    //     let y = BlsFp2::random(&mut rng);
-    //     let c =
+    #[test]
+    fn test_random_map_to_g2() {
+        let mut rng = rand::thread_rng();
+        let x = BlsFp2::random(&mut rng);
+        let y = BlsFp2::random(&mut rng);
+        let p1 = G2Projective::map_to_curve(&x);
+        let p2 = G2Projective::map_to_curve(&y);
+        let c = (p1 + &p2).clear_h();
+        let c = G2Affine::from(c);
 
-    //     let mut cs = TestConstraintSystem::<Fp>::new();
-    //     let x_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc x"), &x).unwrap();
-    //     let y_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc y"), &y).unwrap();
-    //     let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
-    //     let res_alloc = G2Point::map_to_g2(&mut cs.namespace(|| "map_to_g2(x, y)"), &x_alloc, &y_alloc).unwrap();
-    //     G2Point::assert_is_equal(&mut cs.namespace(|| "map_to_g2(x, y) = c"), &res_alloc, &c_alloc)
-    //         .unwrap();
-    //     if !cs.is_satisfied() {
-    //         eprintln!("{:?}", cs.which_is_unsatisfied())
-    //     }
-    //     assert!(cs.is_satisfied());
-    //     expect_eq(cs.num_inputs(), &expect!["1"]);
-    //     expect_eq(cs.scalar_aux().len(), &expect!["2704"]);
-    //     expect_eq(cs.num_constraints(), &expect!["2668"]);
-    // }
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let x_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc x"), &x).unwrap();
+        let y_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc y"), &y).unwrap();
+        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = G2Point::map_to_g2(&mut cs.namespace(|| "map_to_g2(x, y)"), &x_alloc, &y_alloc).unwrap();
+        G2Point::assert_is_equal(&mut cs.namespace(|| "map_to_g2(x, y) = c"), &res_alloc, &c_alloc)
+            .unwrap();
+        if !cs.is_satisfied() {
+            eprintln!("{:?}", cs.which_is_unsatisfied())
+        }
+        assert!(cs.is_satisfied());
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["2089487"]);
+        expect_eq(cs.num_constraints(), &expect!["2097025"]);
+    }
 }
