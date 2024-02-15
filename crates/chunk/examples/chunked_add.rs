@@ -1,6 +1,4 @@
-//! Demonstrates how to use the `ChunkStepCircuit` trait along with the `Circuit` structure to
-//! leverage the folding process to
-//!
+//! Demonstrates how to create an addition accumulator and looping using the Chunk pattern.
 use bellpepper_chunk::traits::ChunkCircuit;
 use bellpepper_chunk::{traits::ChunkStepCircuit, Circuit};
 use bellpepper_core::{num::AllocatedNum, ConstraintSystem, SynthesisError};
