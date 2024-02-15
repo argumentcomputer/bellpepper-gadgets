@@ -81,7 +81,7 @@ impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> ChunkCircuit<F, C, N
     for Circuit<F, C, N>
 {
     // TODO use z0_primary for accumulator initialization
-    fn new(z0_primary: &[F], intermediate_steps_input: &[F]) -> anyhow::Result<Self, ChunkError> {
+    fn new(_z0_primary: &[F], intermediate_steps_input: &[F]) -> anyhow::Result<Self, ChunkError> {
         if intermediate_steps_input.len() % N != 0 {
             return Err(ChunkError::InvalidInputLength(
                 intermediate_steps_input.len(),
@@ -89,17 +89,21 @@ impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> ChunkCircuit<F, C, N
             ));
         }
 
+        let mut circuits = (0..intermediate_steps_input.len())
+            .step_by(N)
+            .map(|i| {
+                let inputs: [F; N] = intermediate_steps_input[i..i + N]
+                    .try_into()
+                    .map_err(|err| ChunkError::DivisionError { source: err })?;
+                Ok(FoldStep::new(C::new(), inputs, i))
+            })
+            .collect::<anyhow::Result<Vec<_>, ChunkError>>()?;
+
+        circuits.push(FoldStep::new(C::new(), [F::ZERO; N], circuits.len()));
+
         Ok(Self {
-            circuits: (0..intermediate_steps_input.len())
-                .step_by(N)
-                .map(|i| {
-                    let inputs: [F; N] = intermediate_steps_input[i..i + N]
-                        .try_into()
-                        .map_err(|err| ChunkError::DivisionError { source: err })?;
-                    Ok(FoldStep::new(C::new(), inputs, i))
-                })
-                .collect::<anyhow::Result<Vec<_>, ChunkError>>()?,
-            num_fold_steps: intermediate_steps_input.len() / N,
+            circuits,
+            num_fold_steps: (intermediate_steps_input.len() / N) + 1,
         })
     }
 

@@ -10,11 +10,7 @@ use flate2::Compression;
 use halo2curves::bn256::Bn256;
 use nova::{
     provider::{Bn256EngineKZG, GrumpkinEngine},
-    traits::{
-        circuit::{StepCircuit, TrivialCircuit},
-        snark::RelaxedR1CSSNARKTrait,
-        Engine, Group,
-    },
+    traits::{circuit::TrivialCircuit, snark::RelaxedR1CSSNARKTrait, Engine},
     CompressedSNARK, PublicParams, RecursiveSNARK,
 };
 use std::marker::PhantomData;
@@ -67,10 +63,10 @@ fn main() {
         .with(TeXRayLayer::new());
     tracing::subscriber::set_global_default(subscriber).unwrap();
 
-    println!("Sketch Chunk proving pattern");
+    println!("Addition accumulator with a Chunk pattern");
     println!("=========================================================");
 
-    const num_iters_per_step: usize = 3;
+    const NUM_ITERS_PER_STEP: usize = 3;
 
     type E1 = Bn256EngineKZG;
     type E2 = GrumpkinEngine;
@@ -80,14 +76,18 @@ fn main() {
     type S2 = nova::spartan::snark::RelaxedR1CSSNARK<E2, EE2>; // non-preprocessing SNARK
 
     type C1 =
-        Circuit<<E1 as Engine>::Scalar, ChunkStep<<E1 as Engine>::Scalar>, num_iters_per_step>;
+        Circuit<<E1 as Engine>::Scalar, ChunkStep<<E1 as Engine>::Scalar>, NUM_ITERS_PER_STEP>;
+
+    let z0_primary = vec![
+        <E1 as Engine>::Scalar::zero(),
+        <E1 as Engine>::Scalar::zero(),
+        <E1 as Engine>::Scalar::zero(),
+        <E1 as Engine>::Scalar::zero(),
+    ];
+
     // number of iterations of MinRoot per Nova's recursive step
     let circuit_primary = C1::new(
-        &[
-            <E1 as Engine>::Scalar::zero(),
-            <E1 as Engine>::Scalar::zero(),
-            <E1 as Engine>::Scalar::zero(),
-        ],
+        &z0_primary,
         &[
             <E1 as Engine>::Scalar::one(),
             <E1 as Engine>::Scalar::from(2),
@@ -98,9 +98,6 @@ fn main() {
             <E1 as Engine>::Scalar::from(7),
             <E1 as Engine>::Scalar::from(8),
             <E1 as Engine>::Scalar::from(9),
-            <E1 as Engine>::Scalar::from(0),
-            <E1 as Engine>::Scalar::from(0),
-            <E1 as Engine>::Scalar::from(0),
         ],
     )
     .unwrap();
@@ -109,7 +106,7 @@ fn main() {
 
     let circuit_secondary: TrivialCircuit<<E2 as Engine>::Scalar> = TrivialCircuit::default();
 
-    println!("Proving {num_iters_per_step} iterations of MinRoot per step");
+    println!("Proving {NUM_ITERS_PER_STEP} iterations of MinRoot per step");
 
     // produce public parameters
     let start = Instant::now();
@@ -133,12 +130,7 @@ fn main() {
         &pp,
         inner_circuits.get(0).unwrap(),
         &circuit_secondary,
-        &[
-            <E1 as Engine>::Scalar::zero(),
-            <E1 as Engine>::Scalar::zero(),
-            <E1 as Engine>::Scalar::zero(),
-            <E1 as Engine>::Scalar::zero(),
-        ],
+        &z0_primary,
         &z0_secondary,
     )
     .unwrap();
@@ -161,12 +153,7 @@ fn main() {
     let res = recursive_snark.verify(
         &pp,
         circuit_primary.num_fold_steps(),
-        &[
-            <E1 as Engine>::Scalar::zero(),
-            <E1 as Engine>::Scalar::zero(),
-            <E1 as Engine>::Scalar::zero(),
-            <E1 as Engine>::Scalar::zero(),
-        ],
+        &z0_primary,
         &z0_secondary,
     );
     println!(
@@ -205,12 +192,7 @@ fn main() {
     let res = compressed_snark.verify(
         &vk,
         circuit_primary.num_fold_steps(),
-        &[
-            <E1 as Engine>::Scalar::zero(),
-            <E1 as Engine>::Scalar::zero(),
-            <E1 as Engine>::Scalar::zero(),
-            <E1 as Engine>::Scalar::zero(),
-        ],
+        &z0_primary,
         &z0_secondary,
     );
     println!(
