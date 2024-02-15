@@ -754,15 +754,15 @@ impl<F: PrimeFieldBits> G2Point<F> {
         let den_0 = den_0.reduce(&mut cs.namespace(|| "den_0 <- den_0.reduce()"))?;
         let den_1 = den_1.reduce(&mut cs.namespace(|| "den_1 <- den_1.reduce()"))?;
         let den_0 = Fp2Element::conditionally_select(
-            &mut cs.namespace(|| "den_0 <- select(den_0, 0, is_infinity)"),
+            &mut cs.namespace(|| "den_0 <- select(den_0, 1, is_infinity)"),
             &den_0,
-            &Fp2Element::zero(),
+            &Fp2Element::one(),
             &is_infinity,
         )?;
         let den_1 = Fp2Element::conditionally_select(
-            &mut cs.namespace(|| "den_1 <- select(den_1, 0, is_infinity)"),
+            &mut cs.namespace(|| "den_1 <- select(den_1, 1, is_infinity)"),
             &den_1,
-            &Fp2Element::zero(),
+            &Fp2Element::one(),
             &is_infinity,
         )?;
 
