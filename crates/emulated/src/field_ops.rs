@@ -9,7 +9,7 @@ use bellpepper_core::num::{AllocatedNum, Num};
 use bellpepper_core::{ConstraintSystem, LinearCombination, SynthesisError};
 use ff::{PrimeField, PrimeFieldBits};
 use num_bigint::BigInt;
-use num_traits::One;
+use num_traits::{One, Zero};
 
 use crate::field_element::{EmulatedFieldElement, EmulatedFieldParams, EmulatedLimbs};
 use crate::util::{bigint_to_scalar, decompose, recompose};
@@ -221,6 +221,8 @@ where
             if a_r != b_r {
                 eprintln!("Constant values are not equal");
                 return Err(SynthesisError::Unsatisfiable);
+            } else {
+                return Ok(());
             }
         }
 
@@ -433,7 +435,11 @@ where
         if a.is_constant() && b.is_constant() {
             let a_int = BigInt::from(a);
             let b_int = BigInt::from(b);
-            let res_int = (a_int + b_int).rem(P::modulus());
+            let mut res_int = a_int - b_int;
+            while res_int < BigInt::zero() {
+                res_int += P::modulus();
+            }
+            res_int = res_int.rem(P::modulus());
             return Ok(Self::from(&res_int));
         }
 
@@ -662,7 +668,9 @@ where
             self,
             other,
         )?;
-        prod.fold_limbs(&mut cs.namespace(|| "fold limbs of product"))?;
+        if !prod.is_constant() {
+            prod.fold_limbs(&mut cs.namespace(|| "fold limbs of product"))?;
+        }
         Ok(prod)
     }
 
