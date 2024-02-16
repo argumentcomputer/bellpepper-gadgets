@@ -433,7 +433,7 @@ where
         if a.is_constant() && b.is_constant() {
             let a_int = BigInt::from(a);
             let b_int = BigInt::from(b);
-            let res_int = (a_int + b_int).rem(P::modulus());
+            let res_int = (a_int - b_int).rem(P::modulus());
             return Ok(Self::from(&res_int));
         }
 
