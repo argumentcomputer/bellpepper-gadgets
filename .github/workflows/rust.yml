@@ -88,6 +88,7 @@ jobs:
           - "ed25519"
           - "keccak"
           - "bls12381"
+          - "merkle-inclusion"
     steps:
     - uses: actions/checkout@v4
     - name: Install rustup
