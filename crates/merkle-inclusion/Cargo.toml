@@ -7,7 +7,7 @@ license = "MIT OR Apache-2.0"
 description = "Merkle proof of inclusion using Bellpepper"
 homepage.workspace = true
 repository.workspace = true
-rust-version = "1.70"
+rust-version = "1.71.1"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
