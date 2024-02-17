@@ -435,7 +435,7 @@ where
         if a.is_constant() && b.is_constant() {
             let a_int = BigInt::from(a);
             let b_int = BigInt::from(b);
-            let res_int = if a_int > b_int {
+            let res_int = if a_int >= b_int {
                 (a_int - b_int).rem(P::modulus())
             } else {
                 P::modulus() - (b_int - a_int).rem(P::modulus())
