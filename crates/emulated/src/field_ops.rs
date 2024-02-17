@@ -221,6 +221,8 @@ where
             if a_r != b_r {
                 eprintln!("Constant values are not equal");
                 return Err(SynthesisError::Unsatisfiable);
+            } else {
+                return Ok(());
             }
         }
 
@@ -433,7 +435,11 @@ where
         if a.is_constant() && b.is_constant() {
             let a_int = BigInt::from(a);
             let b_int = BigInt::from(b);
-            let res_int = (a_int + b_int).rem(P::modulus());
+            let res_int = if a_int >= b_int {
+                (a_int - b_int).rem(P::modulus())
+            } else {
+                P::modulus() - (b_int - a_int).rem(P::modulus())
+            };
             return Ok(Self::from(&res_int));
         }
 
@@ -662,7 +668,9 @@ where
             self,
             other,
         )?;
-        prod.fold_limbs(&mut cs.namespace(|| "fold limbs of product"))?;
+        if !prod.is_constant() {
+            prod.fold_limbs(&mut cs.namespace(|| "fold limbs of product"))?;
+        }
         Ok(prod)
     }
 

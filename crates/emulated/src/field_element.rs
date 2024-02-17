@@ -1320,4 +1320,84 @@ mod tests {
             assert!(cs.is_satisfied());
         }
     }
+
+    #[test]
+    fn test_const_ops() {
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let mut rng = rand::thread_rng();
+        let a_int = rng.gen_bigint_range(&BigInt::zero(), &Ed25519Fp::modulus());
+        let b_int = rng.gen_bigint_range(&BigInt::zero(), &Ed25519Fp::modulus());
+        let a_const = EmulatedFieldElement::<Fp, Ed25519Fp>::from(&a_int);
+        let b_const = EmulatedFieldElement::<Fp, Ed25519Fp>::from(&b_int);
+        assert!(a_const.is_constant());
+        assert!(b_const.is_constant());
+
+        // mul
+        let prod_int = (&a_int * &b_int).rem(&Ed25519Fp::modulus());
+        let prod_const_res = a_const.mul(&mut cs.namespace(|| "mul"), &b_const).unwrap();
+        let prod_const = EmulatedFieldElement::<Fp, Ed25519Fp>::from(&prod_int);
+        assert!(prod_const_res.is_constant());
+        assert!(prod_const.is_constant());
+        EmulatedFieldElement::<Fp, Ed25519Fp>::assert_is_equal(
+            &mut cs.namespace(|| "mul assert"),
+            &prod_const,
+            &prod_const_res,
+        )
+        .unwrap();
+
+        // add
+        let add_int = (&a_int + &b_int).rem(&Ed25519Fp::modulus());
+        let add_const_res = a_const.add(&mut cs.namespace(|| "add"), &b_const).unwrap();
+        let add_const = EmulatedFieldElement::<Fp, Ed25519Fp>::from(&add_int);
+        assert!(add_const_res.is_constant());
+        assert!(add_const.is_constant());
+        EmulatedFieldElement::<Fp, Ed25519Fp>::assert_is_equal(
+            &mut cs.namespace(|| "add assert"),
+            &add_const,
+            &add_const_res,
+        )
+        .unwrap();
+
+        // sub
+        let sub_int = if a_int >= b_int {
+            &a_int - &b_int
+        } else {
+            &Ed25519Fp::modulus() + &a_int - &b_int
+        };
+        let sub_int = sub_int.rem(&Ed25519Fp::modulus());
+        let sub_const_res = a_const.sub(&mut cs.namespace(|| "sub1"), &b_const).unwrap();
+        let sub_const = EmulatedFieldElement::<Fp, Ed25519Fp>::from(&sub_int);
+        assert!(sub_const_res.is_constant());
+        assert!(sub_const.is_constant());
+        EmulatedFieldElement::<Fp, Ed25519Fp>::assert_is_equal(
+            &mut cs.namespace(|| "sub1 assert"),
+            &sub_const,
+            &sub_const_res,
+        )
+        .unwrap();
+
+        // sub reversed
+        let sub_int = if b_int >= a_int {
+            &b_int - &a_int
+        } else {
+            &Ed25519Fp::modulus() + &b_int - &a_int
+        };
+        let sub_int = sub_int.rem(&Ed25519Fp::modulus());
+        let sub_const_res = b_const.sub(&mut cs.namespace(|| "sub2"), &a_const).unwrap();
+        let sub_const = EmulatedFieldElement::<Fp, Ed25519Fp>::from(&sub_int);
+        assert!(sub_const_res.is_constant());
+        assert!(sub_const.is_constant());
+        EmulatedFieldElement::<Fp, Ed25519Fp>::assert_is_equal(
+            &mut cs.namespace(|| "sub2 assert"),
+            &sub_const,
+            &sub_const_res,
+        )
+        .unwrap();
+
+        if !cs.is_satisfied() {
+            println!("{:?}", cs.which_is_unsatisfied());
+        }
+        assert!(cs.is_satisfied());
+        assert_eq!(cs.num_constraints(), 0);
+    }
 }
