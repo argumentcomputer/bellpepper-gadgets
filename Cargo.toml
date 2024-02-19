@@ -34,5 +34,4 @@ incremental = false
 codegen-units = 16
 
 [patch.crates-io]
-# This is needed to ensure halo2curves, which imports pasta-curves, uses the *same* traits in bn256_grumpkin
 pasta_curves = { git = "https://github.com/lurk-lab/pasta_curves", branch = "dev" }
