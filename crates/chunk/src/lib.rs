@@ -46,8 +46,8 @@ impl<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> FoldStep<F, 
     }
 
     /// This `synthesize` implementation consists of two parts:
-    /// 1. Synthesize the necessary number of `ChunkStepCircuit` instances.
-    /// 2. Allocate the next input values for the next `FoldStep` instance.
+    /// 1. Call the inner synthesize method of `ChunkStepCircuit` with correct inputs.
+    /// 2. Calculate the next program and allocate the next input values for the next `FoldStep` instance.
     pub fn synthesize<CS: ConstraintSystem<F>>(
         &self,
         cs: &mut CS,
