@@ -175,7 +175,7 @@ fn main() {
     type C1 =
         ChunkCircuit<<E1 as Engine>::Scalar, ChunkStep<<E1 as Engine>::Scalar>, NUM_ITERS_PER_STEP>;
 
-    println!("IVC addition accumulator with a Chunk pattern");
+    println!("NIVC addition accumulator with a Chunk pattern");
     println!("=========================================================");
 
     let z0_primary = vec![
