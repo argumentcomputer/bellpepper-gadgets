@@ -1,5 +1,5 @@
 use crate::error::ChunkError;
-use crate::traits::{ChunkCircuit, ChunkStepCircuit};
+use crate::traits::{ChunkCircuitInner, ChunkStepCircuit};
 use bellpepper_core::num::AllocatedNum;
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use ff::PrimeField;
@@ -20,17 +20,20 @@ pub struct FoldStep<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usiz
     circuit: C,
     /// The next input values for the next `ChunkStepCircuit` instance.
     next_input: [F; N],
+    /// Next circuit
+    next_circuit: Option<F>,
 }
 
 impl<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> FoldStep<F, C, N> {
     pub fn arity(&self) -> usize {
         N + C::arity()
     }
-    pub fn new(circuit: C, inputs: [F; N], step_nbr: usize) -> Self {
+    pub fn new(circuit: C, inputs: [F; N], step_nbr: usize, next_circuit: Option<F>) -> Self {
         Self {
             circuit,
             next_input: inputs,
             step_nbr,
+            next_circuit,
         }
     }
 
@@ -40,8 +43,9 @@ impl<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> FoldStep<F, 
     pub fn synthesize<CS: ConstraintSystem<F>>(
         &self,
         cs: &mut CS,
+        pc: Option<&AllocatedNum<F>>,
         z: &[AllocatedNum<F>],
-    ) -> Result<Vec<AllocatedNum<F>>, SynthesisError> {
+    ) -> Result<(Option<AllocatedNum<F>>, Vec<AllocatedNum<F>>), SynthesisError> {
         let (z_in, chunk_in) = z.split_at(C::arity());
         let mut z_out = self.circuit.chunk_synthesize(
             &mut cs.namespace(|| format!("chunk_folding_step_{}", self.step_nbr)),
@@ -49,6 +53,15 @@ impl<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> FoldStep<F, 
             chunk_in,
         )?;
 
+        // Next program
+        let next_pc = match self.next_circuit() {
+            Some(next_circuit) => {
+                AllocatedNum::alloc(cs.namespace(|| "next_circuit"), || Ok(*next_circuit))?
+            }
+            None => AllocatedNum::alloc(cs.namespace(|| "next_circuit"), || Ok(F::ZERO))?,
+        };
+
+        // Next input
         let next_inputs_allocated = self
             .next_input
             .iter()
@@ -59,7 +72,7 @@ impl<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> FoldStep<F, 
             .collect::<Result<Vec<AllocatedNum<F>>, SynthesisError>>()?;
 
         z_out.extend(next_inputs_allocated);
-        Ok(z_out)
+        Ok((Some(next_pc), z_out))
     }
 }
 
@@ -69,6 +82,7 @@ impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> Clone for FoldStep<F
             step_nbr: self.step_nbr,
             circuit: self.circuit.clone(),
             next_input: self.next_input,
+            next_circuit: self.next_circuit,
         }
     }
 }
@@ -76,7 +90,7 @@ impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> Clone for FoldStep<F
 /// `Circuit` is a helper structure that handles the plumbing of generating the necessary number of `FoldStep` instances
 /// to properly prove and verifiy a circuit.
 #[derive(Debug, Getters)]
-pub struct Circuit<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
+pub struct InnerCircuit<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
     /// The `FoldStep` instances that are part of the circuit.
     #[getset(get = "pub")]
     circuits: Vec<FoldStep<F, C, N>>,
@@ -84,8 +98,8 @@ pub struct Circuit<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
     num_fold_steps: usize,
 }
 
-impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> ChunkCircuit<F, C, N>
-    for Circuit<F, C, N>
+impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> ChunkCircuitInner<F, C, N>
+    for InnerCircuit<F, C, N>
 {
     fn new(intermediate_steps_input: &[F]) -> anyhow::Result<Self, ChunkError> {
         // For now, we can only handle inputs that are a multiple of N.
@@ -105,13 +119,18 @@ impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> ChunkCircuit<F, C, N
                     .try_into()
                     .map_err(|err| ChunkError::DivisionError { source: err })?;
 
-                Ok(FoldStep::new(C::new(), inputs, i))
+                Ok(FoldStep::new(
+                    C::new(),
+                    inputs,
+                    i,
+                    Some(F::from(i as u64 + 1)),
+                ))
             })
             .collect::<anyhow::Result<Vec<_>, ChunkError>>()?;
 
         // As the input represents the generated values by the inner loop, we need to add one more execution to have
         // a complete circuit and a proper accumulator value.
-        circuits.push(FoldStep::new(C::new(), [F::ZERO; N], circuits.len()));
+        circuits.push(FoldStep::new(C::new(), [F::ZERO; N], circuits.len(), None));
 
         Ok(Self {
             circuits,

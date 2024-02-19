@@ -30,7 +30,7 @@ pub trait ChunkStepCircuit<F: PrimeField>: Clone + Sync + Send + Debug + Partial
 }
 
 /// `ChunkCircuit` is the trait used to interface with a circuit that is composed of a loop of steps.
-pub trait ChunkCircuit<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
+pub trait ChunkCircuitInner<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
     /// `new` must return a new instance of the chunk circuit.
     /// # Arguments
     /// * `intermediate_steps_input` - The intermediate input values for each of the step circuits.
