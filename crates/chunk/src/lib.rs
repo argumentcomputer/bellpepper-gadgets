@@ -4,7 +4,6 @@ use bellpepper_core::num::AllocatedNum;
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use ff::PrimeField;
 use getset::Getters;
-use std::convert::TryInto;
 
 pub mod error;
 pub mod traits;
@@ -16,22 +15,31 @@ pub mod traits;
 pub struct FoldStep<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> {
     /// The step number of the `FoldStep` in the circuit.
     step_nbr: usize,
+    /// Next circuit index.
+    next_circuit: Option<F>,
     /// The `ChunkStepCircuit` instance to be used in the `FoldStep`.
     circuit: C,
+    /// Number of input to be expected
+    input_nbr: usize,
     /// The next input values for the next `ChunkStepCircuit` instance.
     next_input: [F; N],
-    /// Next circuit
-    next_circuit: Option<F>,
 }
 
 impl<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> FoldStep<F, C, N> {
     pub fn arity(&self) -> usize {
         N + C::arity()
     }
-    pub fn new(circuit: C, inputs: [F; N], step_nbr: usize, next_circuit: Option<F>) -> Self {
+    pub fn new(
+        circuit: C,
+        inputs: [F; N],
+        input_nbr: usize,
+        step_nbr: usize,
+        next_circuit: Option<F>,
+    ) -> Self {
         Self {
             circuit,
             next_input: inputs,
+            input_nbr,
             step_nbr,
             next_circuit,
         }
@@ -47,10 +55,13 @@ impl<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> FoldStep<F, 
         z: &[AllocatedNum<F>],
     ) -> Result<(Option<AllocatedNum<F>>, Vec<AllocatedNum<F>>), SynthesisError> {
         let (z_in, chunk_in) = z.split_at(C::arity());
+
         let mut z_out = self.circuit.chunk_synthesize(
             &mut cs.namespace(|| format!("chunk_folding_step_{}", self.step_nbr)),
+            pc,
             z_in,
-            chunk_in,
+            // Only keep inputs that were part of the original input set
+            chunk_in.split_at(self.input_nbr).0,
         )?;
 
         // Next program
@@ -83,6 +94,7 @@ impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> Clone for FoldStep<F
             circuit: self.circuit.clone(),
             next_input: self.next_input,
             next_circuit: self.next_circuit,
+            input_nbr: self.input_nbr,
         }
     }
 }
@@ -102,26 +114,23 @@ impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> ChunkCircuitInner<F,
     for InnerCircuit<F, C, N>
 {
     fn new(intermediate_steps_input: &[F]) -> anyhow::Result<Self, ChunkError> {
-        // For now, we can only handle inputs that are a multiple of N.
-        if intermediate_steps_input.len() % N != 0 {
-            return Err(ChunkError::InvalidInputLength(
-                intermediate_steps_input.len(),
-                N,
-            ));
-        }
-
         // We generate the `FoldStep` instances that are part of the circuit.
         let mut circuits = intermediate_steps_input
             .chunks(N)
             .enumerate()
             .map(|(i, chunk)| {
-                let inputs: [F; N] = chunk
-                    .try_into()
-                    .map_err(|err| ChunkError::DivisionError { source: err })?;
+                // Create an array filled with F::ZERO
+                let mut inputs: [F; N] = [F::ZERO; N];
+
+                // Copy elements from the chunk into the inputs array
+                for (input, value) in inputs.iter_mut().zip(chunk.iter()) {
+                    *input = *value;
+                }
 
                 Ok(FoldStep::new(
                     C::new(),
                     inputs,
+                    N,
                     i,
                     Some(F::from(i as u64 + 1)),
                 ))
@@ -130,11 +139,26 @@ impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> ChunkCircuitInner<F,
 
         // As the input represents the generated values by the inner loop, we need to add one more execution to have
         // a complete circuit and a proper accumulator value.
-        circuits.push(FoldStep::new(C::new(), [F::ZERO; N], circuits.len(), None));
+        circuits.push(FoldStep::new(
+            C::new(),
+            [F::ZERO; N],
+            if intermediate_steps_input.len() % N != 0 {
+                intermediate_steps_input.len() % N
+            } else {
+                N
+            },
+            circuits.len(),
+            None,
+        ));
 
         Ok(Self {
             circuits,
-            num_fold_steps: (intermediate_steps_input.len() / N) + 1,
+            num_fold_steps: (intermediate_steps_input.len() / N)
+                + if intermediate_steps_input.len() % N != 0 {
+                    2
+                } else {
+                    1
+                },
         })
     }
 

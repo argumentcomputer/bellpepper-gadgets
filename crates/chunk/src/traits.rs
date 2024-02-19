@@ -19,11 +19,13 @@ pub trait ChunkStepCircuit<F: PrimeField>: Clone + Sync + Send + Debug + Partial
     ///
     /// # Arguments
     /// * `cs` - The constraint system to which the circuit is being added.
+    /// * `pc` - The program counter value for the current step.
     /// * `z` - The accumulator value for the current step.
     /// * `chunk_in` - The input values for the current step (which are the output values from the previous step).
     fn chunk_synthesize<CS: ConstraintSystem<F>>(
         &self,
         cs: &mut CS,
+        pc: Option<&AllocatedNum<F>>,
         z: &[AllocatedNum<F>],
         chunk_in: &[AllocatedNum<F>],
     ) -> Result<Vec<AllocatedNum<F>>, SynthesisError>;
@@ -44,6 +46,6 @@ pub trait ChunkCircuitInner<F: PrimeField, C: ChunkStepCircuit<F>, const N: usiz
         Self: Sized;
     /// `initial_input` must return the first circuit to be proven/verified.
     fn initial_input(&self) -> Option<&FoldStep<F, C, N>>;
-    /// `num_fold_steps` must return the number of recusrive snark step necessary to prove and verify the circuit.
+    /// `num_fold_steps` must return the number of recursive snark step necessary to prove and verify the circuit.
     fn num_fold_steps(&self) -> usize;
 }

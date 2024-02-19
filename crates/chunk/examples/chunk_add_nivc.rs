@@ -46,6 +46,7 @@ impl<F: PrimeField> ChunkStepCircuit<F> for ChunkStep<F> {
     fn chunk_synthesize<CS: ConstraintSystem<F>>(
         &self,
         cs: &mut CS,
+        _pc: Option<&AllocatedNum<F>>,
         z: &[AllocatedNum<F>],
         chunk_in: &[AllocatedNum<F>],
     ) -> Result<Vec<AllocatedNum<F>>, SynthesisError> {
@@ -195,6 +196,7 @@ fn main() {
         <E1 as Engine>::Scalar::from(7),
         <E1 as Engine>::Scalar::from(8),
         <E1 as Engine>::Scalar::from(9),
+        <E1 as Engine>::Scalar::from(10),
     ])
     .unwrap();
 
@@ -205,7 +207,7 @@ fn main() {
     // produce non-deterministic hint
     assert_eq!(
         <C1 as NonUniformCircuit<E1>>::num_circuits(&chunk_circuit),
-        4
+        5
     );
 
     let z0_secondary = vec![<Dual<E1> as Engine>::Scalar::ZERO];
