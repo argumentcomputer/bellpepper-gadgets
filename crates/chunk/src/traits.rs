@@ -3,14 +3,17 @@ use crate::FoldStep;
 use bellpepper_core::num::AllocatedNum;
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use ff::PrimeField;
+use std::fmt::Debug;
 
 /// `ChunkStepCircuit` is the trait used to interface with one step in a loop of a `ChunkCircuit`.
-pub trait ChunkStepCircuit<F: PrimeField>: Clone + Sync + Send {
+pub trait ChunkStepCircuit<F: PrimeField>: Clone + Sync + Send + Debug + PartialEq + Eq {
     /// `new` should return a new instance of the step circuit.
     fn new() -> Self;
 
     /// `arity` must return the number of inputs or outputs of each step.
-    fn arity() -> usize;
+    fn arity() -> usize {
+        1
+    }
 
     /// `chunk_synthesize` must be the method that performs the computation for a given step.
     ///
@@ -30,14 +33,13 @@ pub trait ChunkStepCircuit<F: PrimeField>: Clone + Sync + Send {
 pub trait ChunkCircuit<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
     /// `new` must return a new instance of the chunk circuit.
     /// # Arguments
-    /// * `z0_primary` - The initial input values for the circuit.
     /// * `intermediate_steps_input` - The intermediate input values for each of the step circuits.
     ///
     /// # Note
     ///
     /// As `intermediate_steps_input` represents the input values for each of the step circuits, there is currently a need
     /// to generate one last `FoldStep` instance to represent the last step in the circuit.
-    fn new(z0_primary: &[F], intermediate_steps_input: &[F]) -> anyhow::Result<Self, ChunkError>
+    fn new(intermediate_steps_input: &[F]) -> anyhow::Result<Self, ChunkError>
     where
         Self: Sized;
     /// `initial_input` must return the first circuit to be proven/verified.
