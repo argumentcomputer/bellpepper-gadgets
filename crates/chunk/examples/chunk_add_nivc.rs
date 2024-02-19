@@ -53,8 +53,7 @@ impl<F: PrimeField> ChunkStepCircuit<F> for ChunkStep<F> {
         let mut acc = z[0].clone();
 
         for (i, elem) in chunk_in.iter().enumerate() {
-            // TODO i is not what we want here. Should be fold_step + i
-            acc = acc.add(&mut cs.namespace(|| format!("add{i}")), &elem)?;
+            acc = acc.add(&mut cs.namespace(|| format!("add{i}")), elem)?;
         }
 
         Ok(vec![acc])
@@ -152,14 +151,10 @@ impl<E1: CurveCycleEquipped, C: ChunkStepCircuit<E1::Scalar>, const N: usize> No
     }
 
     fn primary_circuit(&self, circuit_index: usize) -> Self::C1 {
-        match circuit_index {
-            _ => {
-                if let Some(fold_step) = self.inner.circuits().get(circuit_index) {
-                    return Self::C1::IterStep(FoldStepWrapper::new(fold_step.clone()));
-                }
-                unreachable!()
-            }
+        if let Some(fold_step) = self.inner.circuits().get(circuit_index) {
+            return Self::C1::IterStep(FoldStepWrapper::new(fold_step.clone()));
         }
+        unreachable!()
     }
 
     fn secondary_circuit(&self) -> Self::C2 {
@@ -271,7 +266,7 @@ fn main() {
     }
     println!(
         "Calculated sum: {:?}",
-        recursive_snark.zi_primary().get(0).unwrap()
+        recursive_snark.zi_primary().first().unwrap()
     );
 
     println!("Generating a CompressedSNARK...");
