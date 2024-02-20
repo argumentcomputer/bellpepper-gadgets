@@ -101,14 +101,13 @@ impl<F: PrimeFieldBits> EmulatedBls12381Pairing<F> {
         res.v0[n - 2] = tmp0;
         res.v1[n - 2] = tmp1;
         let mut i = n - 3;
-        let mut j = 1;
         while i >= 1 {
             if LOOP_COUNTER[i] == 0 {
                 let (tmpq, tmp0) = Self::double_step(
                     &mut cs.namespace(|| format!("q_acc,tmp0 <- double_step(q_acc) ({i})")),
                     &q_acc,
                 )?;
-                q_acc = tmpq;
+                q_acc = tmpq.reduce(&mut cs.namespace(|| format!("q_acc <- tmpq.reduce() ({i})")))?;
                 res.v0[i] = tmp0;
             } else {
                 let (tmpq, tmp0, tmp1) = Self::double_and_add_step(
@@ -118,19 +117,12 @@ impl<F: PrimeFieldBits> EmulatedBls12381Pairing<F> {
                     &q_acc,
                     q,
                 )?;
-                q_acc = tmpq;
+                q_acc = tmpq.reduce(&mut cs.namespace(|| format!("q_acc <- tmpq.reduce() ({i})")))?;
                 res.v0[i] = tmp0;
                 res.v1[i] = tmp1;
             }
 
-            // TODO: This fails with an overflow without an explicit reduce call every few iterations, even though theoretically this should be happening automatically.
-            if j % 16 == 0 {
-                q_acc =
-                    q_acc.reduce(&mut cs.namespace(|| format!("q_acc <- q_acc.reduce() ({i})")))?;
-            }
-
             i -= 1;
-            j += 1;
         }
         let tmp0 = Self::tangent_compute(cs, &q_acc)?;
         res.v0[0] = tmp0;
@@ -193,6 +185,7 @@ impl<F: PrimeFieldBits> EmulatedBls12381Pairing<F> {
         p: &G2Point<F>,
     ) -> Result<(G2Point<F>, LineEval<F>), SynthesisError> {
         let cs = &mut cs.namespace(|| "double_step(p)");
+        let p = p.reduce(&mut cs.namespace(|| "p <- p.reduce()"))?;
         // λ = 3x²/2y
         let n = p.x.square(&mut cs.namespace(|| "n <- p.x.square()"))?;
         let n = n.mul_const(&mut cs.namespace(|| "n <- n * 3"), &BigInt::from(3))?;
@@ -475,7 +468,7 @@ where
         is_single_pairing: bool,
     ) -> Result<Fp12Element<F>, SynthesisError> {
         let cs = &mut cs.namespace(|| format!("final_exponentiation(e, {is_single_pairing})"));
-        let mut e = gt.clone();
+        let mut e = gt.reduce(&mut cs.namespace(|| "e <- e.reduce()"))?;
         let mut sel1: Option<AllocatedBit> = None;
         // 1. Easy part
         // (p⁶-1)(p²+1)
@@ -609,8 +602,8 @@ where
 mod tests {
     use super::*;
     use bellpepper_core::test_cs::TestConstraintSystem;
-    use pasta_curves::group::Group;
-    use pasta_curves::Fp;
+    use halo2curves::group::Group;
+    use halo2curves::bn256::Fq as Fp;
 
     use bls12_381::{G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective};
 
@@ -647,8 +640,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["27479425"]);
-        expect_eq(cs.num_constraints(), &expect!["27589064"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["7142222"]);
+        expect_eq(cs.num_constraints(), &expect!["7147240"]);
     }
 
     // NOTE: this test currently takes ~140GB of ram and a lot of minutes to run, so it's commented out (but it works!)
@@ -696,7 +689,7 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["42513910"]);
-        expect_eq(cs.num_constraints(), &expect!["42690690"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["17043247"]);
+        expect_eq(cs.num_constraints(), &expect!["17085695"]);
     }
 }

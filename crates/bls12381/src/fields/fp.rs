@@ -13,15 +13,13 @@ pub struct Bls12381FpParams;
 
 impl EmulatedFieldParams for Bls12381FpParams {
     // TODO: Depending on the native field, different limb/bit pairs are more optimal and have less waste. This should be customizable and not hardcoded
-    // for example, in the pasta field, 4/96 could be used instead
+    // for example, in the pasta field, 4/96 could be used instead for savings, but in bn256 7/55 is better
     fn num_limbs() -> usize {
-        6
-        //4
+        7
     }
 
     fn bits_per_limb() -> usize {
-        64
-        //96
+        55
     }
 
     fn modulus() -> BigInt {
@@ -307,7 +305,7 @@ mod tests {
     use super::*;
     use bellpepper_core::test_cs::TestConstraintSystem;
     use bls12_381::hash_to_curve::Sgn0;
-    use pasta_curves::Fp;
+    use halo2curves::bn256::Fq as Fp;
 
     use expect_test::{expect, Expect};
     fn expect_eq(computed: usize, expected: &Expect) {
@@ -332,8 +330,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["277"]);
-        expect_eq(cs.num_constraints(), &expect!["262"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["244"]);
+        expect_eq(cs.num_constraints(), &expect!["226"]);
     }
 
     #[test]
@@ -354,8 +352,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["277"]);
-        expect_eq(cs.num_constraints(), &expect!["262"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["244"]);
+        expect_eq(cs.num_constraints(), &expect!["226"]);
     }
 
     #[test]
@@ -373,8 +371,8 @@ mod tests {
         FpElement::assert_is_equal(&mut cs.namespace(|| "a*b = c"), &res_alloc, &c_alloc).unwrap();
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["681"]);
-        expect_eq(cs.num_constraints(), &expect!["666"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["651"]);
+        expect_eq(cs.num_constraints(), &expect!["633"]);
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
@@ -406,8 +404,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["271"]);
-        expect_eq(cs.num_constraints(), &expect!["262"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["237"]);
+        expect_eq(cs.num_constraints(), &expect!["226"]);
     }
 
     #[test]
@@ -426,8 +424,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["271"]);
-        expect_eq(cs.num_constraints(), &expect!["262"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["237"]);
+        expect_eq(cs.num_constraints(), &expect!["226"]);
     }
 
     #[test]
@@ -451,7 +449,7 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["9"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["10"]);
         expect_eq(cs.num_constraints(), &expect!["4"]);
     }
 
@@ -488,7 +486,7 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["1193"]);
-        expect_eq(cs.num_constraints(), &expect!["1196"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["1091"]);
+        expect_eq(cs.num_constraints(), &expect!["1093"]);
     }
 }

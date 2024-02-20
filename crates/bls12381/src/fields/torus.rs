@@ -300,7 +300,7 @@ impl<F: PrimeFieldBits> Torus<F> {
 mod tests {
     use super::*;
     use bellpepper_core::test_cs::TestConstraintSystem;
-    use pasta_curves::Fp;
+    use halo2curves::bn256::Fq as Fp;
 
     use expect_test::{expect, Expect};
     fn expect_eq(computed: usize, expected: &Expect) {
@@ -328,8 +328,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["5907"]);
-        expect_eq(cs.num_constraints(), &expect!["5799"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["5541"]);
+        expect_eq(cs.num_constraints(), &expect!["5409"]);
     }
 
     #[test]
@@ -356,8 +356,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["11769"]);
-        expect_eq(cs.num_constraints(), &expect!["11661"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["11019"]);
+        expect_eq(cs.num_constraints(), &expect!["10881"]);
     }
 
     #[test]
@@ -393,7 +393,7 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["14709"]);
-        expect_eq(cs.num_constraints(), &expect!["14493"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["14055"]);
+        expect_eq(cs.num_constraints(), &expect!["13791"]);
     }
 }
