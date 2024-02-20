@@ -245,7 +245,7 @@ where
         CS: ConstraintSystem<F>,
     {
         if self.is_constant() {
-            // FIXME: it's not necessarily unsat, could do the comparison like the other cases and allocate a constant bit
+            eprintln!("alloc_is_zero not implemented for constants");
             return Err(SynthesisError::Unsatisfiable);
         }
 
