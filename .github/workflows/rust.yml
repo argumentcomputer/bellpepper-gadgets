@@ -83,6 +83,7 @@ jobs:
       matrix:
         package:
           - "emulated"
+          - "chunk"
           - "sha1"
           - "sha512"
           - "ed25519"
