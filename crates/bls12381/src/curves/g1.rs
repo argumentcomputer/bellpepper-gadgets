@@ -1,3 +1,4 @@
+use bellpepper_core::boolean::{AllocatedBit, Boolean};
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use bls12_381::G1Affine;
 use bls12_381::{fp::Fp as BlsFp, G1Projective};
@@ -42,15 +43,36 @@ where
 }
 
 impl<F: PrimeField + PrimeFieldBits> G1Point<F> {
+    pub fn identity() -> Self {
+        // (0,0) is the point at infinity
+        Self {
+            x: FpElement::zero(),
+            y: FpElement::zero(),
+        }
+    }
+
     pub fn alloc_element<CS>(cs: &mut CS, value: &G1Affine) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
-        // (0,0) is the point at infinity
-        let x = FpElement::<F>::alloc_element(&mut cs.namespace(|| "allocate x (g1)"), &value.x)?;
-        let y = FpElement::<F>::alloc_element(&mut cs.namespace(|| "allocate y (g1)"), &value.y)?;
+        let (x, y) = if value.is_identity().into() {
+            (BlsFp::zero(), BlsFp::zero())
+        } else {
+            (value.x, value.y)
+        };
+        let x = FpElement::<F>::alloc_element(&mut cs.namespace(|| "allocate x (g1)"), &x)?;
+        let y = FpElement::<F>::alloc_element(&mut cs.namespace(|| "allocate y (g1)"), &y)?;
 
         Ok(Self { x, y })
+    }
+
+    pub fn alloc_is_identity<CS>(&self, cs: &mut CS) -> Result<AllocatedBit, SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        let x = self.x.alloc_is_zero(&mut cs.namespace(|| "x =? 0"))?;
+        let y = self.y.alloc_is_zero(&mut cs.namespace(|| "y =? 0"))?;
+        AllocatedBit::and(&mut cs.namespace(|| "and(x, y)"), &x, &y)
     }
 
     pub fn assert_is_equal<CS>(cs: &mut CS, a: &Self, b: &Self) -> Result<(), SynthesisError>
@@ -103,9 +125,11 @@ impl<F: PrimeField + PrimeFieldBits> G1Point<F> {
         })
     }
 
-    //Implements constraint: (y_a + y_c) * (x_b - x_a) - (y_b - y_a)*(x_a - x_c) = 0 mod p
-    //used to show (x_a, y_a), (x_b, y_b), (x_c, -y_c) are co-linear
-    pub fn assert_collinear<CS>(
+    /// Asserts that `(y_a + y_c)*(x_b - x_a) - (y_b - y_a)*(x_a - x_c) = 0 mod p`.
+    /// Used to show `a, b, -c` are all co-linear, or that `a + b = c`.
+    /// Does not check that the points are on the curve or the proper subgroup.
+    /// If `a == 0` or `b == 0`, enforces that `b == c` or `a == c` respectively. Does not work if `c == 0`
+    pub fn assert_addition<CS>(
         cs: &mut CS,
         a: &Self,
         b: &Self,
@@ -114,22 +138,82 @@ impl<F: PrimeField + PrimeFieldBits> G1Point<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let cs = &mut cs.namespace(|| "G1::assert_collinear(a, b, c)");
-
-        // compute leftside = (y_a + y_c) * (x_b - x_a)
-        let aycy = a.y.add(&mut cs.namespace(|| "aycy <- a.y + c.y"), &c.y)?;
+        // compute leftside = (y_a - y_c) * (x_b - x_a)
+        let aymcy = a.y.add(&mut cs.namespace(|| "aymcy <- a.y + c.y"), &c.y)?; // flip c.y to check for EC add
         let bxax = b.x.sub(&mut cs.namespace(|| "bxax <- b.x - a.x"), &a.x)?;
-        let leftside = aycy.mul(&mut cs.namespace(|| "leftside <- aycy * bxax"), &bxax)?;
+        let leftside = aymcy.mul(&mut cs.namespace(|| "leftside <- aymcy * bxax"), &bxax)?;
 
-        //compute rightside = (y_b - y_a)*(x_a - x_c)
+        // compute rightside = (y_b - y_a)*(x_a - x_c)
         let byay = b.y.sub(&mut cs.namespace(|| "byay <- b.y - a.y"), &a.y)?;
         let axcx = a.x.sub(&mut cs.namespace(|| "axcx <- a.x - c.x"), &c.x)?;
         let rightside = byay.mul(&mut cs.namespace(|| "rightside <- byay * axcx"), &axcx)?;
 
-        FpElement::assert_is_equal(
-            &mut cs.namespace(|| "leftside =? rightside"),
-            &leftside,
+        let res = leftside.sub(
+            &mut cs.namespace(|| "res <- leftside - rightside"),
             &rightside,
+        )?;
+        let res = res.alloc_is_zero(&mut cs.namespace(|| "res =? 0"))?;
+
+        let aycy = a.y.sub(&mut cs.namespace(|| "aycy <- a.y - c.y"), &c.y)?;
+        let bxcx = b.x.sub(&mut cs.namespace(|| "bxcx <- b.x - c.x"), &c.x)?;
+        let bycy = b.y.sub(&mut cs.namespace(|| "bycy <- b.y - c.y"), &c.y)?;
+
+        // if a == 0, then check b == c and ignore res
+        let a_is_0 = a.alloc_is_identity(&mut cs.namespace(|| "a_is_0 <- a =? 0"))?;
+        let bycy_is_0 = bycy.alloc_is_zero(&mut cs.namespace(|| "bycy_is_0 <- bycy =? 0"))?;
+        let bxcx_is_0 = bxcx.alloc_is_zero(&mut cs.namespace(|| "bxcx_is_0 <- bxcx =? 0"))?;
+        let b_eq_c = Boolean::and(
+            &mut cs.namespace(|| "b_eq_c <- and(bxcx_is_0, bycy_is_0)"),
+            &Boolean::from(bxcx_is_0),
+            &Boolean::from(bycy_is_0),
+        )?;
+        let a_case = Boolean::and(
+            &mut cs.namespace(|| "a_case <- and(a_is_0, b_eq_c)"),
+            &Boolean::from(a_is_0.clone()),
+            &Boolean::from(b_eq_c),
+        )?;
+        // if b == 0, then check a == c and ignore res
+        let b_is_0 = b.alloc_is_identity(&mut cs.namespace(|| "b_is_0 <- b =? 0"))?;
+        let aycy_is_0 = aycy.alloc_is_zero(&mut cs.namespace(|| "aycy_is_0 <- aycy =? 0"))?;
+        let axcx_is_0 = axcx.alloc_is_zero(&mut cs.namespace(|| "axcx_is_0 <- axcx =? 0"))?;
+        let a_eq_c = Boolean::and(
+            &mut cs.namespace(|| "a_eq_c <- and(axcx_is_0, aycy_is_0)"),
+            &Boolean::from(axcx_is_0),
+            &Boolean::from(aycy_is_0),
+        )?;
+        let b_case = Boolean::and(
+            &mut cs.namespace(|| "b_case <- and(b_is_0, a_eq_c)"),
+            &Boolean::from(b_is_0.clone()),
+            &Boolean::from(a_eq_c),
+        )?;
+
+        let any_is_0 = Boolean::or(
+            &mut cs.namespace(|| "any_is_0 <- or(a_is_0, b_is_0)"),
+            &Boolean::from(a_is_0),
+            &Boolean::from(b_is_0),
+        )?;
+
+        // if any of the inputs is 0, then the collinear result bit needs to be cleared
+        let res = Boolean::and(
+            &mut cs.namespace(|| "res <- and(res, !any_is_0)"),
+            &Boolean::from(res),
+            &any_is_0.not(),
+        )?;
+        let res = Boolean::or(
+            &mut cs.namespace(|| "res <- or(res, a_case)"),
+            &res,
+            &a_case,
+        )?;
+        let res = Boolean::or(
+            &mut cs.namespace(|| "res <- or(res, b_case)"),
+            &res,
+            &b_case,
+        )?;
+
+        Boolean::enforce_equal(
+            &mut cs.namespace(|| "enforce(res, true)"),
+            &res,
+            &Boolean::Constant(true),
         )?;
 
         Ok(())
@@ -157,6 +241,71 @@ impl<F: PrimeField + PrimeFieldBits> G1Point<F> {
         let yr = lambdapxrx.sub(&mut cs.namespace(|| "yr <- lambdapxrx - p.y"), &p.y)?;
 
         Ok(Self { x: xr, y: yr })
+    }
+
+    /// Returns the EC addition between `self` and `value`. Supports `p == q` and either point can be the identity
+    /// It uses the unified formulas of Brier and Joye from [BriJoy02 (Corollary 1)](https://link.springer.com/content/pdf/10.1007/3-540-45664-3_24.pdf)
+    pub fn add_unified<CS>(&self, cs: &mut CS, value: &Self) -> Result<Self, SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        let (p, q) = (self, value);
+        let cs = &mut cs.namespace(|| "G1::add_unified(p, q)");
+        let sel1 = p.alloc_is_identity(&mut cs.namespace(|| "sel1 <- p.is_identity()"))?;
+        let sel2 = q.alloc_is_identity(&mut cs.namespace(|| "sel2 <- q.is_identity()"))?;
+
+        // λ = ((p.x+q.x)² - p.x*q.x + a)/(p.y + q.y)
+        let pxqx = p.x.mul(&mut cs.namespace(|| "pxqx <- p.x * q.x"), &q.x)?;
+        let pxplusqx =
+            p.x.add(&mut cs.namespace(|| "pxplusqx <- p.x + q.x"), &q.x)?;
+        let num = pxplusqx.square(&mut cs.namespace(|| "num <- pxplusqx^2"))?;
+        let num = num.sub(&mut cs.namespace(|| "num <- num - pxqx"), &pxqx)?;
+        let denum = p.y.add(&mut cs.namespace(|| "denum <- p.y + q.y"), &q.y)?;
+        // if p.y + q.y = 0, assign dummy 1 to denum and continue
+        let sel3 = denum.alloc_is_zero(&mut cs.namespace(|| "sel3 <- denum.is_zero()"))?;
+        let denum = FpElement::conditionally_select(
+            &mut cs.namespace(|| "denum <- select(denum, 1, sel3)"),
+            &denum,
+            &FpElement::one(),
+            &Boolean::from(sel3.clone()),
+        )?;
+        let lambda = num.div_unchecked(&mut cs.namespace(|| "lamda <- num div denum"), &denum)?;
+
+        // x = λ^2 - p.x - q.x
+        let xr = lambda.square(&mut cs.namespace(|| "xr <- lambda.square()"))?;
+        let xr = xr.sub(&mut cs.namespace(|| "xr <- xr - pxplusqx"), &pxplusqx)?;
+
+        // y = λ(p.x - xr) - p.y
+        let yr = p.x.sub(&mut cs.namespace(|| "yr <- p.x - xr"), &xr)?;
+        let yr = yr.mul(&mut cs.namespace(|| "yr <- yr * lambda"), &lambda)?;
+        let yr = yr.sub(&mut cs.namespace(|| "yr <- yr - p.y"), &p.y)?;
+        let xr = xr.reduce(&mut cs.namespace(|| "xr <- xr.reduce()"))?;
+        let yr = yr.reduce(&mut cs.namespace(|| "yr <- yr.reduce()"))?;
+        let res = Self { x: xr, y: yr };
+
+        // if p=(0,0) return q
+        let res = Self::conditionally_select(
+            &mut cs.namespace(|| "res <- select(res, q, sel1)"),
+            &res,
+            &q,
+            &Boolean::from(sel1),
+        )?;
+        // if q=(0,0) return p
+        let res = Self::conditionally_select(
+            &mut cs.namespace(|| "res <- select(res, p, sel2)"),
+            &res,
+            &p,
+            &Boolean::from(sel2),
+        )?;
+        // if p.y + q.y = 0, return (0, 0)
+        let res = Self::conditionally_select(
+            &mut cs.namespace(|| "res <- select(res, 0, sel3)"),
+            &res,
+            &Self::identity(),
+            &Boolean::from(sel3),
+        )?;
+
+        Ok(res)
     }
 
     pub fn neg<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
@@ -276,6 +425,30 @@ impl<F: PrimeField + PrimeFieldBits> G1Point<F> {
 
         Ok(Self { x: x3, y: y3 })
     }
+
+    pub fn conditionally_select<CS>(
+        cs: &mut CS,
+        p0: &Self,
+        p1: &Self,
+        condition: &Boolean,
+    ) -> Result<Self, SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        let x = FpElement::conditionally_select(
+            &mut cs.namespace(|| "cond x"),
+            &p0.x,
+            &p1.x,
+            condition,
+        )?;
+        let y = FpElement::conditionally_select(
+            &mut cs.namespace(|| "cond y"),
+            &p0.y,
+            &p1.y,
+            condition,
+        )?;
+        Ok(Self { x, y })
+    }
 }
 
 #[cfg(test)]
@@ -316,7 +489,51 @@ mod tests {
     }
 
     #[test]
-    fn test_collinear() {
+    fn test_random_add_unified() {
+        let mut rng = rand::thread_rng();
+        let a = G1Projective::random(&mut rng);
+        let b = G1Projective::random(&mut rng);
+        let c = a + b;
+        let d = a + a;
+        let a = G1Affine::from(a);
+        let b = G1Affine::from(b);
+        let c = G1Affine::from(c);
+        let d = G1Affine::from(d);
+
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let b_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+        let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let d_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc d"), &d).unwrap();
+        let z_alloc =
+            G1Point::alloc_element(&mut cs.namespace(|| "alloc z"), &G1Affine::identity()).unwrap();
+        let res1_alloc = a_alloc
+            .add_unified(&mut cs.namespace(|| "a+b"), &b_alloc)
+            .unwrap();
+        G1Point::assert_is_equal(&mut cs.namespace(|| "a+b = c"), &res1_alloc, &c_alloc).unwrap();
+        let res2_alloc = a_alloc
+            .add_unified(&mut cs.namespace(|| "a+a"), &a_alloc)
+            .unwrap();
+        G1Point::assert_is_equal(&mut cs.namespace(|| "a+a = d"), &res2_alloc, &d_alloc).unwrap();
+        let res3_alloc = a_alloc
+            .add_unified(&mut cs.namespace(|| "a+0"), &z_alloc)
+            .unwrap();
+        G1Point::assert_is_equal(&mut cs.namespace(|| "a+0 = a"), &res3_alloc, &a_alloc).unwrap();
+        let res4_alloc = z_alloc
+            .add_unified(&mut cs.namespace(|| "0+a"), &a_alloc)
+            .unwrap();
+        G1Point::assert_is_equal(&mut cs.namespace(|| "0+a = a"), &res4_alloc, &a_alloc).unwrap();
+        if !cs.is_satisfied() {
+            eprintln!("{:?}", cs.which_is_unsatisfied())
+        }
+        assert!(cs.is_satisfied());
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["28644"]);
+        expect_eq(cs.num_constraints(), &expect!["28836"]);
+    }
+
+    #[test]
+    fn test_assert_addition() {
         let mut rng = rand::thread_rng();
         let a = G1Projective::random(&mut rng);
         let b = G1Projective::random(&mut rng);
@@ -329,11 +546,36 @@ mod tests {
         let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
         let b_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
         let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
-        G1Point::assert_collinear(
-            &mut cs.namespace(|| "a+b-c = 0"),
+        // alloc it so it's not a constant
+        let z_alloc =
+            G1Point::alloc_element(&mut cs.namespace(|| "alloc 0"), &G1Affine::identity()).unwrap();
+        G1Point::assert_addition(
+            &mut cs.namespace(|| "assert_addition(a, b, c)"),
             &a_alloc,
             &b_alloc,
             &c_alloc,
+        )
+        .unwrap();
+        // test cases where a == 0 or b == 0
+        G1Point::assert_addition(
+            &mut cs.namespace(|| "assert_addition(a, 0, a)"),
+            &a_alloc,
+            &z_alloc,
+            &a_alloc,
+        )
+        .unwrap();
+        G1Point::assert_addition(
+            &mut cs.namespace(|| "assert_addition(0, b, b)"),
+            &z_alloc,
+            &b_alloc,
+            &b_alloc,
+        )
+        .unwrap();
+        G1Point::assert_addition(
+            &mut cs.namespace(|| "assert_addition(0, 0, 0)"),
+            &z_alloc,
+            &z_alloc,
+            &z_alloc,
         )
         .unwrap();
 
@@ -343,8 +585,8 @@ mod tests {
         assert!(cs.is_satisfied());
 
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["728"]);
-        expect_eq(cs.num_constraints(), &expect!["695"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["15256"]);
+        expect_eq(cs.num_constraints(), &expect!["15488"]);
     }
 
     #[test]
@@ -471,5 +713,42 @@ mod tests {
         expect_eq(cs.num_inputs(), &expect!["1"]);
         expect_eq(cs.scalar_aux().len(), &expect!["8913"]);
         expect_eq(cs.num_constraints(), &expect!["8919"]);
+    }
+
+    #[test]
+    fn test_random_alloc_is_zero() {
+        let mut rng = rand::thread_rng();
+        let a = G1Affine::from(G1Projective::random(&mut rng));
+        let b = G1Affine::from(G1Projective::random(&mut rng));
+
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let b_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+        let neg_a = a_alloc.neg(&mut cs.namespace(|| "-a")).unwrap();
+        let res_alloc = a_alloc.add_unified(&mut cs.namespace(|| "a-a"), &neg_a).unwrap();
+        G1Point::assert_is_equal(&mut cs.namespace(|| "a-a = 0"), &res_alloc, &G1Point::identity()).unwrap();
+        let zbit_alloc = res_alloc
+            .alloc_is_identity(&mut cs.namespace(|| "z <- a-a ?= 0"))
+            .unwrap();
+        let cond_alloc = G1Point::conditionally_select(
+            &mut cs.namespace(|| "select(a, b, z)"),
+            &a_alloc,
+            &b_alloc,
+            &Boolean::Is(zbit_alloc),
+        )
+        .unwrap();
+        G1Point::assert_is_equal(
+            &mut cs.namespace(|| "select(a, b, z) = b"),
+            &cond_alloc,
+            &b_alloc,
+        )
+        .unwrap();
+        if !cs.is_satisfied() {
+            eprintln!("{:?}", cs.which_is_unsatisfied())
+        }
+        assert!(cs.is_satisfied());
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["9015"]);
+        expect_eq(cs.num_constraints(), &expect!["9078"]);
     }
 }
