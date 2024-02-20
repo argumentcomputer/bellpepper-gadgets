@@ -602,50 +602,51 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use bellpepper_core::test_cs::TestConstraintSystem;
-    use halo2curves::bn256::Fq as Fp;
-    use halo2curves::group::Group;
+    // use super::*;
+    // use bellpepper_core::test_cs::TestConstraintSystem;
+    // use halo2curves::bn256::Fq as Fp;
+    // use halo2curves::group::Group;
 
-    use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective};
+    // use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective};
 
-    use expect_test::{expect, Expect};
-    fn expect_eq(computed: usize, expected: &Expect) {
-        expected.assert_eq(&computed.to_string());
-    }
+    // use expect_test::{expect, Expect};
+    // fn expect_eq(computed: usize, expected: &Expect) {
+    //     expected.assert_eq(&computed.to_string());
+    // }
 
-    #[test]
-    fn test_random_pairing() {
-        let mut rng = rand::thread_rng();
-        let a = G1Projective::random(&mut rng);
-        let b = G2Projective::random(&mut rng);
-        let a = G1Affine::from(a);
-        let b = G2Affine::from(b);
-        let c = bls12_381::pairing(&a, &b);
-        let c = c.0;
+    // NOTE: this test currently takes ~22GB of ram and ~50s to run. It's commented out for CI
+    // #[test]
+    // fn test_random_pairing() {
+    //     let mut rng = rand::thread_rng();
+    //     let a = G1Projective::random(&mut rng);
+    //     let b = G2Projective::random(&mut rng);
+    //     let a = G1Affine::from(a);
+    //     let b = G2Affine::from(b);
+    //     let c = bls12_381::pairing(&a, &b);
+    //     let c = c.0;
 
-        let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
-        let res_alloc = EmulatedBls12381Pairing::pair(
-            &mut cs.namespace(|| "pair(a, b)"),
-            &[a_alloc],
-            &[b_alloc],
-        )
-        .unwrap();
-        Fp12Element::assert_is_equal(&mut cs.namespace(|| "pair(a, b) = c"), &res_alloc, &c_alloc)
-            .unwrap();
-        if !cs.is_satisfied() {
-            eprintln!("{:?}", cs.which_is_unsatisfied())
-        }
-        assert!(cs.is_satisfied());
-        expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["7142222"]);
-        expect_eq(cs.num_constraints(), &expect!["7147240"]);
-    }
+    //     let mut cs = TestConstraintSystem::<Fp>::new();
+    //     let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+    //     let b_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+    //     let c_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+    //     let res_alloc = EmulatedBls12381Pairing::pair(
+    //         &mut cs.namespace(|| "pair(a, b)"),
+    //         &[a_alloc],
+    //         &[b_alloc],
+    //     )
+    //     .unwrap();
+    //     Fp12Element::assert_is_equal(&mut cs.namespace(|| "pair(a, b) = c"), &res_alloc, &c_alloc)
+    //         .unwrap();
+    //     if !cs.is_satisfied() {
+    //         eprintln!("{:?}", cs.which_is_unsatisfied())
+    //     }
+    //     assert!(cs.is_satisfied());
+    //     expect_eq(cs.num_inputs(), &expect!["1"]);
+    //     expect_eq(cs.scalar_aux().len(), &expect!["7142222"]);
+    //     expect_eq(cs.num_constraints(), &expect!["7147240"]);
+    // }
 
-    // NOTE: this test currently takes ~58GB of ram and 110s to run. It's commented out since CI does not have this much memory
+    // NOTE: this test currently takes ~50GB of ram and ~110s to run. It's commented out for CI
     // #[test]
     // fn test_random_multi_pairing() {
     //     use bls12_381::G2Prepared;
