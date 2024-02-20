@@ -9,6 +9,7 @@ use crate::fields::fp::FpElement;
 
 use super::params::{Bls12381G1Params, EmulatedCurveParams};
 
+/// Represents an affine point on BLS12-381's G1 curve. Point at infinity is represented with (0, 0)
 #[derive(Clone)]
 pub struct G1Point<F: PrimeFieldBits> {
     pub x: FpElement<F>,
@@ -112,6 +113,7 @@ impl<F: PrimeFieldBits> G1Point<F> {
         Ok(())
     }
 
+    /// Returns `phi(P)` where the coefficient is a cube root of unity in Fp
     pub fn phi<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -220,6 +222,7 @@ impl<F: PrimeFieldBits> G1Point<F> {
         Ok(())
     }
 
+    /// Returns the EC addition between `self` and `value`. Requires that `self != value`
     pub fn add<CS>(&self, cs: &mut CS, value: &Self) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -309,6 +312,7 @@ impl<F: PrimeFieldBits> G1Point<F> {
         Ok(res)
     }
 
+    /// Returns `-P`
     pub fn neg<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -319,6 +323,7 @@ impl<F: PrimeFieldBits> G1Point<F> {
         })
     }
 
+    /// Returns `self - value`. Requires that `self != -value` since it calls `add`
     pub fn sub<CS>(&self, cs: &mut CS, value: &Self) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -328,6 +333,7 @@ impl<F: PrimeFieldBits> G1Point<F> {
         Ok(res)
     }
 
+    /// Returns `self + self`
     pub fn double<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -353,6 +359,7 @@ impl<F: PrimeFieldBits> G1Point<F> {
         Ok(Self { x: xr, y: yr })
     }
 
+    /// Calls `self.double()` repeated `n` times
     pub fn double_n<CS>(&self, cs: &mut CS, n: usize) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -362,7 +369,8 @@ impl<F: PrimeFieldBits> G1Point<F> {
         let mut cs = cs.namespace(|| format!("G1::double_n(p, {n})"));
         for i in 0..n {
             if let Some(cur_p) = p {
-                let mut val = cur_p.double(&mut cs.namespace(|| format!("p <- p.double() ({i})")))?;
+                let mut val =
+                    cur_p.double(&mut cs.namespace(|| format!("p <- p.double() ({i})")))?;
                 if i % 2 == 1 {
                     val = val.reduce(&mut cs.namespace(|| format!("p <- p.reduce() ({i})")))?;
                 }
@@ -374,6 +382,7 @@ impl<F: PrimeFieldBits> G1Point<F> {
         Ok(tmp.unwrap())
     }
 
+    /// Returns `self + self + self`
     pub fn triple<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -411,6 +420,7 @@ impl<F: PrimeFieldBits> G1Point<F> {
         Ok(Self { x: xr, y: yr })
     }
 
+    /// Returns `2*self + value`
     pub fn double_and_add<CS>(&self, cs: &mut CS, value: &Self) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -472,6 +482,7 @@ impl<F: PrimeFieldBits> G1Point<F> {
         Ok(Self { x, y })
     }
 
+    /// Returns `[x^2]P` where `x` is the BLS parameter for BLS12-381, `-15132376222941642752`
     pub fn scalar_mul_by_seed_square<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -543,8 +554,8 @@ mod tests {
     use bellpepper_core::test_cs::TestConstraintSystem;
     use bls12_381::Scalar;
     use ff::Field;
-    use halo2curves::group::Group;
     use halo2curves::bn256::Fq as Fp;
+    use halo2curves::group::Group;
 
     use expect_test::{expect, Expect};
     fn expect_eq(computed: usize, expected: &Expect) {

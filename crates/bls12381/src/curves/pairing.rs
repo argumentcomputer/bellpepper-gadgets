@@ -107,7 +107,8 @@ impl<F: PrimeFieldBits> EmulatedBls12381Pairing<F> {
                     &mut cs.namespace(|| format!("q_acc,tmp0 <- double_step(q_acc) ({i})")),
                     &q_acc,
                 )?;
-                q_acc = tmpq.reduce(&mut cs.namespace(|| format!("q_acc <- tmpq.reduce() ({i})")))?;
+                q_acc =
+                    tmpq.reduce(&mut cs.namespace(|| format!("q_acc <- tmpq.reduce() ({i})")))?;
                 res.v0[i] = tmp0;
             } else {
                 let (tmpq, tmp0, tmp1) = Self::double_and_add_step(
@@ -117,7 +118,8 @@ impl<F: PrimeFieldBits> EmulatedBls12381Pairing<F> {
                     &q_acc,
                     q,
                 )?;
-                q_acc = tmpq.reduce(&mut cs.namespace(|| format!("q_acc <- tmpq.reduce() ({i})")))?;
+                q_acc =
+                    tmpq.reduce(&mut cs.namespace(|| format!("q_acc <- tmpq.reduce() ({i})")))?;
                 res.v0[i] = tmp0;
                 res.v1[i] = tmp1;
             }
@@ -602,8 +604,8 @@ where
 mod tests {
     use super::*;
     use bellpepper_core::test_cs::TestConstraintSystem;
-    use halo2curves::group::Group;
     use halo2curves::bn256::Fq as Fp;
+    use halo2curves::group::Group;
 
     use bls12_381::{G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective};
 

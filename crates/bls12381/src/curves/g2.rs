@@ -14,11 +14,15 @@ use crate::fields::fp2::Fp2Element;
 
 use super::params::EmulatedCurveParams;
 
+/// Represents an affine point on BLS12-381's G2 curve. Point at infinity is represented with (0, 0)
 #[derive(Clone)]
 pub struct G2Point<F: PrimeFieldBits> {
     pub x: Fp2Element<F>,
     pub y: Fp2Element<F>,
 }
+
+/// Represents a point on the curve E' isogenous to E specified in section 8.8.2 of [RFC 9380](https://datatracker.ietf.org/doc/rfc9380/)
+pub struct G2IsoPoint<F: PrimeField + PrimeFieldBits>(pub G2Point<F>);
 
 impl<F> From<&G2Affine> for G2Point<F>
 where
@@ -104,7 +108,8 @@ impl<F: PrimeFieldBits> G2Point<F> {
         let x = self
             .x
             .conjugate(&mut cs.namespace(|| "x <- p.x.conjugate()"))?;
-        let x = x.mul(&mut cs.namespace(|| "x <- x * c0"), &Bls12381G2Params::c0())?; // TODO: might be cheaper to use a different mul here since first coord is 0
+        let x = x.mul(&mut cs.namespace(|| "x <- x * c0"), &Bls12381G2Params::c0())?;
+        // TODO: might be cheaper to use a different mul here since first coord is 0
         let y = self
             .y
             .conjugate(&mut cs.namespace(|| "y <- p.y.conjugate()"))?;
@@ -120,12 +125,14 @@ impl<F: PrimeFieldBits> G2Point<F> {
         let w = Fp2Element {
             a0: Bls12381FpParams::w(),
             a1: FpElement::zero(),
-        }; // TODO: might be cheaper to use a different mul here since first coord is 0
+        };
+        // TODO: might be cheaper to use a different mul here since second coord is 0
         let x = self.x.mul(&mut cs.namespace(|| "x <- p.x * w"), &w)?;
         let y = self.y.neg(&mut cs.namespace(|| "y <- -p.y"))?;
         Ok(Self { x, y })
     }
 
+    /// Returns `[x]P` where `x` is the BLS parameter for BLS12-381, `-15132376222941642752`
     pub fn scalar_mul_by_seed<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -146,6 +153,7 @@ impl<F: PrimeFieldBits> G2Point<F> {
         Ok(z)
     }
 
+    /// Returns the EC addition between `self` and `value`. Requires that `self != value`
     pub fn add<CS>(&self, cs: &mut CS, value: &Self) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -170,13 +178,13 @@ impl<F: PrimeFieldBits> G2Point<F> {
         Ok(Self { x: xr, y: yr })
     }
 
+    /// This function is equivalent to `add`, but it will conditionally check if
+    /// the points are equal and call `double` instead if necessary.
     pub fn add_or_double<CS>(&self, cs: &mut CS, value: &Self) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
-        // NOTE: this is because the add function requires that p != q, otherwise it divides by zero
-        // here we conditionally select between double or add, so this function ends up costing double
-        // this is used in clear_cofactor() since there we don't know if the point is torsion free or not
+        // TODO: replace this with gnark's [AddUnified](https://github.com/Consensys/gnark/blob/9b8efdac514400a4100888b3cd5279e207f4a193/std/algebra/emulated/sw_emulated/point.go#L205)
         let diffx = self
             .x
             .sub(&mut cs.namespace(|| "diffx <- t1.x - t2.x"), &value.x)?;
@@ -234,6 +242,7 @@ impl<F: PrimeFieldBits> G2Point<F> {
         Ok(Self { x: resx, y: resy })
     }
 
+    /// Returns `-P`
     pub fn neg<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -244,6 +253,7 @@ impl<F: PrimeFieldBits> G2Point<F> {
         })
     }
 
+    /// Returns `self - value`. Requires that `self != -value` since it calls `add`
     pub fn sub<CS>(&self, cs: &mut CS, value: &Self) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -253,6 +263,7 @@ impl<F: PrimeFieldBits> G2Point<F> {
         Ok(res)
     }
 
+    /// Returns `self + self`
     pub fn double<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -278,6 +289,7 @@ impl<F: PrimeFieldBits> G2Point<F> {
         Ok(Self { x: xr, y: yr })
     }
 
+    /// Calls `self.double()` repeated `n` times
     pub fn double_n<CS>(&self, cs: &mut CS, n: usize) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -287,7 +299,8 @@ impl<F: PrimeFieldBits> G2Point<F> {
         let mut cs = cs.namespace(|| format!("G2::double_n(p, {n})"));
         for i in 0..n {
             if let Some(cur_p) = p {
-                let mut val = cur_p.double(&mut cs.namespace(|| format!("p <- p.double() ({i})")))?;
+                let mut val =
+                    cur_p.double(&mut cs.namespace(|| format!("p <- p.double() ({i})")))?;
                 if i % 2 == 1 {
                     val = val.reduce(&mut cs.namespace(|| format!("p <- p.reduce() ({i})")))?;
                 }
@@ -299,6 +312,7 @@ impl<F: PrimeFieldBits> G2Point<F> {
         Ok(tmp.unwrap())
     }
 
+    /// Returns `self + self + self`
     pub fn triple<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -336,6 +350,7 @@ impl<F: PrimeFieldBits> G2Point<F> {
         Ok(Self { x: xr, y: yr })
     }
 
+    /// Returns `2*self + value`
     pub fn double_and_add<CS>(&self, cs: &mut CS, value: &Self) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -373,8 +388,36 @@ impl<F: PrimeFieldBits> G2Point<F> {
         Ok(Self { x: x3, y: y3 })
     }
 
-    pub fn opt_simple_swu2<CS>(cs: &mut CS, t: &Fp2Element<F>) -> Result<Self, SynthesisError>
-    // TODO: this actually returns a point in E2' and not E2, so the type should be different
+    /// Returns a^e in Fp2. Internal helper function for opt_simple_swu2
+    fn fp2_pow_vartime(a: &BlsFp2, e: &BigInt) -> BlsFp2 {
+        let e_bytes = e.to_le_bytes();
+        let mut res = BlsFp2::one();
+        for e in e_bytes.iter().rev() {
+            for i in (0..8).rev() {
+                res = res.square();
+
+                if ((*e >> i) & 1) == 1 {
+                    res *= a;
+                }
+            }
+        }
+        res
+    }
+
+    /// Implementation of the optimized simple SWU map to BLS12-381 G2.
+    /// Following [circom-pairing's implementation](https://github.com/yi-sun/circom-pairing/blob/107c316223a08ac577522c54edd81f0fc4c03130/circuits/bls12_381_hash_to_G2.circom#L11-L29).
+    ///
+    /// Takes an input `t` in Fp2 and returns a point on the 3-isogenous curve E2'.
+    ///
+    /// Additional references:
+    ///   * [Section 8.8.2 of RFC 9380](https://www.rfc-editor.org/rfc/rfc9380.html#name-bls12-381-g2)
+    ///   * [Section 4.2 of Wahby-Boneh](https://eprint.iacr.org/2019/403.pdf)
+    ///   * [Reference python code from bls_sigs_ref](https://github.com/algorand/bls_sigs_ref/blob/master/python-impl/opt_swu_g2.py)
+    ///   * [Code from bls12_381's hash_to_curve module](https://github.com/zkcrypto/bls12_381/blob/4df45188913e9d66ef36ae12825865347eed4e1b/src/hash_to_curve/map_g2.rs#L387-L388)
+    pub fn opt_simple_swu2<CS>(
+        cs: &mut CS,
+        t: &Fp2Element<F>,
+    ) -> Result<G2IsoPoint<F>, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
@@ -384,6 +427,7 @@ impl<F: PrimeFieldBits> G2Point<F> {
         let xi = Fp2Element::from_dec(("2", "1")).unwrap();
         let xi = xi.neg(&mut cs.namespace(|| "xi <- (-2, -1)"))?;
 
+        // curve equation parameters for E2'
         // a <- (0, 240)
         // b <- (1012, 1012)
         let a = Fp2Element::from_dec(("0", "240")).unwrap();
@@ -488,30 +532,14 @@ impl<F: PrimeFieldBits> G2Point<F> {
         // Precompute sqrt_candidate = gX0^{(p^2 + 7) / 16}
         // p^2 + 7
         let c1: BigInt = (Bls12381FpParams::modulus() * Bls12381FpParams::modulus()) + 7;
-        // var c1[50] = long_add_unequal(n, 2*k, 1, prod(n, k, p, p), [7]);
         // (p^2 + 7) // 16
         let c2: BigInt = &c1 / BigInt::from(16);
-        // var c2[2][50] = long_div2(n, 1, 2*k-1, c1, [16]);
 
-        // assert p^2 + 7 is divisible by 16
         assert_eq!(&c1 % 16, BigInt::zero(), "p^2 + 7 divisible by 16");
 
-        // var sqrt_candidate[2][50] = find_Fp2_exp(n, k, gX0.out, p, c2[0]);
-        // gX0^c2 in Fp2
         let gx0_n = BlsFp2::from(&gx0);
         let gx1_n = BlsFp2::from(&gx1);
-        let c2_tmp = c2.to_le_bytes();
-        let mut sqrt_candidate0 = BlsFp2::one();
-        for e in c2_tmp.iter().rev() {
-            for i in (0..8).rev() {
-                sqrt_candidate0 = sqrt_candidate0.square();
-
-                if ((*e >> i) & 1) == 1 {
-                    sqrt_candidate0 *= gx0_n;
-                }
-            }
-        }
-        // TODO: factor this ^ out and test it properly
+        let sqrt_candidate0 = Self::fp2_pow_vartime(&gx0_n, &c2);
 
         // -1 is a square in Fp2 (because p^2 - 1 is even) so we only need to check half of the 8th roots of unity
         let tmp_big_to_fp2 = |c0: &str, c1: &str| -> BlsFp2 {
@@ -608,7 +636,7 @@ impl<F: PrimeFieldBits> G2Point<F> {
             sqrt_witness1
         };
         if tmp_sgn0(&outy_val) != tmp_sgn0(&t_native) {
-            outy_val = outy_val.neg(); // TODO: double check
+            outy_val = outy_val.neg();
         }
         let outy =
             Fp2Element::alloc_element(&mut cs.namespace(|| "alloc outy <- outy_val"), &outy_val)?;
@@ -629,33 +657,24 @@ impl<F: PrimeFieldBits> G2Point<F> {
         let sgn_y = outy.sgn0(&mut cs.namespace(|| "sgn_y <- outy.sgn0()"))?;
         Boolean::enforce_equal(&mut cs.namespace(|| "sgn_y == sgn_t"), &sgn_y, &sgn_t)?;
 
-        Ok(Self { x: outx, y: outy })
+        Ok(G2IsoPoint(Self { x: outx, y: outy }))
     }
 
-    // TODO: this takes and returns points in E2' and not E2
-    pub fn iso3_map<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
+    /// Maps points from the 3-isogenous curve E' to the main curve E.
+    ///
+    /// Assumes that the point is not the point at infinity. Returns the point
+    /// at infinity if the input is infinity or if the input is one of the
+    /// isogeny poles.
+    ///
+    /// References:
+    ///   * [Appendix E.3 of RFC 9380](https://www.rfc-editor.org/rfc/rfc9380.html#name-3-isogeny-map-for-bls12-381)
+    ///   * [Section 4.3 of Wahby-Boneh](https://eprint.iacr.org/2019/403.pdf)
+    ///   * [Reference python code from bls_sigs_ref](https://github.com/algorand/bls_sigs_ref/blob/master/python-impl/opt_swu_g2.py)
+    pub fn iso3_map<CS>(cs: &mut CS, p: &G2IsoPoint<F>) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
-        /*
-        3-Isogeny from E2' to E2
-        References:
-        Appendix E.3 of https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-hash-to-curve-14#appendix-E.3
-        Section 4.3 of Wahby-Boneh: https://eprint.iacr.org/2019/403.pdf
-        iso3(P) in Python reference code: https://github.com/algorand/bls_sigs_ref/blob/master/python-impl/opt_swu_g2.py
-         */
-
-        // Input:
-        //  in = (x', y') point on E2' assumed to not be point at infinity
-        //  inIsInfinity = 1 if input is point at infinity on E2' (in which case x', y' are arbitrary)
-        // Output:
-        //  out = (x, y) is point on E2 after applying 3-isogeny to in
-        //  isInfinity = 1 if one of exceptional cases occurs and output should be point at infinity
-        // Exceptions:
-        //  inIsInfinity = 1
-        //  input is a pole of the isogeny, i.e., x_den or y_den = 0
-
-        // https://cfrg.github.io/draft-irtf-cfrg-hash-to-curve/draft-irtf-cfrg-hash-to-curve.html#appendix-E.3
+        // list of coefficients from appendix E.3 of the RFC
         let iso3_coeffs = vec![
             vec![
                 Fp2Element::from_dec(("889424345604814976315064405719089812568196182208668418962679585805340366775741747653930584250892369786198727235542", "889424345604814976315064405719089812568196182208668418962679585805340366775741747653930584250892369786198727235542")).unwrap(),
@@ -687,9 +706,9 @@ impl<F: PrimeFieldBits> G2Point<F> {
         // y_num = sum_{i=0}^3 coeffs[2][i] * x'^i
         // y_den = x'^3 + sum_{i=0}^2 coeffs[3][i] * x'^i
 
-        let xp1 = self.x.clone();
-        let xp2 = self.x.square(&mut cs.namespace(|| "xp2 <- P.x.square()"))?;
-        let xp3 = xp2.mul(&mut cs.namespace(|| "xp3 <- xp2 * P.x"), &self.x)?;
+        let xp1 = p.0.x.clone();
+        let xp2 = p.0.x.square(&mut cs.namespace(|| "xp2 <- P.x.square()"))?;
+        let xp3 = xp2.mul(&mut cs.namespace(|| "xp3 <- xp2 * P.x"), &p.0.x)?;
         let xp_pow = vec![xp1.clone(), xp2.clone(), xp3.clone()];
         let deg = [3, 1, 3, 2];
         let mut coeffs_xp = vec![];
@@ -751,26 +770,18 @@ impl<F: PrimeFieldBits> G2Point<F> {
         let x_0 = num_0.div_unchecked(&mut cs.namespace(|| "x_0 <- num_0 div den_0"), &den_0)?;
         let x_1 = num_1.div_unchecked(&mut cs.namespace(|| "x_1 <- num_1 div den_1"), &den_1)?;
 
-        let y = self.y.mul(&mut cs.namespace(|| "y <- P.y * x_1"), &x_1)?;
+        let y = p.0.y.mul(&mut cs.namespace(|| "y <- P.y * x_1"), &x_1)?;
 
         Ok(Self { x: x_0, y })
     }
 
-    // in = P, a point on curve E2
-    // out = [x^2 - x - 1]P + [x-1]*psi(P) + psi2(2*P)
-    // where x = -15132376222941642752 is the parameter for BLS12-381
+    /// Clears the cofactor of a point to ensure it lies in the proper E2
+    /// subgroup.  Returns `[x^2 - x - 1]P + [x-1]*psi(P) + psi2(2*P)` where `x`
+    /// is the BLS parameter for BLS12-381, `-15132376222941642752`
     pub fn clear_cofactor<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
-        // from bls12_381:
-        // self.double().psi2() // psi^2(2P)
-        //     + (t1 + t2).mul_by_x() // psi^2(2P) + [x^2] P + [x] psi(P)
-        //     - t1 // psi^2(2P) + [x^2 - x] P + [x] psi(P)
-        //     - t2 // psi^2(2P) + [x^2 - x] P + [x - 1] psi(P)
-        //     - self // psi^2(2P) + [x^2 - x - 1] P + [x - 1] psi(P)
-
-        // TODO: currently this will divide by zero if P is torsion free (when t1 = t2)
         let t1 = self.scalar_mul_by_seed(&mut cs.namespace(|| "t1 <- p.scalar_mul_by_seed()"))?;
         let t2 = self.psi(&mut cs.namespace(|| "t2 <- p.psi()"))?;
 
@@ -786,6 +797,8 @@ impl<F: PrimeFieldBits> G2Point<F> {
         Ok(z)
     }
 
+    /// Given two Fp2 field elements `p1` and `p2`, calculate a point in G2 of BLS12-381.
+    /// Corresponds to function `map_to_curve` from [section 3 of RFC 9380](https://www.rfc-editor.org/rfc/rfc9380.html#name-encoding-byte-strings-to-el).
     pub fn map_to_g2<CS>(
         cs: &mut CS,
         p1: &Fp2Element<F>,
@@ -796,9 +809,10 @@ impl<F: PrimeFieldBits> G2Point<F> {
     {
         let u0 = Self::opt_simple_swu2(&mut cs.namespace(|| "u0 <- p1.opt_simple_swu2()"), p1)?;
         let u1 = Self::opt_simple_swu2(&mut cs.namespace(|| "u1 <- p2.opt_simple_swu2()"), p2)?;
-        let z = u0.add(&mut cs.namespace(|| "z <- u0 + u1"), &u1)?;
+        // we can use the regular addition function before calling iso3_map
+        let z = G2IsoPoint(u0.0.add(&mut cs.namespace(|| "z <- u0 + u1"), &u1.0)?);
 
-        let z = z.iso3_map(&mut cs.namespace(|| "z <- z.iso3_map()"))?;
+        let z = Self::iso3_map(&mut cs.namespace(|| "z <- z.iso3_map()"), &z)?;
 
         let z = z.clear_cofactor(&mut cs.namespace(|| "z <- z.clear_cofactor()"))?;
         // TODO: ensure z is infinity if either of the previous 2 ops is infinity? needs tests around isInfinity and exceptional cases
@@ -844,8 +858,8 @@ mod tests {
     use bellpepper_core::test_cs::TestConstraintSystem;
     use bls12_381::{hash_to_curve::MapToCurve, Scalar};
     use ff::Field;
-    use halo2curves::group::Group;
     use halo2curves::bn256::Fq as Fp;
+    use halo2curves::group::Group;
 
     use expect_test::{expect, Expect};
     fn expect_eq(computed: usize, expected: &Expect) {
@@ -1223,7 +1237,7 @@ mod tests {
             G2Point::opt_simple_swu2(&mut cs.namespace(|| "opt_simple_swu2(a)"), &a_alloc).unwrap();
         G2Point::assert_is_equal(
             &mut cs.namespace(|| "opt_simple_swu2(a) = c"),
-            &res_alloc,
+            &res_alloc.0,
             &c_alloc,
         )
         .unwrap();
@@ -1246,11 +1260,10 @@ mod tests {
         let c = G2Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let a_alloc =
+            G2IsoPoint(G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap());
         let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
-        let res_alloc = a_alloc
-            .iso3_map(&mut cs.namespace(|| "iso3_map(a)"))
-            .unwrap();
+        let res_alloc = G2Point::iso3_map(&mut cs.namespace(|| "iso3_map(a)"), &a_alloc).unwrap();
         G2Point::assert_is_equal(
             &mut cs.namespace(|| "iso3_map(a) = c"),
             &res_alloc,
