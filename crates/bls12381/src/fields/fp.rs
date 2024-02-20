@@ -1,13 +1,9 @@
 use bellpepper_core::{
     boolean::{AllocatedBit, Boolean},
-    num::AllocatedNum,
     ConstraintSystem, SynthesisError,
 };
-use bellpepper_emulated::{
-    field_element::{
-        EmulatedFieldElement, EmulatedFieldParams, EmulatedLimbs, PseudoMersennePrime,
-    },
-    util::bigint_to_scalar,
+use bellpepper_emulated::field_element::{
+    EmulatedFieldElement, EmulatedFieldParams, PseudoMersennePrime,
 };
 use bls12_381::fp::Fp as BlsFp;
 use ff::PrimeFieldBits;
@@ -298,58 +294,11 @@ impl<F: PrimeFieldBits> FpElement<F> {
         Ok(Self(res))
     }
 
-    /// Implements [sgn0](https://datatracker.ietf.org/doc/html/rfc9380#name-the-sgn0-function) which returns `x mod 2`
-    /// Enforces that self is reduced
     pub fn sgn0<CS>(&self, cs: &mut CS) -> Result<Boolean, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
-        self.0
-            .enforce_width_conditional(&mut cs.namespace(|| "ensure bitwidths in input"))?;
-
-        let least_sig = match &self.0.limbs {
-            EmulatedLimbs::Allocated(limbs) => limbs[0].get_value().unwrap(),
-            EmulatedLimbs::Constant(limbs) => limbs[0],
-        };
-
-        let (out_val, div) = {
-            let val = BigInt::from_bytes_le(Sign::Plus, least_sig.to_repr().as_ref());
-            let out = &val % 2u64;
-            let div = &val / 2u64;
-            assert_eq!(2u64 * &div + &out, val.clone(), "sanity check");
-            if out == BigInt::from(0u64) {
-                (false, div)
-            } else if out == BigInt::from(1u64) {
-                (true, div)
-            } else {
-                unreachable!("Division by 2 always returns 0 or 1")
-            }
-        };
-
-        let out = match &self.0.limbs {
-            EmulatedLimbs::Allocated(limbs) => {
-                let out_bit =
-                    AllocatedBit::alloc(&mut cs.namespace(|| "alloc sgn0 out"), Some(out_val))?;
-                let div = AllocatedNum::alloc(&mut cs.namespace(|| "alloc sgn0 div"), || {
-                    Ok(bigint_to_scalar(&div))
-                })?;
-
-                // enforce that least significant limb is divisible by 2
-                let two = F::ONE + F::ONE;
-                cs.enforce(
-                    || "enforce sgn0 bit",
-                    |lc| lc + CS::one(),
-                    |lc| lc + (two, div.get_variable()) + out_bit.get_variable(), // 2 * div + out
-                    |lc| lc + &limbs[0].lc(F::ONE),                              // least_sig
-                );
-                Boolean::from(out_bit)
-            }
-            EmulatedLimbs::Constant(_) => {
-                Boolean::Constant(out_val)
-            }
-        };
-
-        Ok(out)
+        self.0.sgn0(cs)
     }
 }
 
@@ -504,60 +453,6 @@ mod tests {
         expect_eq(cs.num_inputs(), &expect!["1"]);
         expect_eq(cs.scalar_aux().len(), &expect!["9"]);
         expect_eq(cs.num_constraints(), &expect!["4"]);
-    }
-
-    #[test]
-    fn test_sgn0() {
-        let mut cs = TestConstraintSystem::<Fp>::new();
-        let zero = FpElement::zero()
-            .sgn0(&mut cs.namespace(|| "sgn0(0)"))
-            .unwrap();
-        assert!(matches!(zero, Boolean::Constant(false)));
-        let one = FpElement::one()
-            .sgn0(&mut cs.namespace(|| "sgn0(1)"))
-            .unwrap();
-        assert!(matches!(one, Boolean::Constant(true)));
-        let neg_one = FpElement::one().neg(&mut cs.namespace(|| "-1")).unwrap();
-        let neg_one = neg_one.sgn0(&mut cs.namespace(|| "sgn0(-1)")).unwrap();
-        assert!(matches!(neg_one, Boolean::Constant(false)));
-        let neg_zero = FpElement::zero().neg(&mut cs.namespace(|| "-0")).unwrap();
-        let neg_zero = neg_zero.sgn0(&mut cs.namespace(|| "sgn0(-0)")).unwrap();
-        assert!(matches!(neg_zero, Boolean::Constant(false)));
-
-        // p-1 / 2
-        let p_m1_over2 = FpElement(Bls12381Fp::<Fp>::from(
-            &((Bls12381FpParams::modulus() - BigInt::from(1)) / BigInt::from(2)),
-        ));
-        let p_p1_over2 = p_m1_over2
-            .add(&mut cs.namespace(|| "p-1_over2 + 1"), &FpElement::one())
-            .unwrap();
-        let neg_p_p1_over2 = p_p1_over2
-            .neg(&mut cs.namespace(|| "-(p-1_over2+1)"))
-            .unwrap();
-        let p_m1_over2 = p_m1_over2
-            .sgn0(&mut cs.namespace(|| "sgn0(p-1_over2)"))
-            .unwrap();
-        assert!(matches!(p_m1_over2, Boolean::Constant(true)));
-        let p_p1_over2 = p_p1_over2
-            .sgn0(&mut cs.namespace(|| "sgn0(p-1_over2+1)"))
-            .unwrap();
-        assert!(matches!(p_p1_over2, Boolean::Constant(false)));
-        let neg_p_p1_over2 = neg_p_p1_over2
-            .sgn0(&mut cs.namespace(|| "sgn0(-(p-1_over2+1))"))
-            .unwrap();
-        Boolean::enforce_equal(
-            &mut cs.namespace(|| "-(p-1_over2+1) == p_m1_over2"),
-            &neg_p_p1_over2,
-            &p_m1_over2,
-        )
-        .unwrap();
-
-        if !cs.is_satisfied() {
-            eprintln!("{:?}", cs.which_is_unsatisfied())
-        }
-        assert!(cs.is_satisfied());
-        assert_eq!(cs.scalar_aux().len(), 0);
-        assert_eq!(cs.num_constraints(), 0);
     }
 
     #[test]
