@@ -1,16 +1,16 @@
 use bellpepper_core::boolean::{AllocatedBit, Boolean};
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use bellpepper_emulated::field_element::EmulatedFieldParams;
-use bls12_381::fp::Fp as BlsFp;
 use bls12_381::fp2::Fp2 as BlsFp2;
+use bls12_381::hash_to_curve::Sgn0;
 use bls12_381::{G2Affine, G2Projective};
 use ff::PrimeFieldBits;
 use num_bigint::BigInt;
-use num_traits::{ToBytes, Zero};
+use num_traits::Zero;
 
 use crate::curves::params::Bls12381G2Params;
-use crate::fields::fp::{bigint_to_fpelem, Bls12381FpParams, FpElement};
-use crate::fields::fp2::Fp2Element;
+use crate::fields::fp::{big_from_dec, bigint_to_fpelem, fp_from_dec, Bls12381FpParams, FpElement};
+use crate::fields::fp2::{fp2_from_dec, fp2_pow_vartime, Fp2Element};
 
 use super::params::EmulatedCurveParams;
 
@@ -22,7 +22,7 @@ pub struct G2Point<F: PrimeFieldBits> {
 }
 
 /// Represents a point on the curve E' isogenous to E specified in section 8.8.2 of [RFC 9380](https://datatracker.ietf.org/doc/rfc9380/)
-pub struct G2IsoPoint<F: PrimeField + PrimeFieldBits>(pub G2Point<F>);
+pub struct G2IsoPoint<F: PrimeFieldBits>(pub G2Point<F>);
 
 impl<F> From<&G2Affine> for G2Point<F>
 where
@@ -153,7 +153,7 @@ impl<F: PrimeFieldBits> G2Point<F> {
         Ok(z)
     }
 
-    /// Returns the EC addition between `self` and `value`. Requires that `self != value`
+    /// Returns the EC addition between `self` and `value`. Requires that `self != value` and that neither point is the identity
     pub fn add<CS>(&self, cs: &mut CS, value: &Self) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -253,7 +253,7 @@ impl<F: PrimeFieldBits> G2Point<F> {
         })
     }
 
-    /// Returns `self - value`. Requires that `self != -value` since it calls `add`
+    /// Returns `self - value`. Requires that `self != -value` and neither point is the identity since it calls `add`
     pub fn sub<CS>(&self, cs: &mut CS, value: &Self) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -388,22 +388,6 @@ impl<F: PrimeFieldBits> G2Point<F> {
         Ok(Self { x: x3, y: y3 })
     }
 
-    /// Returns a^e in Fp2. Internal helper function for opt_simple_swu2
-    fn fp2_pow_vartime(a: &BlsFp2, e: &BigInt) -> BlsFp2 {
-        let e_bytes = e.to_le_bytes();
-        let mut res = BlsFp2::one();
-        for e in e_bytes.iter().rev() {
-            for i in (0..8).rev() {
-                res = res.square();
-
-                if ((*e >> i) & 1) == 1 {
-                    res *= a;
-                }
-            }
-        }
-        res
-    }
-
     /// Implementation of the optimized simple SWU map to BLS12-381 G2.
     /// Following [circom-pairing's implementation](https://github.com/yi-sun/circom-pairing/blob/107c316223a08ac577522c54edd81f0fc4c03130/circuits/bls12_381_hash_to_G2.circom#L11-L29).
     ///
@@ -424,15 +408,15 @@ impl<F: PrimeFieldBits> G2Point<F> {
         let cs = &mut cs.namespace(|| "G2::opt_simple_swu2(t)");
 
         // xi <- (-2, -1)
-        let xi = Fp2Element::from_dec(("2", "1")).unwrap();
+        let xi = Fp2Element::from_dec("2", "1").unwrap();
         let xi = xi.neg(&mut cs.namespace(|| "xi <- (-2, -1)"))?;
 
         // curve equation parameters for E2'
         // a <- (0, 240)
         // b <- (1012, 1012)
-        let a = Fp2Element::from_dec(("0", "240")).unwrap();
+        let a = Fp2Element::from_dec("0", "240").unwrap();
         let a_neg = a.neg(&mut cs.namespace(|| "a_neg <- -a"))?;
-        let b = Fp2Element::from_dec(("1012", "1012")).unwrap();
+        let b = Fp2Element::from_dec("1012", "1012").unwrap();
 
         let t2 = t.square(&mut cs.namespace(|| "t2 <- t.square()"))?;
         let xi_t2 = xi.mul(&mut cs.namespace(|| "xi_t2 <- xi * t2"), &t2)?;
@@ -458,7 +442,7 @@ impl<F: PrimeFieldBits> G2Point<F> {
         let is_den_0 = x0_den.alloc_is_zero(&mut cs.namespace(|| "is_den_0"))?;
 
         // X1_den = a * xi = 240 - 480 i
-        let x1_den = Fp2Element::from_dec(("240", "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559307")).unwrap();
+        let x1_den = Fp2Element::from_dec("240", "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559307").unwrap();
 
         let ndc_a0 = num_den_common
             .a0
@@ -514,20 +498,18 @@ impl<F: PrimeFieldBits> G2Point<F> {
         // g(X1(t)) = xi^3 * t^6 * g(X0(t))
         let gx1 = xi3_t6.mul(&mut cs.namespace(|| "gx1 <- xi3_t6 * gx0"), &gx0)?;
 
-        /*
-        xi^3 is not a square, so one of gX0, gX1 must be a square
-        isSquare = 1 if gX0 is a square, = 0 if gX1 is a square
-        sqrt = sqrt(gX0) if isSquare = 1, sqrt = sqrt(gX1) if isSquare = 0
+        // xi^3 is not a square, so one of gX0, gX1 must be a square
+        // isSquare = 1 if gX0 is a square, = 0 if gX1 is a square
+        // sqrt = sqrt(gX0) if isSquare = 1, sqrt = sqrt(gX1) if isSquare = 0
 
-        Implementation is special to p^2 = 9 mod 16
-        References:
-        p. 9 of https://eprint.iacr.org/2019/403.pdf
-        F.2.1.1 for general version for any field: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-hash-to-curve-14#appendix-F.2.1.1
+        // Implementation is special to p^2 = 9 mod 16
+        // References:
+        // p. 9 of https://eprint.iacr.org/2019/403.pdf
+        // F.2.1.1 for general version for any field: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-hash-to-curve-14#appendix-F.2.1.1
 
-        I do not use the trick for combining division and sqrt from Section 5 of
-        Bernstein, Duif, Lange, Schwabe, and Yang, "High-speed high-security signatures",
-        since division is cheap
-         */
+        // we do not use the trick for combining division and sqrt from Section 5 of
+        // Bernstein, Duif, Lange, Schwabe, and Yang, "High-speed high-security signatures",
+        // since division is cheap in R1CS
 
         // Precompute sqrt_candidate = gX0^{(p^2 + 7) / 16}
         // p^2 + 7
@@ -539,34 +521,14 @@ impl<F: PrimeFieldBits> G2Point<F> {
 
         let gx0_n = BlsFp2::from(&gx0);
         let gx1_n = BlsFp2::from(&gx1);
-        let sqrt_candidate0 = Self::fp2_pow_vartime(&gx0_n, &c2);
+        let sqrt_candidate0 = fp2_pow_vartime(&gx0_n, &c2);
 
         // -1 is a square in Fp2 (because p^2 - 1 is even) so we only need to check half of the 8th roots of unity
-        let tmp_big_to_fp2 = |c0: &str, c1: &str| -> BlsFp2 {
-            let c0 = BigInt::parse_bytes(c0.as_bytes(), 10)
-                .as_ref()
-                .and_then(bigint_to_fpelem);
-            let c1 = BigInt::parse_bytes(c1.as_bytes(), 10)
-                .as_ref()
-                .and_then(bigint_to_fpelem);
-            if let (Some(c0), Some(c1)) = (c0, c1) {
-                BlsFp2 { c0, c1 }
-            } else {
-                panic!()
-            }
-        };
-        let tmp_big_to_fp = |v: &str| -> BlsFp {
-            BigInt::parse_bytes(v.as_bytes(), 10)
-                .as_ref()
-                .and_then(bigint_to_fpelem)
-                .expect("FIXME")
-        };
-        let tmp_big = |v: &str| -> BigInt { BigInt::parse_bytes(v.as_bytes(), 10).expect("FIXME") };
         let roots_of_unity = vec![
-            tmp_big_to_fp2("1", "0"),
-            tmp_big_to_fp2("0", "1"),
-            tmp_big_to_fp2("1028732146235106349975324479215795277384839936929757896155643118032610843298655225875571310552543014690878354869257", "1028732146235106349975324479215795277384839936929757896155643118032610843298655225875571310552543014690878354869257"),
-            tmp_big_to_fp2("1028732146235106349975324479215795277384839936929757896155643118032610843298655225875571310552543014690878354869257", "2973677408986561043442465346520108879172042883009249989176415018091420807192182638567116318576472649347015917690530"),
+            fp2_from_dec("1", "0").unwrap(),
+            fp2_from_dec("0", "1").unwrap(),
+            fp2_from_dec("1028732146235106349975324479215795277384839936929757896155643118032610843298655225875571310552543014690878354869257", "1028732146235106349975324479215795277384839936929757896155643118032610843298655225875571310552543014690878354869257").unwrap(),
+            fp2_from_dec("1028732146235106349975324479215795277384839936929757896155643118032610843298655225875571310552543014690878354869257", "2973677408986561043442465346520108879172042883009249989176415018091420807192182638567116318576472649347015917690530").unwrap(),
         ];
         let mut is_square0_val: bool = false;
         let mut sqrt_witness0: BlsFp2 = BlsFp2::zero();
@@ -593,10 +555,10 @@ impl<F: PrimeFieldBits> G2Point<F> {
         let sqrt_candidate1 = sqrt_candidate0 * t3;
 
         let etas = vec![
-            tmp_big_to_fp2("1015919005498129635886032702454337503112659152043614931979881174103627376789972962005013361970813319613593700736144", "1244231661155348484223428017511856347821538750986231559855759541903146219579071812422210818684355842447591283616181"),
-            BlsFp2 { c0: bigint_to_fpelem(&(&Bls12381FpParams::modulus() - tmp_big("1244231661155348484223428017511856347821538750986231559855759541903146219579071812422210818684355842447591283616181"))).unwrap(), c1: tmp_big_to_fp("1015919005498129635886032702454337503112659152043614931979881174103627376789972962005013361970813319613593700736144") },
-            tmp_big_to_fp2("1646015993121829755895883253076789309308090876275172350194834453434199515639474951814226234213676147507404483718679", "1637752706019426886789797193293828301565549384974986623510918743054325021588194075665960171838131772227885159387073"),
-            BlsFp2 { c0: bigint_to_fpelem(&(&Bls12381FpParams::modulus() - tmp_big("1637752706019426886789797193293828301565549384974986623510918743054325021588194075665960171838131772227885159387073"))).unwrap(), c1: tmp_big_to_fp("1646015993121829755895883253076789309308090876275172350194834453434199515639474951814226234213676147507404483718679") },
+            fp2_from_dec("1015919005498129635886032702454337503112659152043614931979881174103627376789972962005013361970813319613593700736144", "1244231661155348484223428017511856347821538750986231559855759541903146219579071812422210818684355842447591283616181").unwrap(),
+            BlsFp2 { c0: bigint_to_fpelem(&(&Bls12381FpParams::modulus() - big_from_dec("1244231661155348484223428017511856347821538750986231559855759541903146219579071812422210818684355842447591283616181").unwrap())).unwrap(), c1: fp_from_dec("1015919005498129635886032702454337503112659152043614931979881174103627376789972962005013361970813319613593700736144").unwrap() },
+            fp2_from_dec("1646015993121829755895883253076789309308090876275172350194834453434199515639474951814226234213676147507404483718679", "1637752706019426886789797193293828301565549384974986623510918743054325021588194075665960171838131772227885159387073").unwrap(),
+            BlsFp2 { c0: bigint_to_fpelem(&(&Bls12381FpParams::modulus() - big_from_dec("1637752706019426886789797193293828301565549384974986623510918743054325021588194075665960171838131772227885159387073").unwrap())).unwrap(), c1: fp_from_dec("1646015993121829755895883253076789309308090876275172350194834453434199515639474951814226234213676147507404483718679").unwrap() },
         ];
         let mut is_square1_val: bool = false;
         let mut sqrt_witness1: BlsFp2 = BlsFp2::zero();
@@ -625,17 +587,15 @@ impl<F: PrimeFieldBits> G2Point<F> {
         )?;
 
         let sgn_t = t.sgn0(&mut cs.namespace(|| "sgn_t <- t.sgn0()"))?;
-        let tmp_sgn0 = |x: &BlsFp2| -> bool {
-            use bls12_381::hash_to_curve::Sgn0;
-            x.sgn0().into()
-        };
 
         let mut outy_val = if is_square0_val {
             sqrt_witness0
         } else {
             sqrt_witness1
         };
-        if tmp_sgn0(&outy_val) != tmp_sgn0(&t_native) {
+        let y_sgn0: bool = outy_val.sgn0().into();
+        let t_sgn0: bool = t_native.sgn0().into();
+        if y_sgn0 != t_sgn0 {
             outy_val = outy_val.neg();
         }
         let outy =
@@ -677,25 +637,25 @@ impl<F: PrimeFieldBits> G2Point<F> {
         // list of coefficients from appendix E.3 of the RFC
         let iso3_coeffs = vec![
             vec![
-                Fp2Element::from_dec(("889424345604814976315064405719089812568196182208668418962679585805340366775741747653930584250892369786198727235542", "889424345604814976315064405719089812568196182208668418962679585805340366775741747653930584250892369786198727235542")).unwrap(),
-                Fp2Element::from_dec(("0", "2668273036814444928945193217157269437704588546626005256888038757416021100327225242961791752752677109358596181706522")).unwrap(),
-                Fp2Element::from_dec(("2668273036814444928945193217157269437704588546626005256888038757416021100327225242961791752752677109358596181706526", "1334136518407222464472596608578634718852294273313002628444019378708010550163612621480895876376338554679298090853261")).unwrap(),
-                Fp2Element::from_dec(("3557697382419259905260257622876359250272784728834673675850718343221361467102966990615722337003569479144794908942033", "0")).unwrap(),
+                Fp2Element::from_dec("889424345604814976315064405719089812568196182208668418962679585805340366775741747653930584250892369786198727235542", "889424345604814976315064405719089812568196182208668418962679585805340366775741747653930584250892369786198727235542").unwrap(),
+                Fp2Element::from_dec("0", "2668273036814444928945193217157269437704588546626005256888038757416021100327225242961791752752677109358596181706522").unwrap(),
+                Fp2Element::from_dec("2668273036814444928945193217157269437704588546626005256888038757416021100327225242961791752752677109358596181706526", "1334136518407222464472596608578634718852294273313002628444019378708010550163612621480895876376338554679298090853261").unwrap(),
+                Fp2Element::from_dec("3557697382419259905260257622876359250272784728834673675850718343221361467102966990615722337003569479144794908942033", "0").unwrap(),
             ],
             vec![
-                Fp2Element::from_dec(("0", "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559715")).unwrap(),
-                Fp2Element::from_dec(("12", "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559775")).unwrap(),
+                Fp2Element::from_dec("0", "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559715").unwrap(),
+                Fp2Element::from_dec("12", "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559775").unwrap(),
             ],
             vec![
-                Fp2Element::from_dec(("3261222600550988246488569487636662646083386001431784202863158481286248011511053074731078808919938689216061999863558", "3261222600550988246488569487636662646083386001431784202863158481286248011511053074731078808919938689216061999863558")).unwrap(),
-                Fp2Element::from_dec(("0", "889424345604814976315064405719089812568196182208668418962679585805340366775741747653930584250892369786198727235518")).unwrap(),
-                Fp2Element::from_dec(("2668273036814444928945193217157269437704588546626005256888038757416021100327225242961791752752677109358596181706524", "1334136518407222464472596608578634718852294273313002628444019378708010550163612621480895876376338554679298090853263")).unwrap(),
-                Fp2Element::from_dec(("2816510427748580758331037284777117739799287910327449993381818688383577828123182200904113516794492504322962636245776", "0")).unwrap(),
+                Fp2Element::from_dec("3261222600550988246488569487636662646083386001431784202863158481286248011511053074731078808919938689216061999863558", "3261222600550988246488569487636662646083386001431784202863158481286248011511053074731078808919938689216061999863558").unwrap(),
+                Fp2Element::from_dec("0", "889424345604814976315064405719089812568196182208668418962679585805340366775741747653930584250892369786198727235518").unwrap(),
+                Fp2Element::from_dec("2668273036814444928945193217157269437704588546626005256888038757416021100327225242961791752752677109358596181706524", "1334136518407222464472596608578634718852294273313002628444019378708010550163612621480895876376338554679298090853263").unwrap(),
+                Fp2Element::from_dec("2816510427748580758331037284777117739799287910327449993381818688383577828123182200904113516794492504322962636245776", "0").unwrap(),
             ],
             vec![
-                Fp2Element::from_dec(("4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559355", "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559355")).unwrap(),
-                Fp2Element::from_dec(("0", "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559571")).unwrap(),
-                Fp2Element::from_dec(("18", "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559769")).unwrap(),
+                Fp2Element::from_dec("4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559355", "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559355").unwrap(),
+                Fp2Element::from_dec("0", "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559571").unwrap(),
+                Fp2Element::from_dec("18", "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559769").unwrap(),
             ],
         ];
 
@@ -714,12 +674,12 @@ impl<F: PrimeFieldBits> G2Point<F> {
         let mut coeffs_xp = vec![];
         for i in 0..4 {
             let mut coeffs_j = vec![];
-            for j in 0..deg[i] {
+            for (j, xp) in xp_pow.iter().enumerate().take(deg[i]) {
                 let coeff = iso3_coeffs[i][j + 1].mul(
                     &mut cs.namespace(|| {
                         format!("coeff_xp_{i}_{j} <- coeffs[{i}][{}] * xp_pow[{j}]", j + 1)
                     }),
-                    &xp_pow[j],
+                    xp,
                 )?;
                 coeffs_j.push(coeff);
             }
@@ -815,7 +775,7 @@ impl<F: PrimeFieldBits> G2Point<F> {
         let z = Self::iso3_map(&mut cs.namespace(|| "z <- z.iso3_map()"), &z)?;
 
         let z = z.clear_cofactor(&mut cs.namespace(|| "z <- z.clear_cofactor()"))?;
-        // TODO: ensure z is infinity if either of the previous 2 ops is infinity? needs tests around isInfinity and exceptional cases
+        // TODO: ensure z is infinity if either of the previous 2 ops is infinity? needs tests around isInfinity and exceptional cases (currently returns DivisionByZero error)
 
         Ok(z)
     }

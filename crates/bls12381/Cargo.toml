@@ -2,7 +2,7 @@
 name = "bellpepper-bls12381"
 version = "0.2.0"
 edition = "2021"
-authors = ["Gustavo <gustavo@wrinqle.net>"]
+authors = ["Lurk Lab Engineering <engineering@lurk-lab.com>"]
 license.workspace=true
 description = "Bellpepper circuit implementation of BLS12-381 pairing and curve operations"
 documentation = "https://docs.rs/bellpepper-bls12381"

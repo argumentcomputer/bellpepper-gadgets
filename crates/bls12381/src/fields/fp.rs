@@ -120,6 +120,14 @@ where
     bigint_to_fpelem(&val).unwrap()
 }
 
+pub(crate) fn big_from_dec(v: &str) -> Option<BigInt> {
+    BigInt::parse_bytes(v.as_bytes(), 10)
+}
+
+pub(crate) fn fp_from_dec(v: &str) -> Option<BlsFp> {
+    big_from_dec(v).as_ref().and_then(bigint_to_fpelem)
+}
+
 impl<F> From<&FpElement<F>> for BlsFp
 where
     F: PrimeFieldBits,
@@ -139,11 +147,7 @@ impl<F: PrimeFieldBits> From<&FpElement<F>> for BigInt {
 
 impl<F: PrimeFieldBits> FpElement<F> {
     pub fn from_dec(val: &str) -> Option<Self> {
-        BigInt::parse_bytes(val.as_bytes(), 10)
-            .as_ref()
-            .and_then(bigint_to_fpelem)
-            .as_ref()
-            .map(Self::from)
+        fp_from_dec(val).as_ref().map(Self::from)
     }
 
     pub fn zero() -> Self {

@@ -222,7 +222,7 @@ impl<F: PrimeFieldBits> G1Point<F> {
         Ok(())
     }
 
-    /// Returns the EC addition between `self` and `value`. Requires that `self != value`
+    /// Returns the EC addition between `self` and `value`. Requires that `self != value` and that neither point is the identity
     pub fn add<CS>(&self, cs: &mut CS, value: &Self) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -323,7 +323,7 @@ impl<F: PrimeFieldBits> G1Point<F> {
         })
     }
 
-    /// Returns `self - value`. Requires that `self != -value` since it calls `add`
+    /// Returns `self - value`. Requires that `self != -value` and neither point is the identity since it calls `add`
     pub fn sub<CS>(&self, cs: &mut CS, value: &Self) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
