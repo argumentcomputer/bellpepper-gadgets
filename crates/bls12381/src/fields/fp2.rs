@@ -388,11 +388,6 @@ impl<F: PrimeFieldBits> Fp2Element<F> {
         // x*inv = 1
         let prod = inv_alloc.mul(&mut cs.namespace(|| "x*inv"), self)?;
 
-        // TODO: An alternative implementation would be calling
-        // `assert_equality_to_constant(1)`, however that seems to only work if
-        // we `reduce` the value first, and then the constraint count of just
-        // calling `assert_is_equal` ends up being lower instead.
-
         Self::assert_is_equal(&mut cs.namespace(|| "x*inv = 1 mod P"), &prod, &Self::one())?;
 
         Ok(inv_alloc)

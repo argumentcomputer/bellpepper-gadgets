@@ -287,10 +287,10 @@ impl<F: PrimeFieldBits> G2Point<F> {
         let mut cs = cs.namespace(|| format!("G2::double_n(p, {n})"));
         for i in 0..n {
             if let Some(cur_p) = p {
-                let val = cur_p.double(&mut cs.namespace(|| format!("p <- p.double() ({i})")))?;
-                // TODO: This fails with an overflow without an explicit reduce call every few iterations, even though theoretically this should be happening automatically. needs further investigation
-                // even weirder, the constraint count for `scalar_mul_by_seed` goes up if this reduce is called less often
-                let val = val.reduce(&mut cs.namespace(|| format!("p <- p.reduce() ({i})")))?;
+                let mut val = cur_p.double(&mut cs.namespace(|| format!("p <- p.double() ({i})")))?;
+                if i % 2 == 1 {
+                    val = val.reduce(&mut cs.namespace(|| format!("p <- p.reduce() ({i})")))?;
+                }
                 tmp = Some(val);
                 p = tmp.as_ref();
             }
@@ -1030,8 +1030,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["443992"]);
-        expect_eq(cs.num_constraints(), &expect!["444284"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["440023"]);
+        expect_eq(cs.num_constraints(), &expect!["440303"]);
     }
 
     #[test]
@@ -1050,8 +1050,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["445588"]);
-        expect_eq(cs.num_constraints(), &expect!["445908"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["441619"]);
+        expect_eq(cs.num_constraints(), &expect!["441927"]);
     }
 
     #[test]
@@ -1125,8 +1125,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["973844"]);
-        expect_eq(cs.num_constraints(), &expect!["974694"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["965906"]);
+        expect_eq(cs.num_constraints(), &expect!["966732"]);
     }
 
     #[test]
@@ -1171,8 +1171,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["973844"]);
-        expect_eq(cs.num_constraints(), &expect!["974694"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["965906"]);
+        expect_eq(cs.num_constraints(), &expect!["966732"]);
     }
 
     #[test]
@@ -1205,8 +1205,8 @@ mod tests {
             .unwrap();
         assert!(!cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["445588"]);
-        expect_eq(cs.num_constraints(), &expect!["445908"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["441619"]);
+        expect_eq(cs.num_constraints(), &expect!["441927"]);
     }
 
     #[test]
@@ -1294,7 +1294,7 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["1460221"]);
-        expect_eq(cs.num_constraints(), &expect!["1463059"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["1450871"]);
+        expect_eq(cs.num_constraints(), &expect!["1453683"]);
     }
 }

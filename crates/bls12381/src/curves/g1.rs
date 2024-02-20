@@ -362,9 +362,10 @@ impl<F: PrimeFieldBits> G1Point<F> {
         let mut cs = cs.namespace(|| format!("G1::double_n(p, {n})"));
         for i in 0..n {
             if let Some(cur_p) = p {
-                let val = cur_p.double(&mut cs.namespace(|| format!("p <- p.double() ({i})")))?;
-                // TODO: Don't call reduce as often. A similar problem exists in G2Point::double_n
-                let val = val.reduce(&mut cs.namespace(|| format!("p <- p.reduce() ({i})")))?;
+                let mut val = cur_p.double(&mut cs.namespace(|| format!("p <- p.double() ({i})")))?;
+                if i % 2 == 1 {
+                    val = val.reduce(&mut cs.namespace(|| format!("p <- p.reduce() ({i})")))?;
+                }
                 tmp = Some(val);
                 p = tmp.as_ref();
             }
@@ -872,8 +873,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["492554"]);
-        expect_eq(cs.num_constraints(), &expect!["493829"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["489860"]);
+        expect_eq(cs.num_constraints(), &expect!["491128"]);
     }
 
     #[test]
@@ -892,8 +893,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["492934"]);
-        expect_eq(cs.num_constraints(), &expect!["494223"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["490240"]);
+        expect_eq(cs.num_constraints(), &expect!["491522"]);
     }
 
     #[test]
@@ -926,8 +927,8 @@ mod tests {
             .unwrap();
         assert!(!cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["492934"]);
-        expect_eq(cs.num_constraints(), &expect!["494223"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["490240"]);
+        expect_eq(cs.num_constraints(), &expect!["491522"]);
     }
 
     #[test]
