@@ -58,7 +58,7 @@ impl<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> FoldStep<F, 
     ) -> Result<(Option<AllocatedNum<F>>, Vec<AllocatedNum<F>>), SynthesisError> {
         let (z_in, chunk_in) = z.split_at(C::arity());
 
-        let mut z_out = self.circuit.chunk_synthesize(
+        let mut z_out = self.circuit.synthesize(
             &mut cs.namespace(|| format!("chunk_folding_step_{}", self.step_nbr)),
             pc,
             z_in,

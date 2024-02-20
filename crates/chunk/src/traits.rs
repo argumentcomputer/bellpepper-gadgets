@@ -15,14 +15,14 @@ pub trait ChunkStepCircuit<F: PrimeField>: Clone + Sync + Send + Debug + Partial
         1
     }
 
-    /// `chunk_synthesize` must be the method that performs the computation for a given step.
+    /// `synthesize` must be the method that performs the computation for a given step.
     ///
     /// # Arguments
     /// * `cs` - The constraint system to which the circuit is being added.
     /// * `pc` - The program counter value for the current step.
     /// * `z` - The accumulator value for the current step.
     /// * `chunk_in` - The input values for the current step (which are the output values from the previous step).
-    fn chunk_synthesize<CS: ConstraintSystem<F>>(
+    fn synthesize<CS: ConstraintSystem<F>>(
         &self,
         cs: &mut CS,
         pc: Option<&AllocatedNum<F>>,

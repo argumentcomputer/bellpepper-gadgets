@@ -43,7 +43,7 @@ impl<F: PrimeField> ChunkStepCircuit<F> for ChunkStep<F> {
         }
     }
 
-    fn chunk_synthesize<CS: ConstraintSystem<F>>(
+    fn synthesize<CS: ConstraintSystem<F>>(
         &self,
         cs: &mut CS,
         _pc: Option<&AllocatedNum<F>>,
@@ -180,7 +180,7 @@ fn main() {
         <E1 as Engine>::Scalar::zero(),
     ];
 
-    // number of iterations of MinRoot per Nova's recursive step
+    // Different instantiations of circuit for each of the nova fold steps
     let inner_chunk_circuit = Inner::new(&[
         <E1 as Engine>::Scalar::one(),
         <E1 as Engine>::Scalar::from(2),

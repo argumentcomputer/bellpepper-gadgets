@@ -22,7 +22,7 @@ impl<F: PrimeField> ChunkStepCircuit<F> for ChunkStep<F> {
         }
     }
 
-    fn chunk_synthesize<CS: ConstraintSystem<F>>(
+    fn synthesize<CS: ConstraintSystem<F>>(
         &self,
         cs: &mut CS,
         _pc: Option<&AllocatedNum<F>>,
