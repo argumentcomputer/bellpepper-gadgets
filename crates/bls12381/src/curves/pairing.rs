@@ -4,9 +4,6 @@ use bellpepper_core::{
     boolean::{AllocatedBit, Boolean},
     ConstraintSystem, SynthesisError,
 };
-use bls12_381::fp12::Fp12 as BlsFp12;
-use bls12_381::fp2::Fp2 as BlsFp2;
-use bls12_381::fp6::Fp6 as BlsFp6;
 use ff::PrimeFieldBits;
 use num_bigint::BigInt;
 
@@ -326,9 +323,7 @@ impl<F: PrimeFieldBits> EmulatedBls12381Pairing<F> {
             x_neg_over_y.push(x);
         }
 
-        // TODO: there should be some unnecessary allocs due to how we're overwriting some res values below, double check
-        let mut res =
-            Fp12Element::alloc_element(&mut cs.namespace(|| "res <- 1"), &BlsFp12::one())?;
+        let mut res = Fp12Element::one();
 
         // Compute ∏ᵢ { fᵢ_{x₀,Q}(P) }
 
@@ -349,8 +344,7 @@ impl<F: PrimeFieldBits> EmulatedBls12381Pairing<F> {
                 &x_neg_over_y[0],
             )?
             .clone();
-        res.c1.b1 =
-            Fp2Element::alloc_element(&mut cs.namespace(|| "res.c1.b1 <- 1"), &BlsFp2::one())?;
+        res.c1.b1 = Fp2Element::one();
 
         let tmp0 = lines[0].v1[62].r1.mul_element(
             &mut cs.namespace(|| "tmp0 <- l[0][1][62].r1 * y_inv[0]"),
@@ -483,8 +477,6 @@ where
         let cs = &mut cs.namespace(|| format!("final_exponentiation(e, {is_single_pairing})"));
         let mut e = gt.clone();
         let mut sel1: Option<AllocatedBit> = None;
-        let mut dummy: Option<Fp6Element<F>> = None;
-
         // 1. Easy part
         // (p⁶-1)(p²+1)
 
@@ -497,19 +489,15 @@ where
             // However, for a product of Miller loops (n>=2) this might happen.  If this is
             // the case, the result is 1 in the torus. We assign a dummy value (1) to e.C1
             // and proceed further.
-            dummy = Some(Fp6Element::<F>::alloc_element(
-                &mut cs.namespace(|| "alloc dummy"),
-                &BlsFp6::one(),
-            )?); // TODO: do we need to explicit alloc here or could this be a constant?
             sel1 = Some(e.c1.alloc_is_zero(&mut cs.namespace(|| "sel1 <- e.c1.is_zero()"))?);
-            // reduce e.c1 explicitly so both e.c1 and dummy have the same number of limbs (for conditionally_select)
+            // reduce e.c1 explicitly so both e.c1 and the const dummy have the same number of limbs (for conditionally_select)
             let ec1 = e.c1.reduce(&mut cs.namespace(|| "e.c1 <- e.c1.reduce()"))?;
             e = Fp12Element {
                 c0: e.c0,
                 c1: Fp6Element::conditionally_select(
-                    &mut cs.namespace(|| "e.c1 <- select(e.c1, dummy, sel1)"),
+                    &mut cs.namespace(|| "e.c1 <- select(e.c1, 1, sel1)"),
                     &ec1,
-                    dummy.as_ref().unwrap(),
+                    &Fp6Element::one(),
                     &Boolean::Is(sel1.clone().unwrap()),
                 )?,
             };
@@ -570,9 +558,9 @@ where
             let sel2: AllocatedBit =
                 sum.alloc_is_zero(&mut cs.namespace(|| "sel2 <- sum.is_zero()"))?;
             let t1 = Fp6Element::conditionally_select(
-                &mut cs.namespace(|| "t1 <- select(t1, dummy, sel2)"),
+                &mut cs.namespace(|| "t1 <- select(t1, 1, sel2)"),
                 &t1,
-                &dummy.unwrap(),
+                &Fp6Element::one(),
                 &Boolean::Is(sel2.clone()),
             )?;
             let selector = AllocatedBit::nor(
@@ -584,13 +572,9 @@ where
             let t1 = Torus(t1);
             let res = ct.mul(&mut cs.namespace(|| "res <- ct * t1"), &t1)?;
             let res = res.decompress(&mut cs.namespace(|| "res <- res.decompress()"))?;
-            let dummy2 = Fp12Element::<F>::alloc_element(
-                &mut cs.namespace(|| "alloc dummy2"),
-                &BlsFp12::one(),
-            )?; // TODO: does this need an explicit alloc or could this be a constant?
             let res = Fp12Element::conditionally_select(
                 &mut cs.namespace(|| "res <- select(1, res, selector)"),
-                &dummy2,
+                &Fp12Element::one(),
                 &res,
                 &Boolean::Is(selector),
             )?;
@@ -623,100 +607,96 @@ where
 
 #[cfg(test)]
 mod tests {
-    // use super::*;
-    // use bellpepper_core::test_cs::TestConstraintSystem;
-    // use pasta_curves::group::Group;
-    // use pasta_curves::Fp;
+    use super::*;
+    use bellpepper_core::test_cs::TestConstraintSystem;
+    use pasta_curves::group::Group;
+    use pasta_curves::Fp;
 
-    // use bls12_381::{G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective};
+    use bls12_381::{G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective};
 
-    // use expect_test::{expect, Expect};
-    // fn expect_eq(computed: usize, expected: Expect) {
-    //     expected.assert_eq(&computed.to_string());
-    // }
+    use expect_test::{expect, Expect};
+    fn expect_eq(computed: usize, expected: &Expect) {
+        expected.assert_eq(&computed.to_string());
+    }
 
     // NOTE: this test currently takes ~100GB of ram and a few minutes to run, so it's commented out
-    // #[test]
-    // fn test_random_pairing() {
-    //     let mut rng = rand::thread_rng();
-    //     let a = G1Projective::random(&mut rng);
-    //     let b = G2Projective::random(&mut rng);
-    //     let a = G1Affine::from(a);
-    //     let b = G2Affine::from(b);
-    //     let c = bls12_381::pairing(&a, &b);
-    //     let c = c.0;
+    #[test]
+    fn test_random_pairing() {
+        let mut rng = rand::thread_rng();
+        let a = G1Projective::random(&mut rng);
+        let b = G2Projective::random(&mut rng);
+        let a = G1Affine::from(a);
+        let b = G2Affine::from(b);
+        let c = bls12_381::pairing(&a, &b);
+        let c = c.0;
 
-    //     let mut cs = TestConstraintSystem::<Fp>::new();
-    //     let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-    //     let b_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-    //     let c_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
-    //     let res_alloc = EmulatedBls12381Pairing::pair(
-    //         &mut cs.namespace(|| "pair(a, b)"),
-    //         &[a_alloc],
-    //         &[b_alloc],
-    //     )
-    //     .unwrap();
-    //     Fp12Element::assert_is_equal(&mut cs.namespace(|| "pair(a, b) = c"), &res_alloc, &c_alloc)
-    //         .unwrap();
-    //     if !cs.is_satisfied() {
-    //         eprintln!("{:?}", cs.which_is_unsatisfied())
-    //     }
-    //     assert!(cs.is_satisfied());
-    //     expect_eq(cs.num_inputs(), expect!["1"]);
-    //     expect_eq(cs.scalar_aux().len(), expect!["27479875"]);
-    //     expect_eq(cs.num_constraints(), expect!["27589382"]);
-    // }
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let b_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+        let c_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = EmulatedBls12381Pairing::pair(
+            &mut cs.namespace(|| "pair(a, b)"),
+            &[a_alloc],
+            &[b_alloc],
+        )
+        .unwrap();
+        Fp12Element::assert_is_equal(&mut cs.namespace(|| "pair(a, b) = c"), &res_alloc, &c_alloc)
+            .unwrap();
+        if !cs.is_satisfied() {
+            eprintln!("{:?}", cs.which_is_unsatisfied())
+        }
+        assert!(cs.is_satisfied());
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["27479425"]);
+        expect_eq(cs.num_constraints(), &expect!["27589064"]);
+    }
 
     // NOTE: this test currently takes ~140GB of ram and a lot of minutes to run, so it's commented out (but it works!)
-    // #[test]
-    // fn test_random_multi_pairing() {
-    //     let mut rng = rand::thread_rng();
-    //     let a = vec![
-    //         G1Projective::random(&mut rng),
-    //         G1Projective::random(&mut rng),
-    //     ];
-    //     let b = vec![
-    //         G2Projective::random(&mut rng),
-    //         G2Projective::random(&mut rng),
-    //     ];
-    //     let a: Vec<G1Affine> = a.into_iter().map(G1Affine::from).collect();
-    //     let b: Vec<G2Affine> = b.iter().map(G2Affine::from).collect();
-    //     let b_prep: Vec<G2Prepared> = b.iter().cloned().map(G2Prepared::from).collect();
-    //     let terms: Vec<(&G1Affine, &G2Prepared)> = a
-    //         .iter()
-    //         .zip(b_prep.iter())
-    //         .map(|(g1, g2)| (g1, g2))
-    //         .collect();
-    //     let c = bls12_381::multi_miller_loop(&terms).final_exponentiation();
-    //     let c = c.0;
+    #[test]
+    fn test_random_multi_pairing() {
+        let mut rng = rand::thread_rng();
+        let a = vec![
+            G1Projective::random(&mut rng),
+            G1Projective::random(&mut rng),
+        ];
+        let b = vec![
+            G2Projective::random(&mut rng),
+            G2Projective::random(&mut rng),
+        ];
+        let a: Vec<G1Affine> = a.into_iter().map(G1Affine::from).collect();
+        let b: Vec<G2Affine> = b.iter().map(G2Affine::from).collect();
+        let b_prep: Vec<G2Prepared> = b.iter().cloned().map(G2Prepared::from).collect();
+        let terms: Vec<(&G1Affine, &G2Prepared)> = a.iter().zip(b_prep.iter()).collect();
+        let c = bls12_381::multi_miller_loop(&terms).final_exponentiation();
+        let c = c.0;
 
-    //     let mut cs = TestConstraintSystem::<Fp>::new();
-    //     let a_allocs: Vec<G1Point<Fp>> = a
-    //         .iter()
-    //         .enumerate()
-    //         .map(|(idx, a)| {
-    //             G1Point::alloc_element(&mut cs.namespace(|| format!("alloc a {idx}")), &a).unwrap()
-    //         })
-    //         .collect();
-    //     let b_allocs: Vec<G2Point<Fp>> = b
-    //         .iter()
-    //         .enumerate()
-    //         .map(|(idx, b)| {
-    //             G2Point::alloc_element(&mut cs.namespace(|| format!("alloc b {idx}")), &b).unwrap()
-    //         })
-    //         .collect();
-    //     let c_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
-    //     let res_alloc =
-    //         EmulatedBls12381Pairing::pair(&mut cs.namespace(|| "pair(a, b)"), &a_allocs, &b_allocs)
-    //             .unwrap();
-    //     Fp12Element::assert_is_equal(&mut cs.namespace(|| "pair(a, b) = c"), &res_alloc, &c_alloc)
-    //         .unwrap();
-    //     if !cs.is_satisfied() {
-    //         eprintln!("{:?}", cs.which_is_unsatisfied())
-    //     }
-    //     assert!(cs.is_satisfied());
-    //     expect_eq(cs.num_inputs(), expect!["1"]);
-    //     expect_eq(cs.scalar_aux().len(), expect!["42514420"]);
-    //     expect_eq(cs.num_constraints(), expect!["42690960"]);
-    // }
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let a_allocs: Vec<G1Point<Fp>> = a
+            .iter()
+            .enumerate()
+            .map(|(idx, a)| {
+                G1Point::alloc_element(&mut cs.namespace(|| format!("alloc a {idx}")), a).unwrap()
+            })
+            .collect();
+        let b_allocs: Vec<G2Point<Fp>> = b
+            .iter()
+            .enumerate()
+            .map(|(idx, b)| {
+                G2Point::alloc_element(&mut cs.namespace(|| format!("alloc b {idx}")), b).unwrap()
+            })
+            .collect();
+        let c_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc =
+            EmulatedBls12381Pairing::pair(&mut cs.namespace(|| "pair(a, b)"), &a_allocs, &b_allocs)
+                .unwrap();
+        Fp12Element::assert_is_equal(&mut cs.namespace(|| "pair(a, b) = c"), &res_alloc, &c_alloc)
+            .unwrap();
+        if !cs.is_satisfied() {
+            eprintln!("{:?}", cs.which_is_unsatisfied())
+        }
+        assert!(cs.is_satisfied());
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["42513910"]);
+        expect_eq(cs.num_constraints(), &expect!["42690690"]);
+    }
 }

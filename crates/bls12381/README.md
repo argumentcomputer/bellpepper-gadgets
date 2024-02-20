@@ -1,6 +1,6 @@
 # bellpepper-bls12381
 
-Emulated pairing and elliptic curve library using [bellpepper](https://github.com/lurk-lab/bellpepper) inspired by the [emulated](https://github.com/Consensys/gnark/tree/master/std/math/emulated) package in [Gnark](https://github.com/Consensys/gnark)
+Emulated pairing and elliptic curve library using [bellpepper](https://github.com/lurk-lab/bellpepper) inspired by the [emulated](https://github.com/Consensys/gnark/tree/master/std/algebra/emulated) package in [Gnark](https://github.com/Consensys/gnark)
 
 ## License
 

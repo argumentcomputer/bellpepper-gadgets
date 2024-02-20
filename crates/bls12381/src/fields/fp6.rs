@@ -775,9 +775,8 @@ mod tests {
         let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
         let b_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
         let res_alloc = a_alloc.sub(&mut cs.namespace(|| "a-a"), &a_alloc).unwrap();
-        let z_alloc =
-            Fp6Element::alloc_element(&mut cs.namespace(|| "alloc zero"), &BlsFp6::zero()).unwrap();
-        Fp6Element::assert_is_equal(&mut cs.namespace(|| "a-a = 0"), &res_alloc, &z_alloc).unwrap();
+        let zero = Fp6Element::zero();
+        Fp6Element::assert_is_equal(&mut cs.namespace(|| "a-a = 0"), &res_alloc, &zero).unwrap();
         let zbit_alloc = res_alloc
             .alloc_is_zero(&mut cs.namespace(|| "z <- a-a ?= 0"))
             .unwrap();
@@ -799,7 +798,7 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["7199"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["7163"]);
         expect_eq(cs.num_constraints(), &expect!["7181"]);
     }
 }

@@ -58,13 +58,11 @@ impl<F: PrimeFieldBits> Torus<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        // NOTE: if we don't alloc_element and try to just use Fp6Element::one() instead, this fails
-        // (presumably because one() returns a non-allocated constant)
-        let alloc_one = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc 1"), &BlsFp6::one())?;
-        let neg_one = alloc_one.neg(&mut cs.namespace(|| "-1"))?;
+        let one = Fp6Element::one();
+        let neg_one = one.neg(&mut cs.namespace(|| "-1"))?;
         let n = Fp12Element {
             c0: self.0.clone(),
-            c1: alloc_one,
+            c1: one,
         };
         let d = Fp12Element {
             c0: self.0.clone(),
@@ -358,8 +356,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["12075"]);
-        expect_eq(cs.num_constraints(), &expect!["11931"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["11769"]);
+        expect_eq(cs.num_constraints(), &expect!["11661"]);
     }
 
     #[test]

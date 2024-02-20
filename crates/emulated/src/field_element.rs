@@ -84,7 +84,7 @@ pub trait EmulatedFieldParams {
 #[allow(clippy::len_without_is_empty)]
 #[derive(Debug)]
 pub struct EmulatedFieldElement<F: PrimeFieldBits, P: EmulatedFieldParams> {
-    pub(crate) limbs: EmulatedLimbs<F>,
+    pub limbs: EmulatedLimbs<F>,
     pub(crate) overflow: usize,
     pub(crate) internal: bool,
     pub(crate) marker: PhantomData<P>,
@@ -370,7 +370,7 @@ where
     /// The number of limbs is required to be equal to P::num_limbs(), and
     /// the most significant limb will be constrained to have
     /// width less than or equal to the most significant limb of the modulus.
-    pub(crate) fn enforce_width_conditional<CS>(&self, cs: &mut CS) -> Result<bool, SynthesisError>
+    pub fn enforce_width_conditional<CS>(&self, cs: &mut CS) -> Result<bool, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {

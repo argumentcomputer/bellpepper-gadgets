@@ -118,7 +118,7 @@ impl<F: PrimeFieldBits> G2Point<F> {
         CS: ConstraintSystem<F>,
     {
         let w = Fp2Element {
-            a0: Bls12381G2Params::w(),
+            a0: Bls12381FpParams::w(),
             a1: FpElement::zero(),
         }; // TODO: might be cheaper to use a different mul here since first coord is 0
         let x = self.x.mul(&mut cs.namespace(|| "x <- p.x * w"), &w)?;
@@ -290,7 +290,6 @@ impl<F: PrimeFieldBits> G2Point<F> {
                 let val = cur_p.double(&mut cs.namespace(|| format!("p <- p.double() ({i})")))?;
                 // TODO: This fails with an overflow without an explicit reduce call every few iterations, even though theoretically this should be happening automatically. needs further investigation
                 // even weirder, the constraint count for `scalar_mul_by_seed` goes up if this reduce is called less often
-                // currently this function is unused except for `scalar_mul_by_seed` which will be used for an `assert_is_on_g2` implementation
                 let val = val.reduce(&mut cs.namespace(|| format!("p <- p.reduce() ({i})")))?;
                 tmp = Some(val);
                 p = tmp.as_ref();
@@ -381,14 +380,14 @@ impl<F: PrimeFieldBits> G2Point<F> {
     {
         let cs = &mut cs.namespace(|| "G2::opt_simple_swu2(t)");
 
+        // xi <- (-2, -1)
         let xi = Fp2Element::from_dec(("2", "1")).unwrap();
         let xi = xi.neg(&mut cs.namespace(|| "xi <- (-2, -1)"))?;
 
-        // a = (0, 240)
-        // b = (1012, 1012)
+        // a <- (0, 240)
+        // b <- (1012, 1012)
         let a = Fp2Element::from_dec(("0", "240")).unwrap();
-        let a_neg = Fp2Element::from_dec(("0", "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559547")).unwrap();
-        //let a_neg = a.neg(&mut cs.namespace(|| "a_a1_neg <- -240"))?; // FIXME: see above
+        let a_neg = a.neg(&mut cs.namespace(|| "a_neg <- -a"))?;
         let b = Fp2Element::from_dec(("1012", "1012")).unwrap();
 
         let t2 = t.square(&mut cs.namespace(|| "t2 <- t.square()"))?;
@@ -397,18 +396,19 @@ impl<F: PrimeFieldBits> G2Point<F> {
 
         let num_den_common = xi2_t4.add(&mut cs.namespace(|| "ndc <- xi2_t4 + xi_t2"), &xi_t2)?;
 
-        // let x0_den_a0 = num_den_common
-        //     .a1
-        //     .mul(&mut cs.namespace(|| "x0_den_a0 <- ndc.a1 * a_a1"), &a.a1)?;
-        // let x0_den_a1 = num_den_common.a0.mul(
-        //     &mut cs.namespace(|| "x0_den_a1 <- ndc.a0 * -a_a1"),
-        //     &a_a1_neg,
-        // )?;
-        // let x0_den = Fp2Element {
-        //     a0: x0_den_a0,
-        //     a1: x0_den_a1,
-        // };
-        let x0_den = num_den_common.mul(&mut cs.namespace(|| "x0_den <- -a * ndc"), &a_neg)?;
+        // Calculate num_den_common * a piece-wise for fewer constraints
+        let x0_den_a0 = num_den_common
+            .a1
+            .mul(&mut cs.namespace(|| "x0_den_a0 <- ndc.a1 * a_a1"), &a.a1)?;
+        let x0_den_a1 = num_den_common.a0.mul(
+            &mut cs.namespace(|| "x0_den_a1 <- ndc.a0 * -a_a1"),
+            &a_neg.a1,
+        )?;
+        let x0_den = Fp2Element {
+            a0: x0_den_a0,
+            a1: x0_den_a1,
+        };
+
         let x0_den = x0_den.reduce(&mut cs.namespace(|| "x0_den <- x0_den.reduce()"))?;
         //  if X0_den = 0, replace with X1_den = a * xi; this way X1(t) = X0_num / X1_den = b / (xi * a)
         let is_den_0 = x0_den.alloc_is_zero(&mut cs.namespace(|| "is_den_0"))?;
@@ -416,15 +416,21 @@ impl<F: PrimeFieldBits> G2Point<F> {
         // X1_den = a * xi = 240 - 480 i
         let x1_den = Fp2Element::from_dec(("240", "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559307")).unwrap();
 
-        let num_den_common =
-            num_den_common.add(&mut cs.namespace(|| "ndc <- ndc + 1"), &Fp2Element::one())?;
+        let ndc_a0 = num_den_common
+            .a0
+            .add(&mut cs.namespace(|| "ndc <- ndc + 1"), &FpElement::one())?;
+        let num_den_common = Fp2Element {
+            a0: ndc_a0,
+            a1: num_den_common.a1,
+        };
 
+        // Calculate num_den_common * b piece-wise for fewer constraints
         let tmp_ndc0 = b.a0.mul(
             &mut cs.namespace(|| "tmp_ndc0 <- b * ndc.a0"),
             &num_den_common.a0,
         )?;
         let tmp_ndc1 = b.a0.mul(
-            &mut cs.namespace(|| "tmp_ndc1 <- b * ndx.a1"),
+            &mut cs.namespace(|| "tmp_ndc1 <- b * ndc.a1"),
             &num_den_common.a1,
         )?;
         let x0_num_a0 = tmp_ndc0.sub(
@@ -487,8 +493,6 @@ impl<F: PrimeFieldBits> G2Point<F> {
         let c2: BigInt = &c1 / BigInt::from(16);
         // var c2[2][50] = long_div2(n, 1, 2*k-1, c1, [16]);
 
-        eprintln!("c2: {}", c2);
-
         // assert p^2 + 7 is divisible by 16
         assert_eq!(&c1 % 16, BigInt::zero(), "p^2 + 7 divisible by 16");
 
@@ -507,19 +511,7 @@ impl<F: PrimeFieldBits> G2Point<F> {
                 }
             }
         }
-        // let mut res = Self::one();
-        // for e in by.iter().rev() {
-        //     for i in (0..64).rev() {
-        //         res = res.square();
-
-        //         if ((*e >> i) & 1) == 1 {
-        //             res *= self;
-        //         }
-        //     }
-        // }
-        // res
         // TODO: factor this ^ out and test it properly
-        // let sqrt_candidate = gx0_n.pow_vartime(&c2_tmp.try_into().unwrap());
 
         // -1 is a square in Fp2 (because p^2 - 1 is even) so we only need to check half of the 8th roots of unity
         let tmp_big_to_fp2 = |c0: &str, c1: &str| -> BlsFp2 {
@@ -548,18 +540,6 @@ impl<F: PrimeFieldBits> G2Point<F> {
             tmp_big_to_fp2("1028732146235106349975324479215795277384839936929757896155643118032610843298655225875571310552543014690878354869257", "1028732146235106349975324479215795277384839936929757896155643118032610843298655225875571310552543014690878354869257"),
             tmp_big_to_fp2("1028732146235106349975324479215795277384839936929757896155643118032610843298655225875571310552543014690878354869257", "2973677408986561043442465346520108879172042883009249989176415018091420807192182638567116318576472649347015917690530"),
         ];
-        // sanity check
-        for v in roots_of_unity.iter() {
-            let mut s = v.clone();
-            let mut asdf = 0;
-            if s != BlsFp2::one() {
-                asdf += 1;
-                s *= v;
-                if asdf > 4 {
-                    panic!("{:?}^2 = {:?}\n{}", v, s, asdf);
-                }
-            }
-        }
         let mut is_square0_val: bool = false;
         let mut sqrt_witness0: BlsFp2 = BlsFp2::zero();
         // if gX0 is a square, square root must be sqrt_candidate * (8th-root of unity)
@@ -647,11 +627,7 @@ impl<F: PrimeFieldBits> G2Point<F> {
 
         // sgn0(Y) == sgn0(t)
         let sgn_y = outy.sgn0(&mut cs.namespace(|| "sgn_y <- outy.sgn0()"))?;
-        Boolean::enforce_equal(
-            &mut cs.namespace(|| "sgn_y == sgn_t"),
-            &Boolean::from(sgn_y),
-            &Boolean::from(sgn_t),
-        )?;
+        Boolean::enforce_equal(&mut cs.namespace(|| "sgn_y == sgn_t"), &sgn_y, &sgn_t)?;
 
         Ok(Self { x: outx, y: outy })
     }
@@ -715,7 +691,7 @@ impl<F: PrimeFieldBits> G2Point<F> {
         let xp2 = self.x.square(&mut cs.namespace(|| "xp2 <- P.x.square()"))?;
         let xp3 = xp2.mul(&mut cs.namespace(|| "xp3 <- xp2 * P.x"), &self.x)?;
         let xp_pow = vec![xp1.clone(), xp2.clone(), xp3.clone()];
-        let deg = vec![3, 1, 3, 2];
+        let deg = [3, 1, 3, 2];
         let mut coeffs_xp = vec![];
         for i in 0..4 {
             let mut coeffs_j = vec![];
@@ -830,11 +806,24 @@ impl<F: PrimeFieldBits> G2Point<F> {
         Ok(z)
     }
 
+    /// Asserts that y^2 = x^3 + ax + b
     pub fn assert_is_on_curve<CS>(&self, cs: &mut CS) -> Result<(), SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
-        todo!()
+        let y_2 = self.y.square(&mut cs.namespace(|| "y_2 <- p.y.square()"))?;
+        let x_2 = self.x.square(&mut cs.namespace(|| "x_2 <- p.x.square()"))?;
+        let x_3 = self.x.mul(&mut cs.namespace(|| "x_3 <- x * x_2"), &x_2)?;
+        let ax = self
+            .x
+            .mul(&mut cs.namespace(|| "ax <- x * a"), &Bls12381G2Params::a())?;
+        let rhs = x_3.add(&mut cs.namespace(|| "rhs <- x_3 + ax"), &ax)?;
+        let rhs = rhs.add(
+            &mut cs.namespace(|| "rhs <- rhs + b"),
+            &Bls12381G2Params::b(),
+        )?;
+        Fp2Element::assert_is_equal(&mut cs.namespace(|| "y_2 == rhs"), &y_2, &rhs)?;
+        Ok(())
     }
 
     /// Asserts that `psi(P) == [x]P`
@@ -842,7 +831,6 @@ impl<F: PrimeFieldBits> G2Point<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        // TODO: does it make sense for this function to return a bit instead of asserting?
         let a = self.psi(&mut cs.namespace(|| "a <- p.psi()"))?;
         let b = self.scalar_mul_by_seed(&mut cs.namespace(|| "b <- p.scalar_mul_by_seed()"))?;
         Self::assert_is_equal(&mut cs.namespace(|| "a == b"), &a, &b)?;
@@ -856,7 +844,6 @@ mod tests {
     use bellpepper_core::test_cs::TestConstraintSystem;
     use bls12_381::{hash_to_curve::MapToCurve, Scalar};
     use ff::Field;
-    use num_bigint::Sign;
     use pasta_curves::group::Group;
     use pasta_curves::Fp;
 
@@ -1225,33 +1212,6 @@ mod tests {
     #[test]
     fn test_random_opt_simple_swu2() {
         let mut rng = rand::thread_rng();
-        // fn blsfp_to_bigint(value: &BlsFp) -> BigInt {
-        //     let bytes = value.to_bytes();
-        //     assert!(bytes.len() == 48);
-        //     BigInt::from_bytes_be(num_bigint::Sign::Plus, &bytes)
-        // }
-        // fn big_to_circ(v: &BlsFp) -> String {
-        //     let mut x = blsfp_to_bigint(v);
-        //     let p = std::iter::repeat(BigInt::from(2))
-        //         .take(55)
-        //         .fold(BigInt::from(1), |acc, x| acc * x);
-        //     let mut res = vec![];
-        //     for _ in 0..7 {
-        //         let limb = &x % &p;
-        //         res.push(limb);
-        //         x = &x / &p;
-        //     }
-        //     assert!(x == BigInt::from(0));
-        //     res.into_iter()
-        //         .map(|b| format!("{}", b))
-        //         .collect::<Vec<_>>()
-        //         .join(",")
-        // }
-        // use rand::SeedableRng;
-        // let mut rng = rand_xorshift::XorShiftRng::from_seed([
-        //     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
-        //     0xbc, 0xe5,
-        // ]);
         let a = BlsFp2::random(&mut rng);
         let c = bls12_381::hash_to_curve::map_g2::map_to_curve_simple_swu(&a);
         let c = G2Affine::from(c);
@@ -1272,8 +1232,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["97368"]);
-        expect_eq(cs.num_constraints(), &expect!["97789"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["93533"]);
+        expect_eq(cs.num_constraints(), &expect!["93936"]);
     }
 
     #[test]
@@ -1313,22 +1273,28 @@ mod tests {
         let y = BlsFp2::random(&mut rng);
         let p1 = G2Projective::map_to_curve(&x);
         let p2 = G2Projective::map_to_curve(&y);
-        let c = (p1 + &p2).clear_h();
+        let c = (p1 + p2).clear_h();
         let c = G2Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
         let x_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc x"), &x).unwrap();
         let y_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc y"), &y).unwrap();
         let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
-        let res_alloc = G2Point::map_to_g2(&mut cs.namespace(|| "map_to_g2(x, y)"), &x_alloc, &y_alloc).unwrap();
-        G2Point::assert_is_equal(&mut cs.namespace(|| "map_to_g2(x, y) = c"), &res_alloc, &c_alloc)
-            .unwrap();
+        let res_alloc =
+            G2Point::map_to_g2(&mut cs.namespace(|| "map_to_g2(x, y)"), &x_alloc, &y_alloc)
+                .unwrap();
+        G2Point::assert_is_equal(
+            &mut cs.namespace(|| "map_to_g2(x, y) = c"),
+            &res_alloc,
+            &c_alloc,
+        )
+        .unwrap();
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["2089487"]);
-        expect_eq(cs.num_constraints(), &expect!["2097025"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["2081817"]);
+        expect_eq(cs.num_constraints(), &expect!["2089319"]);
     }
 }

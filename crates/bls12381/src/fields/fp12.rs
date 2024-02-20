@@ -1,7 +1,6 @@
 use bellpepper_core::boolean::{AllocatedBit, Boolean};
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use bls12_381::fp12::Fp12 as BlsFp12;
-use bls12_381::fp2::Fp2 as BlsFp2;
 use bls12_381::fp6::Fp6 as BlsFp6;
 use ff::PrimeFieldBits;
 
@@ -245,9 +244,6 @@ impl<F: PrimeFieldBits> Fp12Element<F> {
         let zc0b0 = Fp2Element::<F>::non_residue();
         let zc0b0 = zc0b0.add(&mut cs.namespace(|| "zc0b0 <- non_residue() + x0"), &x0)?;
 
-        // TODO: double check if we need to actually alloc here or if this could be a constant
-        let c1b0 =
-            Fp2Element::<F>::alloc_element(&mut cs.namespace(|| "c1b0 <- 0"), &BlsFp2::zero())?;
         Ok(Self {
             c0: Fp6Element {
                 b0: zc0b0,
@@ -255,7 +251,7 @@ impl<F: PrimeFieldBits> Fp12Element<F> {
                 b2: x1,
             },
             c1: Fp6Element {
-                b0: c1b0,
+                b0: Fp2Element::zero(),
                 b1: x04,
                 b2: x14,
             },
@@ -637,7 +633,7 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["7437"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["7425"]);
         expect_eq(cs.num_constraints(), &expect!["7341"]);
     }
 
@@ -753,11 +749,8 @@ mod tests {
         let a_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
         let b_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
         let res_alloc = a_alloc.sub(&mut cs.namespace(|| "a-a"), &a_alloc).unwrap();
-        let z_alloc =
-            Fp12Element::alloc_element(&mut cs.namespace(|| "alloc zero"), &BlsFp12::zero())
-                .unwrap();
-        Fp12Element::assert_is_equal(&mut cs.namespace(|| "a-a = 0"), &res_alloc, &z_alloc)
-            .unwrap();
+        let zero = Fp12Element::zero();
+        Fp12Element::assert_is_equal(&mut cs.namespace(|| "a-a = 0"), &res_alloc, &zero).unwrap();
         let zbit_alloc = res_alloc
             .alloc_is_zero(&mut cs.namespace(|| "z <- a-a ?= 0"))
             .unwrap();
@@ -779,7 +772,7 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["14399"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["14327"]);
         expect_eq(cs.num_constraints(), &expect!["14363"]);
     }
 }

@@ -5,8 +5,9 @@ use bls12_381::{fp::Fp as BlsFp, G1Projective};
 use ff::PrimeFieldBits;
 use num_bigint::BigInt;
 
-use crate::curves::params::Bls12381G1Params;
 use crate::fields::fp::FpElement;
+
+use super::params::{Bls12381G1Params, EmulatedCurveParams};
 
 #[derive(Clone)]
 pub struct G1Point<F: PrimeFieldBits> {
@@ -115,10 +116,10 @@ impl<F: PrimeFieldBits> G1Point<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let x = self.x.mul(
-            &mut cs.namespace(|| "x <- x * g1.w"),
-            &Bls12381G1Params::w(),
-        )?;
+        let phi_coeff = FpElement::from_dec("793479390729215512621379701633421447060886740281060493010456487427281649075476305620758731620350").unwrap();
+        let x = self
+            .x
+            .mul(&mut cs.namespace(|| "x <- x * phi_coeff"), &phi_coeff)?;
         Ok(Self {
             x,
             y: self.y.clone(),
@@ -362,7 +363,7 @@ impl<F: PrimeFieldBits> G1Point<F> {
         for i in 0..n {
             if let Some(cur_p) = p {
                 let val = cur_p.double(&mut cs.namespace(|| format!("p <- p.double() ({i})")))?;
-                // TODO: visit
+                // TODO: Don't call reduce as often. A similar problem exists in G2Point::double_n
                 let val = val.reduce(&mut cs.namespace(|| format!("p <- p.reduce() ({i})")))?;
                 tmp = Some(val);
                 p = tmp.as_ref();
@@ -505,30 +506,33 @@ impl<F: PrimeFieldBits> G1Point<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        // FIXME: not working -- the circom-pairing strategy and the gnark-crypto strategy seem different, should change this to the gnark approach
-        let d = |x: &Self| {
-            let tmp = G1Affine::from(x);
-            eprintln!("-> {}", tmp);
-        };
-        d(self);
-        // TODO: makes sense for this to return a bit instead of asserting?
         let a = self.phi(&mut cs.namespace(|| "a <- p.phi()"))?;
-        d(&a);
         let b = self.scalar_mul_by_seed_square(
             &mut cs.namespace(|| "b <- p.scalar_mul_by_seed_square()"),
         )?;
-        d(&b);
         let b = b.neg(&mut cs.namespace(|| "b <- -b"))?;
-        d(&b);
         Self::assert_is_equal(&mut cs.namespace(|| "a == b"), &a, &b)?;
         Ok(())
     }
 
+    /// Asserts that y^2 = x^3 + ax + b
     pub fn assert_is_on_curve<CS>(&self, cs: &mut CS) -> Result<(), SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
-        todo!()
+        let y_2 = self.y.square(&mut cs.namespace(|| "y_2 <- p.y.square()"))?;
+        let x_2 = self.x.square(&mut cs.namespace(|| "x_2 <- p.x.square()"))?;
+        let x_3 = self.x.mul(&mut cs.namespace(|| "x_3 <- x * x_2"), &x_2)?;
+        let ax = self
+            .x
+            .mul(&mut cs.namespace(|| "ax <- x * a"), &Bls12381G1Params::a())?;
+        let rhs = x_3.add(&mut cs.namespace(|| "rhs <- x_3 + ax"), &ax)?;
+        let rhs = rhs.add(
+            &mut cs.namespace(|| "rhs <- rhs + b"),
+            &Bls12381G1Params::b(),
+        )?;
+        FpElement::assert_is_equal(&mut cs.namespace(|| "y_2 == rhs"), &y_2, &rhs)?;
+        Ok(())
     }
 }
 
@@ -871,29 +875,78 @@ mod tests {
         expect_eq(cs.num_constraints(), &expect!["818820"]);
     }
 
-    // TODO
-    // #[test]
-    // fn test_random_subgroup_check() {
-    //     let mut rng = rand::thread_rng();
-    //     let n = Scalar::random(&mut rng);
-    //     let a = G1Affine::from(G1Projective::generator() * n);
+    #[test]
+    fn test_random_subgroup_check() {
+        let mut rng = rand::thread_rng();
+        let n = Scalar::random(&mut rng);
+        let a = G1Affine::from(G1Projective::generator() * n);
 
-    //     let mut cs = TestConstraintSystem::<Fp>::new();
-    //     let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-    //     a_alloc
-    //         .assert_subgroup_check(&mut cs.namespace(|| "a.subgroup_check()"))
-    //         .unwrap();
-    //     if !cs.is_satisfied() {
-    //         eprintln!("{:?}", cs.which_is_unsatisfied())
-    //     }
-    //     assert!(cs.is_satisfied());
-    //     expect_eq(cs.num_inputs(), &expect!["1"]);
-    //     expect_eq(cs.scalar_aux().len(), &expect!["815445"]);
-    //     expect_eq(cs.num_constraints(), &expect!["818820"]);
-    // }
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        a_alloc
+            .assert_subgroup_check(&mut cs.namespace(|| "a.subgroup_check()"))
+            .unwrap();
+        if !cs.is_satisfied() {
+            eprintln!("{:?}", cs.which_is_unsatisfied())
+        }
+        assert!(cs.is_satisfied());
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["815826"]);
+        expect_eq(cs.num_constraints(), &expect!["819213"]);
+    }
 
-    // #[test]
-    // fn test_random_subgroup_check_negative() {
-    //     todo!();
-    // }
+    #[test]
+    fn test_random_subgroup_check_negative() {
+        use crate::curves::params::EmulatedCurveParams;
+        let b = BlsFp::from(&Bls12381G1Params::<Fp>::b());
+        use rand::RngCore;
+        let mut rng = rand::thread_rng();
+        let mut random_point = || loop {
+            let x = BlsFp::random(&mut rng);
+            let y = ((x.square() * x) + b).sqrt();
+            if y.is_some().into() {
+                let flip_sign = rng.next_u32() % 2 != 0;
+                return G1Affine {
+                    x,
+                    y: if flip_sign { -y.unwrap() } else { y.unwrap() },
+                    infinity: 0.into(),
+                };
+            }
+        };
+        let mut a = random_point();
+        while a.is_torsion_free().into() {
+            a = random_point();
+        }
+
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        a_alloc
+            .assert_subgroup_check(&mut cs.namespace(|| "a.subgroup_check()"))
+            .unwrap();
+        assert!(!cs.is_satisfied());
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["815826"]);
+        expect_eq(cs.num_constraints(), &expect!["819213"]);
+    }
+
+    #[test]
+    fn test_random_phi() {
+        let mut rng = rand::thread_rng();
+        let a = G1Affine::from(G1Projective::random(&mut rng));
+        let c = bls12_381::g1::endomorphism(&a);
+
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = a_alloc.phi(&mut cs.namespace(|| "a.phi()")).unwrap();
+        G1Point::assert_is_equal(&mut cs.namespace(|| "a.phi() = c"), &res_alloc, &c_alloc)
+            .unwrap();
+        if !cs.is_satisfied() {
+            eprintln!("{:?}", cs.which_is_unsatisfied())
+        }
+        assert!(cs.is_satisfied());
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["935"]);
+        expect_eq(cs.num_constraints(), &expect!["917"]);
+    }
 }

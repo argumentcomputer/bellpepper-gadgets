@@ -45,6 +45,13 @@ impl EmulatedFieldParams for Bls12381FpParams {
     }
 }
 
+impl Bls12381FpParams {
+    /// Third root of unity
+    pub fn w<F: PrimeFieldBits>() -> FpElement<F> {
+        FpElement::<F>::from_dec("4002409555221667392624310435006688643935503118305586438271171395842971157480381377015405980053539358417135540939436").unwrap()
+    }
+}
+
 pub type Bls12381Fp<F> = EmulatedFieldElement<F, Bls12381FpParams>;
 
 #[derive(Clone)]
@@ -132,7 +139,7 @@ impl<F: PrimeFieldBits> From<&FpElement<F>> for BigInt {
     fn from(value: &FpElement<F>) -> Self {
         use std::ops::Rem;
         let p = &Bls12381FpParams::modulus();
-        BigInt::from(value).rem(p)
+        Self::from(&value.0).rem(p)
     }
 }
 
@@ -291,57 +298,58 @@ impl<F: PrimeFieldBits> FpElement<F> {
         Ok(Self(res))
     }
 
-    // TODO: add tests
-    // https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-hash-to-curve-11#section-4.1
-    // return in % 2
-    // This requires `in` to be the unique element < p.
-    // NOTE: different from Wahby-Boneh paper https://eprint.iacr.org/2019/403.pdf and python reference code: https://github.com/algorand/bls_sigs_ref/blob/master/python-impl/opt_swu_g2.py
-    pub(crate) fn sgn0<CS>(&self, cs: &mut CS) -> Result<Boolean, SynthesisError>
+    /// Implements [sgn0](https://datatracker.ietf.org/doc/html/rfc9380#name-the-sgn0-function) which returns `x mod 2`
+    /// Enforces that self is reduced
+    pub fn sgn0<CS>(&self, cs: &mut CS) -> Result<Boolean, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
-        // TODO: cleanup
         self.0
             .enforce_width_conditional(&mut cs.namespace(|| "ensure bitwidths in input"))?;
 
-        // enforce that least significant limb is divisible by 2
+        let least_sig = match &self.0.limbs {
+            EmulatedLimbs::Allocated(limbs) => limbs[0].get_value().unwrap(),
+            EmulatedLimbs::Constant(limbs) => limbs[0],
+        };
+
+        let (out_val, div) = {
+            let val = BigInt::from_bytes_le(Sign::Plus, least_sig.to_repr().as_ref());
+            let out = &val % 2u64;
+            let div = &val / 2u64;
+            assert_eq!(2u64 * &div + &out, val.clone(), "sanity check");
+            if out == BigInt::from(0u64) {
+                (false, div)
+            } else if out == BigInt::from(1u64) {
+                (true, div)
+            } else {
+                unreachable!("Division by 2 always returns 0 or 1")
+            }
+        };
+
         let out = match &self.0.limbs {
             EmulatedLimbs::Allocated(limbs) => {
-                let least_sig = &limbs[0];
-                let val = least_sig.get_value().unwrap();
-                let val = BigInt::from_bytes_le(Sign::Plus, val.to_repr().as_ref());
-                let out = &val % 2u64;
-                let div = &val / 2u64;
-                assert_eq!(2u64 * &div + &out, val.clone(), "sanity check");
-                let out = if &out == &BigInt::from(0u64) {
-                    false
-                } else if &out == &BigInt::from(1u64) {
-                    true
-                } else {
-                    panic!()
-                };
-
                 let out_bit =
-                    AllocatedBit::alloc(&mut cs.namespace(|| "alloc sgn0 out"), Some(out))?;
+                    AllocatedBit::alloc(&mut cs.namespace(|| "alloc sgn0 out"), Some(out_val))?;
                 let div = AllocatedNum::alloc(&mut cs.namespace(|| "alloc sgn0 div"), || {
                     Ok(bigint_to_scalar(&div))
                 })?;
 
+                // enforce that least significant limb is divisible by 2
                 let two = F::ONE + F::ONE;
                 cs.enforce(
-                    || format!("enforce sgn0 bit"),
+                    || "enforce sgn0 bit",
                     |lc| lc + CS::one(),
                     |lc| lc + (two, div.get_variable()) + out_bit.get_variable(), // 2 * div + out
-                    |lc| lc + &least_sig.lc(F::ONE),                              // least_sig
+                    |lc| lc + &limbs[0].lc(F::ONE),                              // least_sig
                 );
-                out_bit
+                Boolean::from(out_bit)
             }
-            _ => {
-                panic!("not implemented") // FIXME
+            EmulatedLimbs::Constant(_) => {
+                Boolean::Constant(out_val)
             }
         };
 
-        Ok(Boolean::from(out))
+        Ok(out)
     }
 }
 
@@ -351,51 +359,11 @@ mod tests {
     use bellpepper_core::test_cs::TestConstraintSystem;
     use bls12_381::hash_to_curve::Sgn0;
     use pasta_curves::Fp;
-    // use halo2curves::bn256::Fq as Fp;
 
     use expect_test::{expect, Expect};
     fn expect_eq(computed: usize, expected: &Expect) {
         expected.assert_eq(&computed.to_string());
     }
-
-    fn big_to_circ(v: BlsFp) -> Vec<String> {
-        let mut x = blsfp_to_bigint(v);
-        let p = std::iter::repeat(BigInt::from(2))
-            .take(55)
-            .fold(BigInt::from(1), |acc, x| acc * x);
-        let mut res = vec![];
-        for _ in 0..7 {
-            let limb = &x % &p;
-            res.push(limb);
-            x = &x / &p;
-        }
-        assert!(x == BigInt::from(0));
-        res.into_iter().map(|b| format!("{}", b)).collect()
-    }
-
-    fn blsfp_to_bigint(value: BlsFp) -> BigInt {
-        let bytes = value.to_bytes();
-        assert!(bytes.len() == 48);
-        BigInt::from_bytes_be(Sign::Plus, &bytes)
-    }
-
-    // #[test]
-    // fn test_asdf() {
-    //     let mut rng = rand::thread_rng();
-    //     let a = BlsFp::random(&mut rng);
-    //     let b = BlsFp::random(&mut rng);
-    //     let c = a * b;
-    //     eprintln!("a:{:?}", a);
-    //     eprintln!("b:{:?}", b);
-    //     eprintln!("c:{:?}", c);
-    //     let a = big_to_circ(a);
-    //     let b = big_to_circ(b);
-    //     let c = big_to_circ(c);
-    //     eprintln!("\"a\":{:?},", a);
-    //     eprintln!("\"b\":{:?},", b);
-    //     eprintln!("\"out\":{:?}", c);
-    //     assert!(false);
-    // }
 
     #[test]
     fn test_random_add() {
@@ -446,45 +414,14 @@ mod tests {
         let mut rng = rand::thread_rng();
         let a = BlsFp::random(&mut rng);
         let b = BlsFp::random(&mut rng);
-        let mut c = a * b;
-        // for _ in 0..99 {
-        //     c *= b;
-        // }
+        let c = a * b;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
         let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
         let b_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
         let c_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
-        let mut res_alloc = a_alloc.mul(&mut cs.namespace(|| "a*b"), &b_alloc).unwrap();
-        // for i in 0..99 {
-        //     res_alloc = res_alloc
-        //         .mul(&mut cs.namespace(|| format!("mul {i}")), &b_alloc)
-        //         .unwrap();
-        // }
+        let res_alloc = a_alloc.mul(&mut cs.namespace(|| "a*b"), &b_alloc).unwrap();
         FpElement::assert_is_equal(&mut cs.namespace(|| "a*b = c"), &res_alloc, &c_alloc).unwrap();
-        // let r = BlsFp::from(&res_alloc);
-        // eprintln!("c: {:?}\nr: {:?}", c, r);
-        // eprintln!("c overflow: {}", c_alloc.0.overflow);
-        // eprintln!("r overflow: {}", res_alloc.0.overflow);
-        // let mut buf = String::new();
-        // for mut l in cs.pretty_print_list().into_iter() {
-        //     if l.starts_with("AUX") || l.starts_with("INPUT") {
-        //         continue;
-        //     }
-        //     let l = l.replace("/", ";");
-        //     //l.retain(|c| !c.is_digit(10));
-        //     // let l = l
-        //     //     .split("/")
-        //     //     .collect::<Vec<_>>()
-        //     //     .into_iter()
-        //     //     .rev()
-        //     //     .collect::<Vec<_>>()
-        //     //     .join(";");
-        //     let l = l + " 1";
-        //     buf += &l;
-        //     buf += "\n";
-        // }
-        // std::fs::write("/home/w/out.folded", &buf).unwrap();
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
         expect_eq(cs.scalar_aux().len(), &expect!["681"]);
@@ -570,6 +507,60 @@ mod tests {
     }
 
     #[test]
+    fn test_sgn0() {
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let zero = FpElement::zero()
+            .sgn0(&mut cs.namespace(|| "sgn0(0)"))
+            .unwrap();
+        assert!(matches!(zero, Boolean::Constant(false)));
+        let one = FpElement::one()
+            .sgn0(&mut cs.namespace(|| "sgn0(1)"))
+            .unwrap();
+        assert!(matches!(one, Boolean::Constant(true)));
+        let neg_one = FpElement::one().neg(&mut cs.namespace(|| "-1")).unwrap();
+        let neg_one = neg_one.sgn0(&mut cs.namespace(|| "sgn0(-1)")).unwrap();
+        assert!(matches!(neg_one, Boolean::Constant(false)));
+        let neg_zero = FpElement::zero().neg(&mut cs.namespace(|| "-0")).unwrap();
+        let neg_zero = neg_zero.sgn0(&mut cs.namespace(|| "sgn0(-0)")).unwrap();
+        assert!(matches!(neg_zero, Boolean::Constant(false)));
+
+        // p-1 / 2
+        let p_m1_over2 = FpElement(Bls12381Fp::<Fp>::from(
+            &((Bls12381FpParams::modulus() - BigInt::from(1)) / BigInt::from(2)),
+        ));
+        let p_p1_over2 = p_m1_over2
+            .add(&mut cs.namespace(|| "p-1_over2 + 1"), &FpElement::one())
+            .unwrap();
+        let neg_p_p1_over2 = p_p1_over2
+            .neg(&mut cs.namespace(|| "-(p-1_over2+1)"))
+            .unwrap();
+        let p_m1_over2 = p_m1_over2
+            .sgn0(&mut cs.namespace(|| "sgn0(p-1_over2)"))
+            .unwrap();
+        assert!(matches!(p_m1_over2, Boolean::Constant(true)));
+        let p_p1_over2 = p_p1_over2
+            .sgn0(&mut cs.namespace(|| "sgn0(p-1_over2+1)"))
+            .unwrap();
+        assert!(matches!(p_p1_over2, Boolean::Constant(false)));
+        let neg_p_p1_over2 = neg_p_p1_over2
+            .sgn0(&mut cs.namespace(|| "sgn0(-(p-1_over2+1))"))
+            .unwrap();
+        Boolean::enforce_equal(
+            &mut cs.namespace(|| "-(p-1_over2+1) == p_m1_over2"),
+            &neg_p_p1_over2,
+            &p_m1_over2,
+        )
+        .unwrap();
+
+        if !cs.is_satisfied() {
+            eprintln!("{:?}", cs.which_is_unsatisfied())
+        }
+        assert!(cs.is_satisfied());
+        assert_eq!(cs.scalar_aux().len(), 0);
+        assert_eq!(cs.num_constraints(), 0);
+    }
+
+    #[test]
     fn test_random_alloc_is_zero() {
         let mut rng = rand::thread_rng();
         let a = BlsFp::random(&mut rng);
@@ -579,9 +570,8 @@ mod tests {
         let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
         let b_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
         let res_alloc = a_alloc.sub(&mut cs.namespace(|| "a-a"), &a_alloc).unwrap();
-        let z_alloc =
-            FpElement::alloc_element(&mut cs.namespace(|| "alloc zero"), &BlsFp::zero()).unwrap();
-        FpElement::assert_is_equal(&mut cs.namespace(|| "a-a = 0"), &res_alloc, &z_alloc).unwrap();
+        let zero = FpElement::zero();
+        FpElement::assert_is_equal(&mut cs.namespace(|| "a-a = 0"), &res_alloc, &zero).unwrap();
         let zbit_alloc = res_alloc
             .alloc_is_zero(&mut cs.namespace(|| "z <- a-a ?= 0"))
             .unwrap();
@@ -603,7 +593,7 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["1199"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["1193"]);
         expect_eq(cs.num_constraints(), &expect!["1196"]);
     }
 }

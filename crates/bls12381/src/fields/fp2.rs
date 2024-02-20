@@ -378,7 +378,7 @@ impl<F: PrimeFieldBits> Fp2Element<F> {
     {
         let val = BlsFp2::from(self);
         if val.is_zero().into() {
-            panic!("Inverse of zero element cannot be calculated");
+            eprintln!("Inverse of zero element cannot be calculated");
             return Err(SynthesisError::DivisionByZero);
         }
         let inv = val.invert().unwrap();
@@ -408,7 +408,7 @@ impl<F: PrimeFieldBits> Fp2Element<F> {
 
         let y = BlsFp2::from(value);
         if y.is_zero().into() {
-            panic!("Inverse of zero element cannot be calculated");
+            eprintln!("Inverse of zero element cannot be calculated");
             return Err(SynthesisError::DivisionByZero);
         }
         let y_inv = y.invert().unwrap();
@@ -447,8 +447,7 @@ impl<F: PrimeFieldBits> Fp2Element<F> {
         Ok(Self { a0, a1 })
     }
 
-    // TODO: add tests
-    pub(crate) fn sgn0<CS>(&self, cs: &mut CS) -> Result<Boolean, SynthesisError>
+    pub fn sgn0<CS>(&self, cs: &mut CS) -> Result<Boolean, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
@@ -820,9 +819,8 @@ mod tests {
         let a_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
         let b_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
         let res_alloc = a_alloc.sub(&mut cs.namespace(|| "a-a"), &a_alloc).unwrap();
-        let z_alloc =
-            Fp2Element::alloc_element(&mut cs.namespace(|| "alloc zero"), &BlsFp2::zero()).unwrap();
-        Fp2Element::assert_is_equal(&mut cs.namespace(|| "a-a = 0"), &res_alloc, &z_alloc).unwrap();
+        let zero = Fp2Element::zero();
+        Fp2Element::assert_is_equal(&mut cs.namespace(|| "a-a = 0"), &res_alloc, &zero).unwrap();
         let zbit_alloc = res_alloc
             .alloc_is_zero(&mut cs.namespace(|| "z <- a-a ?= 0"))
             .unwrap();
@@ -844,7 +842,7 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["2399"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["2387"]);
         expect_eq(cs.num_constraints(), &expect!["2393"]);
     }
 }
