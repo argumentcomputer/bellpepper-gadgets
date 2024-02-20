@@ -607,14 +607,13 @@ mod tests {
     use halo2curves::bn256::Fq as Fp;
     use halo2curves::group::Group;
 
-    use bls12_381::{G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective};
+    use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective};
 
     use expect_test::{expect, Expect};
     fn expect_eq(computed: usize, expected: &Expect) {
         expected.assert_eq(&computed.to_string());
     }
 
-    // NOTE: this test currently takes ~100GB of ram and a few minutes to run, so it's commented out
     #[test]
     fn test_random_pairing() {
         let mut rng = rand::thread_rng();
@@ -646,52 +645,53 @@ mod tests {
         expect_eq(cs.num_constraints(), &expect!["7147240"]);
     }
 
-    // NOTE: this test currently takes ~140GB of ram and a lot of minutes to run, so it's commented out (but it works!)
-    #[test]
-    fn test_random_multi_pairing() {
-        let mut rng = rand::thread_rng();
-        let a = vec![
-            G1Projective::random(&mut rng),
-            G1Projective::random(&mut rng),
-        ];
-        let b = vec![
-            G2Projective::random(&mut rng),
-            G2Projective::random(&mut rng),
-        ];
-        let a: Vec<G1Affine> = a.into_iter().map(G1Affine::from).collect();
-        let b: Vec<G2Affine> = b.iter().map(G2Affine::from).collect();
-        let b_prep: Vec<G2Prepared> = b.iter().cloned().map(G2Prepared::from).collect();
-        let terms: Vec<(&G1Affine, &G2Prepared)> = a.iter().zip(b_prep.iter()).collect();
-        let c = bls12_381::multi_miller_loop(&terms).final_exponentiation();
-        let c = c.0;
+    // NOTE: this test currently takes ~58GB of ram and 110s to run. It's commented out since CI does not have this much memory
+    // #[test]
+    // fn test_random_multi_pairing() {
+    //     use bls12_381::G2Prepared;
+    //     let mut rng = rand::thread_rng();
+    //     let a = vec![
+    //         G1Projective::random(&mut rng),
+    //         G1Projective::random(&mut rng),
+    //     ];
+    //     let b = vec![
+    //         G2Projective::random(&mut rng),
+    //         G2Projective::random(&mut rng),
+    //     ];
+    //     let a: Vec<G1Affine> = a.into_iter().map(G1Affine::from).collect();
+    //     let b: Vec<G2Affine> = b.iter().map(G2Affine::from).collect();
+    //     let b_prep: Vec<G2Prepared> = b.iter().cloned().map(G2Prepared::from).collect();
+    //     let terms: Vec<(&G1Affine, &G2Prepared)> = a.iter().zip(b_prep.iter()).collect();
+    //     let c = bls12_381::multi_miller_loop(&terms).final_exponentiation();
+    //     let c = c.0;
 
-        let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_allocs: Vec<G1Point<Fp>> = a
-            .iter()
-            .enumerate()
-            .map(|(idx, a)| {
-                G1Point::alloc_element(&mut cs.namespace(|| format!("alloc a {idx}")), a).unwrap()
-            })
-            .collect();
-        let b_allocs: Vec<G2Point<Fp>> = b
-            .iter()
-            .enumerate()
-            .map(|(idx, b)| {
-                G2Point::alloc_element(&mut cs.namespace(|| format!("alloc b {idx}")), b).unwrap()
-            })
-            .collect();
-        let c_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
-        let res_alloc =
-            EmulatedBls12381Pairing::pair(&mut cs.namespace(|| "pair(a, b)"), &a_allocs, &b_allocs)
-                .unwrap();
-        Fp12Element::assert_is_equal(&mut cs.namespace(|| "pair(a, b) = c"), &res_alloc, &c_alloc)
-            .unwrap();
-        if !cs.is_satisfied() {
-            eprintln!("{:?}", cs.which_is_unsatisfied())
-        }
-        assert!(cs.is_satisfied());
-        expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["17043247"]);
-        expect_eq(cs.num_constraints(), &expect!["17085695"]);
-    }
+    //     let mut cs = TestConstraintSystem::<Fp>::new();
+    //     let a_allocs: Vec<G1Point<Fp>> = a
+    //         .iter()
+    //         .enumerate()
+    //         .map(|(idx, a)| {
+    //             G1Point::alloc_element(&mut cs.namespace(|| format!("alloc a {idx}")), a).unwrap()
+    //         })
+    //         .collect();
+    //     let b_allocs: Vec<G2Point<Fp>> = b
+    //         .iter()
+    //         .enumerate()
+    //         .map(|(idx, b)| {
+    //             G2Point::alloc_element(&mut cs.namespace(|| format!("alloc b {idx}")), b).unwrap()
+    //         })
+    //         .collect();
+    //     let c_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+    //     let res_alloc =
+    //         EmulatedBls12381Pairing::pair(&mut cs.namespace(|| "pair(a, b)"), &a_allocs, &b_allocs)
+    //             .unwrap();
+    //     Fp12Element::assert_is_equal(&mut cs.namespace(|| "pair(a, b) = c"), &res_alloc, &c_alloc)
+    //         .unwrap();
+    //     if !cs.is_satisfied() {
+    //         eprintln!("{:?}", cs.which_is_unsatisfied())
+    //     }
+    //     assert!(cs.is_satisfied());
+    //     expect_eq(cs.num_inputs(), &expect!["1"]);
+    //     expect_eq(cs.scalar_aux().len(), &expect!["17043247"]);
+    //     expect_eq(cs.num_constraints(), &expect!["17085695"]);
+    // }
 }
