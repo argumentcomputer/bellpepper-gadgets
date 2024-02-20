@@ -170,7 +170,7 @@ impl<F: PrimeField + PrimeFieldBits> G1Point<F> {
         let a_case = Boolean::and(
             &mut cs.namespace(|| "a_case <- and(a_is_0, b_eq_c)"),
             &Boolean::from(a_is_0.clone()),
-            &Boolean::from(b_eq_c),
+            &b_eq_c,
         )?;
         // if b == 0, then check a == c and ignore res
         let b_is_0 = b.alloc_is_identity(&mut cs.namespace(|| "b_is_0 <- b =? 0"))?;
@@ -184,7 +184,7 @@ impl<F: PrimeField + PrimeFieldBits> G1Point<F> {
         let b_case = Boolean::and(
             &mut cs.namespace(|| "b_case <- and(b_is_0, a_eq_c)"),
             &Boolean::from(b_is_0.clone()),
-            &Boolean::from(a_eq_c),
+            &a_eq_c,
         )?;
 
         let any_is_0 = Boolean::or(
@@ -287,14 +287,14 @@ impl<F: PrimeField + PrimeFieldBits> G1Point<F> {
         let res = Self::conditionally_select(
             &mut cs.namespace(|| "res <- select(res, q, sel1)"),
             &res,
-            &q,
+            q,
             &Boolean::from(sel1),
         )?;
         // if q=(0,0) return p
         let res = Self::conditionally_select(
             &mut cs.namespace(|| "res <- select(res, p, sel2)"),
             &res,
-            &p,
+            p,
             &Boolean::from(sel2),
         )?;
         // if p.y + q.y = 0, return (0, 0)
@@ -725,8 +725,15 @@ mod tests {
         let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
         let b_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
         let neg_a = a_alloc.neg(&mut cs.namespace(|| "-a")).unwrap();
-        let res_alloc = a_alloc.add_unified(&mut cs.namespace(|| "a-a"), &neg_a).unwrap();
-        G1Point::assert_is_equal(&mut cs.namespace(|| "a-a = 0"), &res_alloc, &G1Point::identity()).unwrap();
+        let res_alloc = a_alloc
+            .add_unified(&mut cs.namespace(|| "a-a"), &neg_a)
+            .unwrap();
+        G1Point::assert_is_equal(
+            &mut cs.namespace(|| "a-a = 0"),
+            &res_alloc,
+            &G1Point::identity(),
+        )
+        .unwrap();
         let zbit_alloc = res_alloc
             .alloc_is_identity(&mut cs.namespace(|| "z <- a-a ?= 0"))
             .unwrap();
