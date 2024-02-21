@@ -12,10 +12,9 @@ repository.workspace = true
 
 [dependencies]
 bellpepper-core = { workspace = true }
-bellpepper = { workspace = true }
 ff = { workspace = true }
-num-bigint = { version = "0.4.3", features = ["rand"] }
-num-traits = "0.2.15"
+num-bigint = { workspace = true, features = ["rand"] }
+num-traits = { workspace = true }
 
 [dev-dependencies]
 pasta_curves = { workspace = true }
