@@ -38,6 +38,8 @@ concurrency:
 jobs:
   test:
     runs-on: gh-32vcpu-128gbram-ubuntu-2204
+    strategy:
+      fail-fast: false
     env:
       RUSTFLAGS: -D warnings
     steps:
