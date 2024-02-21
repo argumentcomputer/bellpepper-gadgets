@@ -602,97 +602,97 @@ where
 
 #[cfg(test)]
 mod tests {
-    // use super::*;
-    // use bellpepper_core::test_cs::TestConstraintSystem;
-    // use halo2curves::bn256::Fq as Fp;
-    // use halo2curves::group::Group;
+    use super::*;
+    use bellpepper_core::test_cs::TestConstraintSystem;
+    use halo2curves::bn256::Fq as Fp;
+    use halo2curves::group::Group;
 
-    // use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective};
+    use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective};
 
-    // use expect_test::{expect, Expect};
-    // fn expect_eq(computed: usize, expected: &Expect) {
-    //     expected.assert_eq(&computed.to_string());
-    // }
+    use expect_test::{expect, Expect};
+    fn expect_eq(computed: usize, expected: &Expect) {
+        expected.assert_eq(&computed.to_string());
+    }
 
-    // NOTE: this test currently takes ~22GB of ram and ~50s to run. It's commented out for CI
-    // #[test]
-    // fn test_random_pairing() {
-    //     let mut rng = rand::thread_rng();
-    //     let a = G1Projective::random(&mut rng);
-    //     let b = G2Projective::random(&mut rng);
-    //     let a = G1Affine::from(a);
-    //     let b = G2Affine::from(b);
-    //     let c = bls12_381::pairing(&a, &b);
-    //     let c = c.0;
+    // NOTE: this test currently takes ~22GB of ram and ~50s to run
+    #[test]
+    fn test_random_pairing() {
+        let mut rng = rand::thread_rng();
+        let a = G1Projective::random(&mut rng);
+        let b = G2Projective::random(&mut rng);
+        let a = G1Affine::from(a);
+        let b = G2Affine::from(b);
+        let c = bls12_381::pairing(&a, &b);
+        let c = c.0;
 
-    //     let mut cs = TestConstraintSystem::<Fp>::new();
-    //     let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-    //     let b_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-    //     let c_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
-    //     let res_alloc = EmulatedBls12381Pairing::pair(
-    //         &mut cs.namespace(|| "pair(a, b)"),
-    //         &[a_alloc],
-    //         &[b_alloc],
-    //     )
-    //     .unwrap();
-    //     Fp12Element::assert_is_equal(&mut cs.namespace(|| "pair(a, b) = c"), &res_alloc, &c_alloc)
-    //         .unwrap();
-    //     if !cs.is_satisfied() {
-    //         eprintln!("{:?}", cs.which_is_unsatisfied())
-    //     }
-    //     assert!(cs.is_satisfied());
-    //     expect_eq(cs.num_inputs(), &expect!["1"]);
-    //     expect_eq(cs.scalar_aux().len(), &expect!["7142222"]);
-    //     expect_eq(cs.num_constraints(), &expect!["7147240"]);
-    // }
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let b_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+        let c_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = EmulatedBls12381Pairing::pair(
+            &mut cs.namespace(|| "pair(a, b)"),
+            &[a_alloc],
+            &[b_alloc],
+        )
+        .unwrap();
+        Fp12Element::assert_is_equal(&mut cs.namespace(|| "pair(a, b) = c"), &res_alloc, &c_alloc)
+            .unwrap();
+        if !cs.is_satisfied() {
+            eprintln!("{:?}", cs.which_is_unsatisfied())
+        }
+        assert!(cs.is_satisfied());
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["7142222"]);
+        expect_eq(cs.num_constraints(), &expect!["7147240"]);
+    }
 
-    // NOTE: this test currently takes ~50GB of ram and ~110s to run. It's commented out for CI
-    // #[test]
-    // fn test_random_multi_pairing() {
-    //     use bls12_381::G2Prepared;
-    //     let mut rng = rand::thread_rng();
-    //     let a = vec![
-    //         G1Projective::random(&mut rng),
-    //         G1Projective::random(&mut rng),
-    //     ];
-    //     let b = vec![
-    //         G2Projective::random(&mut rng),
-    //         G2Projective::random(&mut rng),
-    //     ];
-    //     let a: Vec<G1Affine> = a.into_iter().map(G1Affine::from).collect();
-    //     let b: Vec<G2Affine> = b.iter().map(G2Affine::from).collect();
-    //     let b_prep: Vec<G2Prepared> = b.iter().cloned().map(G2Prepared::from).collect();
-    //     let terms: Vec<(&G1Affine, &G2Prepared)> = a.iter().zip(b_prep.iter()).collect();
-    //     let c = bls12_381::multi_miller_loop(&terms).final_exponentiation();
-    //     let c = c.0;
+    // NOTE: this test currently takes ~50GB of ram and ~110s to run
+    #[test]
+    fn test_random_multi_pairing() {
+        use bls12_381::G2Prepared;
+        let mut rng = rand::thread_rng();
+        let a = vec![
+            G1Projective::random(&mut rng),
+            G1Projective::random(&mut rng),
+        ];
+        let b = vec![
+            G2Projective::random(&mut rng),
+            G2Projective::random(&mut rng),
+        ];
+        let a: Vec<G1Affine> = a.into_iter().map(G1Affine::from).collect();
+        let b: Vec<G2Affine> = b.iter().map(G2Affine::from).collect();
+        let b_prep: Vec<G2Prepared> = b.iter().cloned().map(G2Prepared::from).collect();
+        let terms: Vec<(&G1Affine, &G2Prepared)> = a.iter().zip(b_prep.iter()).collect();
+        let c = bls12_381::multi_miller_loop(&terms).final_exponentiation();
+        let c = c.0;
 
-    //     let mut cs = TestConstraintSystem::<Fp>::new();
-    //     let a_allocs: Vec<G1Point<Fp>> = a
-    //         .iter()
-    //         .enumerate()
-    //         .map(|(idx, a)| {
-    //             G1Point::alloc_element(&mut cs.namespace(|| format!("alloc a {idx}")), a).unwrap()
-    //         })
-    //         .collect();
-    //     let b_allocs: Vec<G2Point<Fp>> = b
-    //         .iter()
-    //         .enumerate()
-    //         .map(|(idx, b)| {
-    //             G2Point::alloc_element(&mut cs.namespace(|| format!("alloc b {idx}")), b).unwrap()
-    //         })
-    //         .collect();
-    //     let c_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
-    //     let res_alloc =
-    //         EmulatedBls12381Pairing::pair(&mut cs.namespace(|| "pair(a, b)"), &a_allocs, &b_allocs)
-    //             .unwrap();
-    //     Fp12Element::assert_is_equal(&mut cs.namespace(|| "pair(a, b) = c"), &res_alloc, &c_alloc)
-    //         .unwrap();
-    //     if !cs.is_satisfied() {
-    //         eprintln!("{:?}", cs.which_is_unsatisfied())
-    //     }
-    //     assert!(cs.is_satisfied());
-    //     expect_eq(cs.num_inputs(), &expect!["1"]);
-    //     expect_eq(cs.scalar_aux().len(), &expect!["17043247"]);
-    //     expect_eq(cs.num_constraints(), &expect!["17085695"]);
-    // }
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let a_allocs: Vec<G1Point<Fp>> = a
+            .iter()
+            .enumerate()
+            .map(|(idx, a)| {
+                G1Point::alloc_element(&mut cs.namespace(|| format!("alloc a {idx}")), a).unwrap()
+            })
+            .collect();
+        let b_allocs: Vec<G2Point<Fp>> = b
+            .iter()
+            .enumerate()
+            .map(|(idx, b)| {
+                G2Point::alloc_element(&mut cs.namespace(|| format!("alloc b {idx}")), b).unwrap()
+            })
+            .collect();
+        let c_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc =
+            EmulatedBls12381Pairing::pair(&mut cs.namespace(|| "pair(a, b)"), &a_allocs, &b_allocs)
+                .unwrap();
+        Fp12Element::assert_is_equal(&mut cs.namespace(|| "pair(a, b) = c"), &res_alloc, &c_alloc)
+            .unwrap();
+        if !cs.is_satisfied() {
+            eprintln!("{:?}", cs.which_is_unsatisfied())
+        }
+        assert!(cs.is_satisfied());
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["17043247"]);
+        expect_eq(cs.num_constraints(), &expect!["17085695"]);
+    }
 }
