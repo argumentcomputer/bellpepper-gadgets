@@ -9,8 +9,6 @@ use bellpepper_chunk::{FoldStep, InnerCircuit};
 use bellpepper_core::num::AllocatedNum;
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use ff::{Field, PrimeField};
-use flate2::write::ZlibEncoder;
-use flate2::Compression;
 use halo2curves::bn256::Bn256;
 use std::marker::PhantomData;
 use std::time::Instant;
@@ -234,9 +232,9 @@ fn main() {
     )
     .unwrap();
 
-    for step in 0..<C1 as NonUniformCircuit<E1>>::num_circuits(&chunk_circuit) {
-        let start = Instant::now();
+    let start = Instant::now();
 
+    for step in 0..<C1 as NonUniformCircuit<E1>>::num_circuits(&chunk_circuit) {
         let circuit_primary =
             <ChunkCircuit<
                 <E1 as Engine>::Scalar,
@@ -248,17 +246,6 @@ fn main() {
         assert!(res.is_ok());
         println!(
             "RecursiveSNARK::prove_step {}: {:?}, took {:?} ",
-            step,
-            res.is_ok(),
-            start.elapsed()
-        );
-
-        let start = Instant::now();
-
-        let res = recursive_snark.verify(&pp, &z0_primary, &z0_secondary);
-        assert!(res.is_ok());
-        println!(
-            "RecursiveSNARK::verify {}: {:?}, took {:?} ",
             step,
             res.is_ok(),
             start.elapsed()
@@ -281,14 +268,6 @@ fn main() {
     );
     assert!(res.is_ok());
     let compressed_snark = res.unwrap();
-
-    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
-    bincode::serialize_into(&mut encoder, &compressed_snark).unwrap();
-    let compressed_snark_encoded = encoder.finish().unwrap();
-    println!(
-        "CompressedSNARK::len {:?} bytes",
-        compressed_snark_encoded.len()
-    );
 
     // verify the compressed SNARK
     println!("Verifying a CompressedSNARK...");
