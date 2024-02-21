@@ -13,8 +13,7 @@ repository.workspace = true
 
 [dependencies]
 anyhow = "1.0.40"
-bellpepper = { workspace = true }
-bellpepper-core = { git = "https://github.com/lurk-lab/bellpepper", branch = "dev", default-features = false }
+bellpepper-core = { workspace = true, default-features = false }
 ff = { workspace = true }
 thiserror = "1.0.57"
 getset = "0.1.2"
