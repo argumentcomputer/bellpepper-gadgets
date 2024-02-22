@@ -138,7 +138,7 @@ impl<F: PrimeField + PrimeFieldBits> G1Point<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        // compute leftside = (y_a - y_c) * (x_b - x_a)
+        // compute leftside = (y_a + y_c) * (x_b - x_a)
         let aymcy = a.y.add(&mut cs.namespace(|| "aymcy <- a.y + c.y"), &c.y)?; // flip c.y to check for EC add
         let bxax = b.x.sub(&mut cs.namespace(|| "bxax <- b.x - a.x"), &a.x)?;
         let leftside = aymcy.mul(&mut cs.namespace(|| "leftside <- aymcy * bxax"), &bxax)?;
