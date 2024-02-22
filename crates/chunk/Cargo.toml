@@ -20,12 +20,15 @@ thiserror = "1.0.57"
 getset = "0.1.2"
 
 [dev-dependencies]
-arecibo = { git = "https://github.com/lurk-lab/arecibo", branch = "dev", package = "arecibo" }
+arecibo = { path = "../../../arecibo" }
+bellpepper = { workspace = true, default-features = false }
+bellpepper-keccak = { path = "../keccak" }
+bellpepper-merkle-inclusion = { path = "../merkle-inclusion" }
 bincode = "1.3.3"
 bitvec = "1.0.1"
 halo2curves = { version = "0.6.0", features = ["bits", "derive_serde"] }
 paste = "1.0.14"
-tiny-keccak = {  version = "2.0.2", features = ["sha3"] }
+sha3 = "0.11.0-pre.3"
 tracing-subscriber =  { version = "0.3.18", features = ["env-filter"] }
 tracing = "0.1.40"
 tracing-texray = "0.2.0"

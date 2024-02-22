@@ -51,10 +51,10 @@ macro_rules! create_gadget_digest_impl {
             type OutOfCircuitHasher = $out_of_circuit_hasher;
 
             fn digest<CS: ConstraintSystem<E>>(
-                cs: CS,
+                mut cs: CS,
                 input: &[Boolean],
             ) -> Result<Vec<Boolean>, SynthesisError> {
-                $digest_method(cs, input)
+                $digest_method(&mut cs.namespace(|| "digest data"), input)
             }
         }
     };
