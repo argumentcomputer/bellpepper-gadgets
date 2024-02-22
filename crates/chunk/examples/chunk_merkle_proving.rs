@@ -6,6 +6,8 @@ use arecibo::traits::{CurveCycleEquipped, Dual, Engine};
 use bellpepper::gadgets::boolean::{field_into_boolean_vec_le, Boolean};
 use bellpepper::gadgets::multipack::{bytes_to_bits_le, compute_multipacking};
 use bellpepper::gadgets::num::AllocatedNum;
+use bellpepper_chunk::traits::{ChunkCircuitInner, ChunkStepCircuit};
+use bellpepper_chunk::{FoldStep, InnerCircuit};
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use bitvec::order::Lsb0;
 use bitvec::prelude::BitVec;
@@ -29,13 +31,7 @@ pub type SS2 = arecibo::spartan::ppsnark::RelaxedR1CSSNARK<E2, EE2>;
 /*****************************************
  * Utilities
  *****************************************/
-
-fn bytes_to_bitvec(bytes: &[u8]) -> Vec<Boolean> {
-    let bits = BitVec::<u8, Lsb0>::from_slice(bytes);
-    let bits: Vec<Boolean> = bits.iter().map(|b| Boolean::constant(*b)).collect();
-    bits
-}
-
+// Computes the sha3 hash of a preimage.
 fn sha3(preimage: &[u8]) -> [u8; 32] {
     let mut sha3 = Sha3::v256();
 
@@ -46,76 +42,77 @@ fn sha3(preimage: &[u8]) -> [u8; 32] {
     hash
 }
 
-fn hash_to_field_elements<F: PrimeField + PrimeFieldBits<Repr = [u8; 32]>>(
-    hash_bytes: &[u8; 32],
-) -> (F, F) {
-    // Split the hash into two parts
-    let (part1_bytes, part2_bytes) = hash_bytes.split_at(16);
+// Reconstructs a hash from a list of field elements.
+fn reconstruct_hash<F: PrimeField + PrimeFieldBits, CS: ConstraintSystem<F>>(
+    cs: &mut CS,
+    elements: &[AllocatedNum<F>],
+    bit_size: usize,
+) -> Vec<Boolean> {
+    // Compute the bit sizes of the field elements
+    let mut scalar_bit_sizes: Vec<usize> = (0..bit_size / F::CAPACITY as usize)
+        .map(|i| F::CAPACITY as usize)
+        .collect();
+    // If the bit size is not a multiple of 253, we need to add the remaining bits
+    if bit_size % F::CAPACITY != 0 {
+        scalar_bit_sizes.push(bit_size % F::CAPACITY)
+    }
 
-    let part1_bytes_padded = {
-        let mut padded = [0u8; 32];
-        padded[..16].copy_from_slice(part1_bytes);
-        padded
-    };
+    assert_eq!(
+        elements.len(),
+        scalar_bit_sizes.len(),
+        "Got {} elements to reconstruct hash, expected {}",
+        elements.len(),
+        scalar_bit_sizes.len()
+    );
 
-    let part2_bytes_padded = {
-        let mut padded = [0u8; 32];
-        padded[..16].copy_from_slice(part2_bytes);
-        padded
-    };
+    let mut result: Vec<Boolean> = vec![];
 
-    // Convert each part to field elements
-    let part1_fe = F::from_repr(part1_bytes_padded).unwrap();
-    let part2_fe = F::from_repr(part2_bytes_padded).unwrap();
+    // For each field element, take the first `bit_size` bits
+    for (i, bit_to_take) in scalar_bit_sizes.iter().enumerate() {
+        let element = elements[i]
+            .to_bits_le(&mut cs.namespace(|| "test"))
+            .unwrap();
 
-    (part1_fe, part2_fe)
-}
+        result.extend(element.into_iter().take(*bit_to_take));
+    }
 
-fn reconstruct_hash<F: PrimeField + PrimeFieldBits<Repr = [u8; 32]>>(
-    element1: F,
-    element2: F,
-) -> Vec<u8> {
-    // Convert each field element back to bytes
-    // Note: The exact method to do this will depend on your library
-    let mut part1_bytes = element1.to_repr();
-    let mut part2_bytes = element2.to_repr();
-
-    // Concatenate the two parts
-    let mut hash_bytes = [0u8; 32];
-    hash_bytes[..16].copy_from_slice(&part1_bytes[..16]);
-    hash_bytes[16..].copy_from_slice(&part2_bytes[..16]);
-
-    hash_bytes.to_vec()
+    result
 }
 
 /*****************************************
  * Circuit
  *****************************************/
 
-struct ChunkCircuit<F: PrimeField + PrimeFieldBits> {
-    _p: PhantomData<F>,
+struct MerkleChunkCircuit<F: PrimeField + PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize> {
+    inner: InnerCircuit<F, C, N>,
 }
 
-impl<F: PrimeField + PrimeFieldBits> ChunkCircuit<F> {
-    fn new() -> Self {
+impl<F: PrimeField + PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize>
+    MerkleChunkCircuit<F, C, N>
+{
+    fn new(leaf_key: Vec<Boolean>, sibling_hashes: Vec<Boolean>) -> Self {
         Self {
-            _p: Default::default(),
+            inner: InnerCircuit::new(&[]).unwrap(),
         }
     }
 }
 
 #[derive(Clone, Debug)]
-enum ChunkCircuitSet<F: PrimeField + PrimeFieldBits> {
-    Other(PhantomData<F>),
+enum ChunkCircuitSet<F: PrimeField + PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize> {
+    IterStep(FoldStepWrapper<F, C, N>),
 }
 
-impl<F: PrimeField + PrimeFieldBits> StepCircuit<F> for ChunkCircuitSet<F> {
+impl<F: PrimeField + PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize> StepCircuit<F>
+    for ChunkCircuitSet<F, C, N>
+{
     fn arity(&self) -> usize {
-        5
+        6
     }
 
     fn circuit_index(&self) -> usize {
-        0
+        match self {
+            Self::IterStep(fold_step) => *fold_step.inner.step_nbr(),
+        }
     }
 
     fn synthesize<CS: ConstraintSystem<F>>(
@@ -124,57 +121,103 @@ impl<F: PrimeField + PrimeFieldBits> StepCircuit<F> for ChunkCircuitSet<F> {
         pc: Option<&AllocatedNum<F>>,
         z: &[AllocatedNum<F>],
     ) -> Result<(Option<AllocatedNum<F>>, Vec<AllocatedNum<F>>), SynthesisError> {
-        let test1 = z
-            .get(1)
-            .unwrap()
-            .to_bits_le(&mut cs.namespace(|| "test"))
-            .unwrap();
-
-        let test2 = z
-            .get(2)
-            .unwrap()
-            .to_bits_le(&mut cs.namespace(|| "test"))
-            .unwrap();
-
-        // We need to clone each element to avoid moving them, because MyStruct doesn't implement Copy
-        let mut result: Vec<Boolean> = Vec::with_capacity(256);
-
-        // Extend the result with clones of the first 253 elements of vec1
-        result.extend(test1.into_iter().take(253));
-
-        // Extend the result with clones of the first 3 elements of test2
-        result.extend(test2.into_iter().take(3));
-
-        Ok((
-            Some(AllocatedNum::alloc(
-                cs.namespace(|| "next_circuit"),
-                || Ok(F::ZERO),
-            )?),
-            vec![
-                z[0].clone(),
-                z[0].clone(),
-                z[0].clone(),
-                z[0].clone(),
-                z[0].clone(),
-            ],
-        ))
+        match self {
+            Self::IterStep(fold_step) => fold_step.synthesize(cs, pc, z),
+        }
     }
 }
 
-impl<E1: CurveCycleEquipped> NonUniformCircuit<E1> for ChunkCircuit<E1::Scalar> {
-    type C1 = ChunkCircuitSet<E1::Scalar>;
+impl<E1: CurveCycleEquipped, C: ChunkStepCircuit<E1::Scalar>, const N: usize> NonUniformCircuit<E1>
+    for MerkleChunkCircuit<E1::Scalar, C, N>
+{
+    type C1 = ChunkCircuitSet<E1::Scalar, C, N>;
     type C2 = TrivialSecondaryCircuit<<Dual<E1> as Engine>::Scalar>;
 
     fn num_circuits(&self) -> usize {
-        1
+        self.inner.num_fold_steps()
     }
 
     fn primary_circuit(&self, circuit_index: usize) -> Self::C1 {
-        Self::C1::Other(Default::default())
+        if let Some(fold_step) = self.inner.circuits().get(circuit_index) {
+            return Self::C1::IterStep(FoldStepWrapper::new(fold_step.clone()));
+        }
+        panic!("No circuit found for index {}", circuit_index)
     }
 
     fn secondary_circuit(&self) -> Self::C2 {
         Default::default()
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+struct ChunkStep<F: PrimeField> {
+    _p: PhantomData<F>,
+}
+
+impl<F: PrimeField> ChunkStepCircuit<F> for ChunkStep<F> {
+    fn new() -> Self {
+        Self {
+            _p: Default::default(),
+        }
+    }
+
+    // Expected inputs for our circuit. We expect 6 inputs:
+    // 1. The first field element of the accumulator hash
+    // 2. The second field element of the accumulator hash
+    // 3. The first field element of the leaf hash
+    // 4. The second field element of the leaf hash
+    // 5. The first field element of the root hash
+    // 6. The second field element of the root hash
+    fn arity() -> usize {
+        6
+    }
+
+    // In this case z contains the value described above while chunk_in contains the intermediate hashes to continue
+    // the computation.
+    fn synthesize<CS: ConstraintSystem<F>>(
+        &self,
+        cs: &mut CS,
+        _pc: Option<&bellpepper_core::num::AllocatedNum<F>>,
+        z: &[bellpepper_core::num::AllocatedNum<F>],
+        chunk_in: &[bellpepper_core::num::AllocatedNum<F>],
+    ) -> Result<Vec<bellpepper_core::num::AllocatedNum<F>>, SynthesisError> {
+        todo!()
+    }
+}
+
+#[derive(Clone, Debug)]
+struct FoldStepWrapper<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
+    inner: FoldStep<F, C, N>,
+}
+
+impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> FoldStepWrapper<F, C, N> {
+    pub fn new(fold_step: FoldStep<F, C, N>) -> Self {
+        Self { inner: fold_step }
+    }
+}
+
+impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> StepCircuit<F>
+    for FoldStepWrapper<F, C, N>
+{
+    fn arity(&self) -> usize {
+        self.inner.arity()
+    }
+
+    fn circuit_index(&self) -> usize {
+        *self.inner.step_nbr()
+    }
+
+    fn synthesize<CS: ConstraintSystem<F>>(
+        &self,
+        cs: &mut CS,
+        pc: Option<&AllocatedNum<F>>,
+        z: &[AllocatedNum<F>],
+    ) -> Result<(Option<AllocatedNum<F>>, Vec<AllocatedNum<F>>), SynthesisError> {
+        let (next_pc, res_inner_synth) =
+            self.inner
+                .synthesize(&mut cs.namespace(|| "fold_step_wrapper"), pc, z)?;
+
+        Ok((next_pc, res_inner_synth))
     }
 }
 
@@ -183,9 +226,10 @@ fn main() {
     let start = Instant::now();
 
     //  Primary circuit
-    type C1 = ChunkCircuit<<E1 as Engine>::Scalar>;
-    let chunk_circuit = ChunkCircuit::<<E1 as Engine>::Scalar>::new();
+    type C1 = MerkleChunkCircuit<<E1 as Engine>::Scalar, ChunkStep<<E1 as Engine>::Scalar>, 1>;
+    let chunk_circuit = C1::new(vec![], vec![]);
 
+    // Leaf and root hashes
     let a_leaf = sha3("a".as_bytes());
     let mut b_leaf = sha3("b".as_bytes());
     let c_leaf = sha3("c".as_bytes());
@@ -197,13 +241,17 @@ fn main() {
     let abcd_leaf_hash = sha3(&[ab_leaf_hash, cd_leaf_hash].concat());
     let aa = &bytes_to_bits_le(&b_leaf);
 
+    // Multipacking the leaf and root hashes
     let mut leaf_fields =
         compute_multipacking::<<E1 as Engine>::Scalar>(&bytes_to_bits_le(&b_leaf));
-
     let mut root_fields =
         compute_multipacking::<<E1 as Engine>::Scalar>(&bytes_to_bits_le(&abcd_leaf_hash));
 
-    let mut z0_primary: Vec<<E1 as Engine>::Scalar> = vec![<E1 as Engine>::Scalar::zero()];
+    // The accumulator elements are initialized to 0
+    let mut z0_primary: Vec<<E1 as Engine>::Scalar> = vec![
+        <E1 as Engine>::Scalar::zero(),
+        <E1 as Engine>::Scalar::zero(),
+    ];
 
     z0_primary.append(&mut leaf_fields.clone());
     z0_primary.append(&mut root_fields.clone());
