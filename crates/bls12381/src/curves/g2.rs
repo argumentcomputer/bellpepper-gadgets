@@ -208,13 +208,13 @@ impl<F: PrimeFieldBits> G2Point<F> {
             y: Fp2Element::zero(),
         };
         let inputx = Fp2Element::conditionally_select(
-            &mut cs.namespace(|| "asdfx"),
+            &mut cs.namespace(|| "tmp x"),
             &value.x,
             &dummy.x,
             &is_eq,
         )?;
         let inputy = Fp2Element::conditionally_select(
-            &mut cs.namespace(|| "asdfy"),
+            &mut cs.namespace(|| "tmp y"),
             &value.y,
             &dummy.y,
             &is_eq,
@@ -227,13 +227,13 @@ impl<F: PrimeFieldBits> G2Point<F> {
         let add = add.reduce(&mut cs.namespace(|| "add.reduce()"))?;
 
         let resx = Fp2Element::conditionally_select(
-            &mut cs.namespace(|| "asdfx2"),
+            &mut cs.namespace(|| "res x"),
             &add.x,
             &double.x,
             &is_eq,
         )?;
         let resy = Fp2Element::conditionally_select(
-            &mut cs.namespace(|| "asdfy2"),
+            &mut cs.namespace(|| "res y"),
             &add.y,
             &double.y,
             &is_eq,

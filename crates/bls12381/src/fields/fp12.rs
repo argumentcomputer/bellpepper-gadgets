@@ -309,7 +309,13 @@ impl<F: PrimeFieldBits> Fp12Element<F> {
         CS: ConstraintSystem<F>,
     {
         let mut cs = cs.namespace(|| "Fp12::square(x)");
+
+        // This explicit reduction is single-handedly responsible for saving
+        // millions of constraints during a pairing operation. This function is
+        // repeatedly called inside `miller_loop_lines`, and is responsible for
+        // a considerable chunk of the constraints
         let x = self.reduce(&mut cs.namespace(|| "x <- x.reduce()"))?;
+
         let c0 = x.c0.sub(&mut cs.namespace(|| "c0 <- x.c0 - x.c1"), &x.c1)?;
         let c3 =
             x.c1.mul_by_nonresidue(&mut cs.namespace(|| "c3 <- x.c1.mul_by_nonresidue()"))?;
