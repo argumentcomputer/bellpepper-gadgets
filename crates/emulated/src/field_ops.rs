@@ -7,7 +7,7 @@ use std::{
 use bellpepper_core::boolean::{AllocatedBit, Boolean};
 use bellpepper_core::num::{AllocatedNum, Num};
 use bellpepper_core::{ConstraintSystem, LinearCombination, SynthesisError};
-use ff::{PrimeField, PrimeFieldBits};
+use ff::PrimeFieldBits;
 use num_bigint::BigInt;
 use num_traits::One;
 
@@ -40,7 +40,7 @@ impl Debug for OverflowError {
 
 impl<F, P> EmulatedFieldElement<F, P>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
     P: EmulatedFieldParams,
 {
     fn compact(

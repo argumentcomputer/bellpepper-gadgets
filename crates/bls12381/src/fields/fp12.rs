@@ -3,20 +3,20 @@ use bellpepper_core::{ConstraintSystem, SynthesisError};
 use bls12_381::fp12::Fp12 as BlsFp12;
 use bls12_381::fp2::Fp2 as BlsFp2;
 use bls12_381::fp6::Fp6 as BlsFp6;
-use ff::{PrimeField, PrimeFieldBits};
+use ff::PrimeFieldBits;
 
 use super::fp2::Fp2Element;
 use super::fp6::Fp6Element;
 
 #[derive(Clone)]
-pub struct Fp12Element<F: PrimeField + PrimeFieldBits> {
+pub struct Fp12Element<F: PrimeFieldBits> {
     pub(crate) c0: Fp6Element<F>,
     pub(crate) c1: Fp6Element<F>,
 }
 
 impl<F> From<&BlsFp12> for Fp12Element<F>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     fn from(value: &BlsFp12) -> Self {
         let c0 = Fp6Element::<F>::from(&value.c0);
@@ -27,7 +27,7 @@ where
 
 impl<F> From<&Fp12Element<F>> for BlsFp12
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     fn from(value: &Fp12Element<F>) -> Self {
         let c0 = BlsFp6::from(&value.c0);
@@ -36,7 +36,7 @@ where
     }
 }
 
-impl<F: PrimeField + PrimeFieldBits> Fp12Element<F> {
+impl<F: PrimeFieldBits> Fp12Element<F> {
     pub fn zero() -> Self {
         Self {
             c0: Fp6Element::zero(),

@@ -2,12 +2,12 @@ use bellpepper_core::boolean::{AllocatedBit, Boolean};
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use bls12_381::fp2::Fp2 as BlsFp2;
 use bls12_381::fp6::Fp6 as BlsFp6;
-use ff::{PrimeField, PrimeFieldBits};
+use ff::PrimeFieldBits;
 
 use super::fp2::Fp2Element;
 
 #[derive(Clone)]
-pub struct Fp6Element<F: PrimeField + PrimeFieldBits> {
+pub struct Fp6Element<F: PrimeFieldBits> {
     pub(crate) b0: Fp2Element<F>,
     pub(crate) b1: Fp2Element<F>,
     pub(crate) b2: Fp2Element<F>,
@@ -15,7 +15,7 @@ pub struct Fp6Element<F: PrimeField + PrimeFieldBits> {
 
 impl<F> From<&BlsFp6> for Fp6Element<F>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     fn from(value: &BlsFp6) -> Self {
         let b0 = Fp2Element::<F>::from(&value.c0);
@@ -27,7 +27,7 @@ where
 
 impl<F> From<&Fp6Element<F>> for BlsFp6
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     fn from(value: &Fp6Element<F>) -> Self {
         let c0 = BlsFp2::from(&value.b0);
@@ -37,7 +37,7 @@ where
     }
 }
 
-impl<F: PrimeField + PrimeFieldBits> Fp6Element<F> {
+impl<F: PrimeFieldBits> Fp6Element<F> {
     pub fn zero() -> Self {
         Self {
             b0: Fp2Element::zero(),

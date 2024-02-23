@@ -2,21 +2,21 @@ use bellpepper_core::boolean::{AllocatedBit, Boolean};
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use bls12_381::G1Affine;
 use bls12_381::{fp::Fp as BlsFp, G1Projective};
-use ff::{PrimeField, PrimeFieldBits};
+use ff::PrimeFieldBits;
 use num_bigint::BigInt;
 
 use crate::curves::params::Bls12381G1Params;
 use crate::fields::fp::FpElement;
 
 #[derive(Clone)]
-pub struct G1Point<F: PrimeField + PrimeFieldBits> {
+pub struct G1Point<F: PrimeFieldBits> {
     pub x: FpElement<F>,
     pub y: FpElement<F>,
 }
 
 impl<F> From<&G1Affine> for G1Point<F>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     fn from(value: &G1Affine) -> Self {
         let x = FpElement::<F>::from(&value.x);
@@ -27,7 +27,7 @@ where
 
 impl<F> From<&G1Point<F>> for G1Affine
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     fn from(value: &G1Point<F>) -> Self {
         let x = BlsFp::from(&value.x);
@@ -42,7 +42,7 @@ where
     }
 }
 
-impl<F: PrimeField + PrimeFieldBits> G1Point<F> {
+impl<F: PrimeFieldBits> G1Point<F> {
     pub fn identity() -> Self {
         // (0,0) is the point at infinity
         Self {

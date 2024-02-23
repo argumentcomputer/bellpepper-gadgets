@@ -7,21 +7,21 @@ use bellpepper_core::{
     num::Num,
 };
 use bellpepper_core::{ConstraintSystem, LinearCombination, SynthesisError};
-use ff::{PrimeField, PrimeFieldBits};
+use ff::PrimeFieldBits;
 use num_bigint::{BigInt, BigUint};
 use num_traits::{One, Signed, Zero};
 
 use crate::util::*;
 
 #[derive(Debug)]
-pub enum EmulatedLimbs<F: PrimeField + PrimeFieldBits> {
+pub enum EmulatedLimbs<F: PrimeFieldBits> {
     Allocated(Vec<Num<F>>),
     Constant(Vec<F>),
 }
 
 impl<F> From<Vec<F>> for EmulatedLimbs<F>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     fn from(value: Vec<F>) -> Self {
         Self::Constant(value)
@@ -30,14 +30,14 @@ where
 
 impl<F> AsRef<Self> for EmulatedLimbs<F>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     fn as_ref(&self) -> &Self {
         self
     }
 }
 
-impl<F: PrimeField + PrimeFieldBits> Clone for EmulatedLimbs<F> {
+impl<F: PrimeFieldBits> Clone for EmulatedLimbs<F> {
     fn clone(&self) -> Self {
         match self {
             Self::Allocated(a) => Self::Allocated(a.clone()),
@@ -48,7 +48,7 @@ impl<F: PrimeField + PrimeFieldBits> Clone for EmulatedLimbs<F> {
 
 impl<F> EmulatedLimbs<F>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     pub(crate) fn allocate_limbs<CS>(cs: &mut CS, limb_values: &[F]) -> Result<Self, SynthesisError>
     where
@@ -90,7 +90,7 @@ pub trait EmulatedFieldParams {
 
 #[allow(clippy::len_without_is_empty)]
 #[derive(Debug)]
-pub struct EmulatedFieldElement<F: PrimeField + PrimeFieldBits, P: EmulatedFieldParams> {
+pub struct EmulatedFieldElement<F: PrimeFieldBits, P: EmulatedFieldParams> {
     pub(crate) limbs: EmulatedLimbs<F>,
     pub(crate) overflow: usize,
     pub(crate) internal: bool,
@@ -99,7 +99,7 @@ pub struct EmulatedFieldElement<F: PrimeField + PrimeFieldBits, P: EmulatedField
 
 impl<F, P> Clone for EmulatedFieldElement<F, P>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
     P: EmulatedFieldParams,
 {
     fn clone(&self) -> Self {
@@ -114,7 +114,7 @@ where
 
 impl<F, P> From<&BigInt> for EmulatedFieldElement<F, P>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
     P: EmulatedFieldParams,
 {
     /// Converts a [BigInt] into an [EmulatedFieldElement]
@@ -164,7 +164,7 @@ where
 
 impl<F, P> From<&EmulatedFieldElement<F, P>> for BigInt
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
     P: EmulatedFieldParams,
 {
     fn from(value: &EmulatedFieldElement<F, P>) -> Self {
@@ -188,7 +188,7 @@ where
 
 impl<F, P> EmulatedFieldElement<F, P>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
     P: EmulatedFieldParams,
 {
     pub fn zero() -> Self {

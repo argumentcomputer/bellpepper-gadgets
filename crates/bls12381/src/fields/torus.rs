@@ -1,7 +1,7 @@
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use bls12_381::fp12::Fp12 as BlsFp12;
 use bls12_381::fp6::Fp6 as BlsFp6;
-use ff::{PrimeField, PrimeFieldBits};
+use ff::PrimeFieldBits;
 
 use super::fp::FpElement;
 use super::fp12::Fp12Element;
@@ -9,7 +9,7 @@ use super::fp2::Fp2Element;
 use super::fp6::Fp6Element;
 
 #[derive(Clone)]
-pub struct Torus<F: PrimeField + PrimeFieldBits>(pub Fp6Element<F>);
+pub struct Torus<F: PrimeFieldBits>(pub Fp6Element<F>);
 
 /// From gnark's std/algebra/emulated/fields_bls12381/e12_pairing.go:
 ///
@@ -27,7 +27,7 @@ pub struct Torus<F: PrimeField + PrimeFieldBits>(pub Fp6Element<F>);
 ///    𝔽p²[u] = 𝔽p/u²+1
 ///    𝔽p⁶[v] = 𝔽p²/v³-1-u
 ///    𝔽p¹²[w] = 𝔽p⁶/w²-v
-impl<F: PrimeField + PrimeFieldBits> Torus<F> {
+impl<F: PrimeFieldBits> Torus<F> {
     /// compress_torus compresses x ∈ Fp12 to (x.C0 + 1)/x.C1 ∈ Fp6
     pub fn compress<CS>(cs: &mut CS, x: &Fp12Element<F>) -> Result<Self, SynthesisError>
     where

@@ -6,7 +6,7 @@ use bellpepper_emulated::field_element::{
     EmulatedFieldElement, EmulatedFieldParams, PseudoMersennePrime,
 };
 use bls12_381::fp::Fp as BlsFp;
-use ff::{PrimeField, PrimeFieldBits};
+use ff::PrimeFieldBits;
 use num_bigint::{BigInt, Sign};
 
 pub struct Bls12381FpParams;
@@ -42,7 +42,7 @@ impl EmulatedFieldParams for Bls12381FpParams {
 pub type Bls12381Fp<F> = EmulatedFieldElement<F, Bls12381FpParams>;
 
 #[derive(Clone)]
-pub struct FpElement<F: PrimeField + PrimeFieldBits>(pub(crate) Bls12381Fp<F>);
+pub struct FpElement<F: PrimeFieldBits>(pub(crate) Bls12381Fp<F>);
 
 pub struct Bls12381FrParams;
 
@@ -76,7 +76,7 @@ pub type Bls12381Fr<F> = EmulatedFieldElement<F, Bls12381FrParams>;
 
 impl<F> From<&BlsFp> for FpElement<F>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     fn from(value: &BlsFp) -> Self {
         let bytes = value.to_bytes();
@@ -105,7 +105,7 @@ pub(crate) fn bigint_to_fpelem(val: &BigInt) -> Option<BlsFp> {
 
 pub(crate) fn emulated_to_native<F>(value: &Bls12381Fp<F>) -> BlsFp
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     use std::ops::Rem;
     let p = &Bls12381FpParams::modulus();
@@ -115,14 +115,14 @@ where
 
 impl<F> From<&FpElement<F>> for BlsFp
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     fn from(value: &FpElement<F>) -> Self {
         emulated_to_native(&value.0)
     }
 }
 
-impl<F: PrimeField + PrimeFieldBits> FpElement<F> {
+impl<F: PrimeFieldBits> FpElement<F> {
     pub fn from_dec(val: &str) -> Option<Self> {
         BigInt::parse_bytes(val.as_bytes(), 10)
             .as_ref()
