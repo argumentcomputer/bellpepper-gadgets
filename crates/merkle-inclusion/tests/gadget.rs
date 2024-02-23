@@ -71,7 +71,7 @@ fn verify_non_existing_leaf<GD: GadgetDigest<Scalar>, O: BitOrder>() {
 
     let proof = Proof::new(
         Leaf::new(
-            non_existing_key.to_vec(),
+            non_existing_key,
             bytes_to_bitvec::<O>(&non_existing_leaf_hash),
         ),
         vec![/* sibling hashes */],
@@ -125,7 +125,7 @@ fn verify_single_leaf_merkle<GD: GadgetDigest<Scalar>, O: BitOrder>() {
     }
 
     let proof = Proof::new(
-        Leaf::new(leaf_key.to_vec(), bytes_to_bitvec::<O>(&single_leaf)),
+        Leaf::new(leaf_key, bytes_to_bitvec::<O>(&single_leaf)),
         vec![], // No siblings in a single-leaf tree
     );
 
@@ -138,7 +138,7 @@ fn verify_single_leaf_merkle<GD: GadgetDigest<Scalar>, O: BitOrder>() {
     );
     assert_eq!(
         bits_to_bytevec::<O>(&res.unwrap()),
-        single_leaf.to_vec(),
+        single_leaf,
         "The root hash must match the single leaf hash."
     );
 }
@@ -384,10 +384,8 @@ pub fn construct_merkle_tree<GD: GadgetDigest<Scalar>>() -> SimpleMerkleTree {
 
     for j in (0..12).step_by(2) {
         leaves.push(
-            hash::<GD::OutOfCircuitHasher>(
-                &[leaves[j].to_owned(), leaves[j + 1].to_owned()].concat(),
-            )
-            .to_vec(),
+            hash::<GD::OutOfCircuitHasher>(&[leaves[j].clone(), leaves[j + 1].clone()].concat())
+                .to_vec(),
         );
     }
     // Generate keys
@@ -419,11 +417,10 @@ pub fn construct_merkle_tree<GD: GadgetDigest<Scalar>>() -> SimpleMerkleTree {
 
     // Compute expected root hash
     let expected_root =
-        hash::<GD::OutOfCircuitHasher>(&[leaves[12].to_owned(), leaves[13].to_owned()].concat())
-            .to_vec();
+        hash::<GD::OutOfCircuitHasher>(&[leaves[12].clone(), leaves[13].clone()].concat()).to_vec();
 
     SimpleMerkleTree {
-        root: expected_root.to_owned(),
+        root: expected_root,
         leaf_key_vec,
     }
 }

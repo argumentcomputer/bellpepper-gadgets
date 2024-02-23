@@ -41,7 +41,7 @@ impl<F> EmulatedLimbs<F>
 where
     F: PrimeFieldBits,
 {
-    pub(crate) fn allocate_limbs<CS>(cs: &mut CS, limb_values: &[F]) -> Result<Self, SynthesisError>
+    pub(crate) fn allocate_limbs<CS>(cs: &mut CS, limb_values: &[F]) -> Self
     where
         CS: ConstraintSystem<F>,
     {
@@ -55,7 +55,7 @@ where
             num_vec.push(Num::<F>::from(allocated_limb));
         }
 
-        Ok(Self::Allocated(num_vec))
+        Self::Allocated(num_vec)
     }
 }
 
@@ -225,10 +225,10 @@ where
         CS: ConstraintSystem<F>,
     {
         if let EmulatedLimbs::Constant(limb_values) = &self.limbs {
-            EmulatedLimbs::<F>::allocate_limbs(
+            Ok(EmulatedLimbs::<F>::allocate_limbs(
                 &mut cs.namespace(|| "allocate variables from constant limbs"),
                 limb_values,
-            )
+            ))
         } else {
             eprintln!("input must have constant limb values");
             Err(SynthesisError::Unsatisfiable)
@@ -587,7 +587,7 @@ where
         let res_alloc_limbs = EmulatedLimbs::allocate_limbs(
             &mut cs.namespace(|| "allocate result limbs"),
             &res_values,
-        )?;
+        );
 
         match &res_alloc_limbs {
             EmulatedLimbs::Allocated(res_limbs) => {

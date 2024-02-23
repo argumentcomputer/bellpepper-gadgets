@@ -59,7 +59,7 @@ where
         let res_limbs = EmulatedLimbs::<F>::allocate_limbs(
             &mut cs.namespace(|| "allocate from quotient value"),
             &res_limb_values,
-        )?;
+        );
 
         let res = Self::pack_limbs(
             &mut cs.namespace(|| "enforce bitwidths on quotient"),
