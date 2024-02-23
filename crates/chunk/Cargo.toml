@@ -13,7 +13,8 @@ repository.workspace = true
 
 [dependencies]
 anyhow = "1.0.40"
-bellpepper-core = { workspace = true, default-features = false }
+bellpepper = { workspace = true }
+bellpepper-core = { workspace = true, default-features = false}
 ff = { workspace = true }
 thiserror = "1.0.57"
 getset = "0.1.2"
