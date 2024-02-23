@@ -13,7 +13,7 @@ use num_traits::{One, Signed, Zero};
 
 use crate::util::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum EmulatedLimbs<F: PrimeFieldBits> {
     Allocated(Vec<Num<F>>),
     Constant(Vec<F>),
@@ -37,15 +37,6 @@ where
     }
 }
 
-impl<F: PrimeFieldBits> Clone for EmulatedLimbs<F> {
-    fn clone(&self) -> Self {
-        match self {
-            Self::Allocated(a) => Self::Allocated(a.clone()),
-            Self::Constant(c) => Self::Constant(c.clone()),
-        }
-    }
-}
-
 impl<F> EmulatedLimbs<F>
 where
     F: PrimeFieldBits,
@@ -57,8 +48,10 @@ where
         let mut num_vec: Vec<Num<F>> = vec![];
 
         for (i, v) in limb_values.iter().enumerate() {
-            let allocated_limb =
-                AllocatedNum::alloc(cs.namespace(|| format!("allocating limb {i}")), || Ok(*v))?;
+            let allocated_limb = AllocatedNum::alloc_infallible(
+                cs.namespace(|| format!("allocating limb {i}")),
+                || *v,
+            );
             num_vec.push(Num::<F>::from(allocated_limb));
         }
 

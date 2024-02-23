@@ -131,7 +131,7 @@ pub fn alloc_num_equals_constant<F: PrimeField, CS: ConstraintSystem<F>>(
     } else {
         (a_value - b).invert().unwrap()
     };
-    let t = AllocatedNum::alloc(cs.namespace(|| "t"), || Ok(t_value))?;
+    let t = AllocatedNum::alloc_infallible(cs.namespace(|| "t"), || t_value);
 
     cs.enforce(
         || "t*(a - b) = 1 - r",
