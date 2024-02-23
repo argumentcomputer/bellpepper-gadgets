@@ -7,6 +7,7 @@ use arecibo::traits::{CurveCycleEquipped, Dual, Engine};
 use bellpepper::gadgets::boolean::{field_into_boolean_vec_le, Boolean};
 use bellpepper::gadgets::multipack::{bytes_to_bits_le, compute_multipacking, pack_bits};
 use bellpepper::gadgets::num::AllocatedNum;
+use bellpepper::gadgets::Assignment;
 use bellpepper_chunk::traits::{ChunkCircuitInner, ChunkStepCircuit};
 use bellpepper_chunk::{FoldStep, InnerCircuit};
 use bellpepper_core::boolean::{field_into_allocated_bits_le, AllocatedBit};
@@ -18,6 +19,7 @@ use bitvec::order::Lsb0;
 use bitvec::prelude::BitVec;
 use ff::{Field, PrimeField, PrimeFieldBits};
 use halo2curves::bn256::Bn256;
+use itertools::Itertools;
 use sha3::digest::Output;
 use sha3::{Digest, Sha3_256};
 use std::marker::PhantomData;
@@ -82,6 +84,48 @@ fn reconstruct_hash<F: PrimeField + PrimeFieldBits, CS: ConstraintSystem<F>>(
     }
 
     result
+}
+
+pub fn conditionally_select<F: PrimeField, CS: ConstraintSystem<F>>(
+    mut cs: CS,
+    a: &AllocatedNum<F>,
+    b: &AllocatedNum<F>,
+    condition: &Boolean,
+) -> Result<AllocatedNum<F>, SynthesisError> {
+    let c = AllocatedNum::alloc(cs.namespace(|| "conditional select result"), || {
+        if *condition.get_value().get()? {
+            Ok(*a.get_value().get()?)
+        } else {
+            Ok(*b.get_value().get()?)
+        }
+    })?;
+
+    // a * condition + b*(1-condition) = c ->
+    // a * condition - b*condition = c - b
+    cs.enforce(
+        || "conditional select constraint",
+        |lc| lc + a.get_variable() - b.get_variable(),
+        |_| condition.lc(CS::one(), F::ONE),
+        |lc| lc + c.get_variable() - b.get_variable(),
+    );
+
+    Ok(c)
+}
+
+/// If condition return a otherwise b
+pub fn conditionally_select_vec<F: PrimeField, CS: ConstraintSystem<F>>(
+    mut cs: CS,
+    a: &[AllocatedNum<F>],
+    b: &[AllocatedNum<F>],
+    condition: &Boolean,
+) -> Result<Vec<AllocatedNum<F>>, SynthesisError> {
+    a.iter()
+        .zip_eq(b.iter())
+        .enumerate()
+        .map(|(i, (a, b))| {
+            conditionally_select(cs.namespace(|| format!("select_{i}")), a, b, condition)
+        })
+        .collect::<Result<Vec<AllocatedNum<F>>, SynthesisError>>()
 }
 
 /*****************************************
@@ -195,28 +239,34 @@ impl<F: PrimeField + PrimeFieldBits> ChunkStepCircuit<F> for ChunkStep<F> {
         z: &[AllocatedNum<F>],
         chunk_in: &[AllocatedNum<F>],
     ) -> Result<Vec<AllocatedNum<F>>, SynthesisError> {
-        let acc = reconstruct_hash(&mut cs.namespace(|| "reconstruct acc hash"), &z[0..2], 256);
-
         let boolean = &chunk_in[0]
             .to_bits_le(&mut cs.namespace(|| "get positional bit"))
             .unwrap()[0];
 
-        let sibling = reconstruct_hash(
-            &mut cs.namespace(|| "reconstruct__sibling_hash"),
-            &chunk_in[1..3],
+        let hash_order = conditionally_select_vec(
+            &mut cs.namespace(|| "conditional ordering"),
+            &[&chunk_in[1..3], &z[0..2]].concat(),
+            &[&z[0..2], &chunk_in[1..3]].concat(),
+            boolean,
+        )?;
+
+        let mut first_hash = reconstruct_hash(
+            &mut cs.namespace(|| "reconstruct acc hash"),
+            &hash_order[0..2],
             256,
         );
 
-        let new_acc = bellpepper_merkle_inclusion::update_hash_accumulator::<_, _, Sha3>(
-            &mut cs.namespace(|| "update_hash_accumulator"),
-            &acc,
-            boolean,
-            &sibling,
-        )
-        .unwrap_or((0..256).map(|_| Boolean::constant(false)).collect());
+        let mut second_hash = reconstruct_hash(
+            &mut cs.namespace(|| "reconstruct_sibling_hash"),
+            &hash_order[2..],
+            256,
+        );
+        first_hash.append(&mut second_hash);
 
-        let new_acc_f_1 = pack_bits(&mut cs.namespace(|| "pack_bits"), &new_acc[..253])?;
-        let new_acc_f_2 = pack_bits(&mut cs.namespace(|| "pack_bits"), &new_acc[253..])?;
+        let new_acc = sha3(&mut cs.namespace(|| "hash new acc"), &first_hash)?;
+
+        let new_acc_f_1 = pack_bits(&mut cs.namespace(|| "pack_bits new_acc 1"), &new_acc[..253])?;
+        let new_acc_f_2 = pack_bits(&mut cs.namespace(|| "pack_bits new_acc 2"), &new_acc[253..])?;
         dbg!(&new_acc_f_1);
         dbg!(&new_acc_f_2);
         let z_out = vec![new_acc_f_1, new_acc_f_2, z[2].clone(), z[3].clone()];
@@ -396,7 +446,7 @@ fn main() {
     )
     .unwrap();
 
-    for step in 0..2 {
+    for step in 0..<C1 as NonUniformCircuit<E1>>::num_circuits(&chunk_circuit) {
         let circuit_primary = <C1 as NonUniformCircuit<E1>>::primary_circuit(&chunk_circuit, step);
 
         let res = recursive_snark.prove_step(&pp, &circuit_primary, &circuit_secondary);
@@ -411,7 +461,6 @@ fn main() {
         let start = Instant::now();
 
         let res = recursive_snark.verify(&pp, &z0_primary, &z0_secondary);
-        dbg!(&res);
         assert!(res.is_ok());
         println!(
             "RecursiveSNARK::verify {}: {:?}, took {:?} ",

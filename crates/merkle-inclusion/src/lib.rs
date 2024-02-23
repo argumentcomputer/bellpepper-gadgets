@@ -103,22 +103,22 @@ where
         .enumerate()
     {
         // Compute the new hash.
-        actual_root_hash = update_hash_accumulator::<_, _, GD>(
+        actual_root_hash = conditional_hash::<_, _, GD>(
             &mut cs.namespace(|| format!("updating accumulator for sibling {}", i)),
             &actual_root_hash,
-            bit,
             sibling_hash,
+            bit,
         )?;
     }
 
     hash_equality(cs, expected_root, actual_root_hash)
 }
 
-pub fn update_hash_accumulator<E, CS, GD>(
+pub fn conditional_hash<E, CS, GD>(
     mut cs: CS,
     acc: &[Boolean],
-    bit: &Boolean,
     sibling: &[Boolean],
+    bit: &Boolean,
 ) -> Result<Vec<Boolean>, SynthesisError>
 where
     E: PrimeField,
