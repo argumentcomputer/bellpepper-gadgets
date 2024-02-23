@@ -126,24 +126,20 @@ where
     GD: GadgetDigest<E>,
 {
     // Determine the order of hashing based on the bit value.
-    let hash_order = if let Some(b) = bit.get_value() {
-        if b {
-            vec![sibling.to_owned(), acc.to_vec()]
-        } else {
-            vec![acc.to_vec(), sibling.to_owned()]
-        }
+    let hash_order: Vec<Boolean> = if bit.get_value() == Some(true) {
+        vec![sibling.to_owned(), acc.to_vec()]
+            .into_iter()
+            .flatten()
+            .collect()
     } else {
-        vec![
-            (0..256).map(|_| Boolean::constant(false)).collect(),
-            (0..256).map(|_| Boolean::constant(false)).collect(),
-        ]
+        vec![acc.to_vec(), sibling.to_owned()]
+            .into_iter()
+            .flatten()
+            .collect()
     };
 
     // Compute the new hash.
-    let new_acc = GD::digest(
-        &mut cs.namespace(|| "digest leaf & sibling"),
-        &hash_order.concat(),
-    )?;
+    let new_acc = GD::digest(&mut cs.namespace(|| "digest leaf & sibling"), &hash_order)?;
 
     Ok(new_acc)
 }

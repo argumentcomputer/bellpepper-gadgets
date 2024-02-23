@@ -20,7 +20,7 @@ thiserror = "1.0.57"
 getset = "0.1.2"
 
 [dev-dependencies]
-arecibo = { path = "../../../arecibo" }
+arecibo = { git = "https://github.com/lurk-lab/arecibo", branch = "dev", package = "arecibo" }
 bellpepper = { workspace = true, default-features = false }
 bellpepper-keccak = { path = "../keccak" }
 bellpepper-merkle-inclusion = { path = "../merkle-inclusion" }

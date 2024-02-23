@@ -1,3 +1,4 @@
+use arecibo::supernova::snark::CompressedSNARK;
 use arecibo::supernova::{
     NonUniformCircuit, PublicParams, RecursiveSNARK, StepCircuit, TrivialSecondaryCircuit,
 };
@@ -194,15 +195,11 @@ impl<F: PrimeField + PrimeFieldBits> ChunkStepCircuit<F> for ChunkStep<F> {
         z: &[AllocatedNum<F>],
         chunk_in: &[AllocatedNum<F>],
     ) -> Result<Vec<AllocatedNum<F>>, SynthesisError> {
-        dbg!(chunk_in);
         let acc = reconstruct_hash(&mut cs.namespace(|| "reconstruct acc hash"), &z[0..2], 256);
 
-        let boolean = chunk_in[0]
+        let boolean = &chunk_in[0]
             .to_bits_le(&mut cs.namespace(|| "get positional bit"))
-            .unwrap()
-            .get(0)
-            .unwrap()
-            .clone();
+            .unwrap()[0];
 
         let sibling = reconstruct_hash(
             &mut cs.namespace(|| "reconstruct__sibling_hash"),
@@ -213,17 +210,18 @@ impl<F: PrimeField + PrimeFieldBits> ChunkStepCircuit<F> for ChunkStep<F> {
         let new_acc = bellpepper_merkle_inclusion::update_hash_accumulator::<_, _, Sha3>(
             &mut cs.namespace(|| "update_hash_accumulator"),
             &acc,
-            &boolean,
+            boolean,
             &sibling,
         )
-        .unwrap();
+        .unwrap_or((0..256).map(|_| Boolean::constant(false)).collect());
 
         let new_acc_f_1 = pack_bits(&mut cs.namespace(|| "pack_bits"), &new_acc[..253])?;
         let new_acc_f_2 = pack_bits(&mut cs.namespace(|| "pack_bits"), &new_acc[253..])?;
-
+        dbg!(&new_acc_f_1);
+        dbg!(&new_acc_f_2);
         let z_out = vec![new_acc_f_1, new_acc_f_2, z[2].clone(), z[3].clone()];
 
-        Ok(z.to_vec())
+        Ok(z_out)
     }
 }
 
@@ -340,6 +338,9 @@ fn main() {
     let ab_leaf_hash = hash::<<Sha3 as GadgetDigest<<E1 as Engine>::Scalar>>::OutOfCircuitHasher>(
         &[a_leaf_hash, b_leaf_hash].concat(),
     );
+    dbg!(compute_multipacking::<<E1 as Engine>::Scalar>(
+        &bytes_to_bits_le(&ab_leaf_hash)
+    ));
     let cd_leaf_hash = hash::<<Sha3 as GadgetDigest<<E1 as Engine>::Scalar>>::OutOfCircuitHasher>(
         &[c_leaf_hash, d_leaf_hash].concat(),
     );
@@ -395,6 +396,53 @@ fn main() {
     )
     .unwrap();
 
-    let res = recursive_snark.prove_step(&pp, &circuit_primary, &circuit_secondary);
-    dbg!(res.is_ok());
+    for step in 0..2 {
+        let circuit_primary = <C1 as NonUniformCircuit<E1>>::primary_circuit(&chunk_circuit, step);
+
+        let res = recursive_snark.prove_step(&pp, &circuit_primary, &circuit_secondary);
+        assert!(res.is_ok());
+        println!(
+            "RecursiveSNARK::prove_step {}: {:?}, took {:?} ",
+            step,
+            res.is_ok(),
+            start.elapsed()
+        );
+
+        let start = Instant::now();
+
+        let res = recursive_snark.verify(&pp, &z0_primary, &z0_secondary);
+        dbg!(&res);
+        assert!(res.is_ok());
+        println!(
+            "RecursiveSNARK::verify {}: {:?}, took {:?} ",
+            step,
+            res.is_ok(),
+            start.elapsed()
+        );
+    }
+
+    println!("Generating a CompressedSNARK...");
+    let (prover_key, verifier_key) = CompressedSNARK::<_, S1, S2>::setup(&pp).unwrap();
+
+    let start = Instant::now();
+    let res = CompressedSNARK::<_, S1, S2>::prove(&pp, &prover_key, &recursive_snark);
+    println!(
+        "CompressedSNARK::prove: {:?}, took {:?}",
+        res.is_ok(),
+        start.elapsed()
+    );
+    assert!(res.is_ok());
+    let compressed_snark = res.unwrap();
+
+    // verify the compressed SNARK
+    println!("Verifying a CompressedSNARK...");
+    let start = Instant::now();
+    let res = compressed_snark.verify(&pp, &verifier_key, &z0_primary, &z0_secondary);
+    println!(
+        "CompressedSNARK::verify: {:?}, took {:?}",
+        res.is_ok(),
+        start.elapsed()
+    );
+    assert!(res.is_ok());
+    println!("=========================================================");
 }

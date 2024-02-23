@@ -235,12 +235,7 @@ fn main() {
     let start = Instant::now();
 
     for step in 0..<C1 as NonUniformCircuit<E1>>::num_circuits(&chunk_circuit) {
-        let circuit_primary =
-            <ChunkCircuit<
-                <E1 as Engine>::Scalar,
-                ChunkStep<<E1 as Engine>::Scalar>,
-                NUM_ITERS_PER_STEP,
-            > as NonUniformCircuit<E1>>::primary_circuit(&chunk_circuit, step);
+        let circuit_primary = <C1 as NonUniformCircuit<E1>>::primary_circuit(&chunk_circuit, step);
 
         let res = recursive_snark.prove_step(&pp, &circuit_primary, &circuit_secondary);
         assert!(res.is_ok());
