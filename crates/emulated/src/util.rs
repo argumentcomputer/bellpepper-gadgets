@@ -14,7 +14,7 @@ pub fn range_check_num<F, CS>(
     num_bits: usize,
 ) -> Result<(), SynthesisError>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
     CS: ConstraintSystem<F>,
 {
     range_check_lc(
@@ -35,7 +35,7 @@ pub fn range_check_lc<F, CS>(
     num_bits: usize,
 ) -> Result<(), SynthesisError>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
     CS: ConstraintSystem<F>,
 {
     let value_bits = lc_value.to_le_bits();
@@ -93,7 +93,7 @@ where
 /// Range check a constant field element
 pub fn range_check_constant<F>(value: F, num_bits: usize) -> Result<(), SynthesisError>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     let value_bits = value.to_le_bits();
     let mut res = F::ZERO;
@@ -131,7 +131,7 @@ pub fn alloc_num_equals_constant<F: PrimeField, CS: ConstraintSystem<F>>(
     } else {
         (a_value - b).invert().unwrap()
     };
-    let t = AllocatedNum::alloc(cs.namespace(|| "t"), || Ok(t_value))?;
+    let t = AllocatedNum::alloc_infallible(cs.namespace(|| "t"), || t_value);
 
     cs.enforce(
         || "t*(a - b) = 1 - r",
@@ -153,7 +153,7 @@ pub fn alloc_num_equals_constant<F: PrimeField, CS: ConstraintSystem<F>>(
 /// Convert a non-negative BigInt into a field element
 pub fn bigint_to_scalar<F>(value: &BigInt) -> F
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     assert!(value.bits() as u32 <= F::CAPACITY);
     assert!(!value.is_negative());

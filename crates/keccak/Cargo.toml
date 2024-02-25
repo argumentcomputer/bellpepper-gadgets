@@ -13,6 +13,7 @@ rust-version = "1.66.1"
 [dependencies]
 ff = { workspace = true }
 bellpepper-core = { workspace = true }
+bellpepper-uint64 = { version = "0.1.0", path = "../uint64" }
 
 [dev-dependencies]
 bitvec = "1.0.1"

@@ -8,7 +8,8 @@ members = [
     "crates/sha1",
     "crates/keccak",
     "crates/merkle-inclusion",
-    "crates/chunk"
+    "crates/chunk",
+    "crates/uint64",
 ]
 
 [workspace.package]

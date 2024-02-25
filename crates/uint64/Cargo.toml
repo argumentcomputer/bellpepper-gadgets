@@ -1,0 +1,26 @@
+[package]
+name = "bellpepper-uint64"
+version = "0.1.0"
+edition = "2021"
+authors = ["Lurk Lab Engineering <engineering@lurk-lab.com>", "Zatoichi Labs <admin@zatoichi-labs.com>", "Varun Thakore <vrnthakore@gmail.com>"]
+license.workspace=true
+description = "Uint64  using bellpepper"
+documentation = "https://docs.rs/bellpepper-uint64"
+homepage.workspace = true
+repository.workspace = true
+rust-version = "1.66.1"
+
+[dependencies]
+ff = { workspace = true }
+bellpepper-core = { workspace = true }
+bellpepper = { workspace = true }
+
+[dev-dependencies]
+bitvec = "1.0.1"
+blstrs = "0.7.0"
+proptest = { workspace = true }
+hex = "0.4.3"
+pasta_curves = { workspace = true }
+rand_core = { workspace = true }
+rand_xorshift = { workspace = true }
+

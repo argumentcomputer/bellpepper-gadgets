@@ -235,11 +235,7 @@ impl Fe25519 {
             beta * Self::sqrt_minus_one()
         };
 
-        if is_sq_root {
-            Some(sq_root)
-        } else {
-            None
-        }
+        (is_sq_root).then_some(sq_root)
     }
 
     pub fn is_even(&self) -> bool {

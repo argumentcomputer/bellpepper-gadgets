@@ -7,21 +7,21 @@ use bellpepper_core::{
     num::Num,
 };
 use bellpepper_core::{ConstraintSystem, LinearCombination, SynthesisError};
-use ff::{PrimeField, PrimeFieldBits};
+use ff::PrimeFieldBits;
 use num_bigint::{BigInt, BigUint};
 use num_traits::{One, Signed, Zero};
 
 use crate::util::*;
 
-#[derive(Debug)]
-pub enum EmulatedLimbs<F: PrimeField + PrimeFieldBits> {
+#[derive(Debug, Clone)]
+pub enum EmulatedLimbs<F: PrimeFieldBits> {
     Allocated(Vec<Num<F>>),
     Constant(Vec<F>),
 }
 
 impl<F> From<Vec<F>> for EmulatedLimbs<F>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     fn from(value: Vec<F>) -> Self {
         Self::Constant(value)
@@ -30,39 +30,32 @@ where
 
 impl<F> AsRef<Self> for EmulatedLimbs<F>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     fn as_ref(&self) -> &Self {
         self
     }
 }
 
-impl<F: PrimeField + PrimeFieldBits> Clone for EmulatedLimbs<F> {
-    fn clone(&self) -> Self {
-        match self {
-            Self::Allocated(a) => Self::Allocated(a.clone()),
-            Self::Constant(c) => Self::Constant(c.clone()),
-        }
-    }
-}
-
 impl<F> EmulatedLimbs<F>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
-    pub(crate) fn allocate_limbs<CS>(cs: &mut CS, limb_values: &[F]) -> Result<Self, SynthesisError>
+    pub(crate) fn allocate_limbs<CS>(cs: &mut CS, limb_values: &[F]) -> Self
     where
         CS: ConstraintSystem<F>,
     {
         let mut num_vec: Vec<Num<F>> = vec![];
 
         for (i, v) in limb_values.iter().enumerate() {
-            let allocated_limb =
-                AllocatedNum::alloc(cs.namespace(|| format!("allocating limb {i}")), || Ok(*v))?;
+            let allocated_limb = AllocatedNum::alloc_infallible(
+                cs.namespace(|| format!("allocating limb {i}")),
+                || *v,
+            );
             num_vec.push(Num::<F>::from(allocated_limb));
         }
 
-        Ok(Self::Allocated(num_vec))
+        Self::Allocated(num_vec)
     }
 }
 
@@ -90,7 +83,7 @@ pub trait EmulatedFieldParams {
 
 #[allow(clippy::len_without_is_empty)]
 #[derive(Debug)]
-pub struct EmulatedFieldElement<F: PrimeField + PrimeFieldBits, P: EmulatedFieldParams> {
+pub struct EmulatedFieldElement<F: PrimeFieldBits, P: EmulatedFieldParams> {
     pub(crate) limbs: EmulatedLimbs<F>,
     pub(crate) overflow: usize,
     pub(crate) internal: bool,
@@ -99,7 +92,7 @@ pub struct EmulatedFieldElement<F: PrimeField + PrimeFieldBits, P: EmulatedField
 
 impl<F, P> Clone for EmulatedFieldElement<F, P>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
     P: EmulatedFieldParams,
 {
     fn clone(&self) -> Self {
@@ -114,7 +107,7 @@ where
 
 impl<F, P> From<&BigInt> for EmulatedFieldElement<F, P>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
     P: EmulatedFieldParams,
 {
     /// Converts a [BigInt] into an [EmulatedFieldElement]
@@ -164,7 +157,7 @@ where
 
 impl<F, P> From<&EmulatedFieldElement<F, P>> for BigInt
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
     P: EmulatedFieldParams,
 {
     fn from(value: &EmulatedFieldElement<F, P>) -> Self {
@@ -188,7 +181,7 @@ where
 
 impl<F, P> EmulatedFieldElement<F, P>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
     P: EmulatedFieldParams,
 {
     pub fn zero() -> Self {
@@ -232,10 +225,10 @@ where
         CS: ConstraintSystem<F>,
     {
         if let EmulatedLimbs::Constant(limb_values) = &self.limbs {
-            EmulatedLimbs::<F>::allocate_limbs(
+            Ok(EmulatedLimbs::<F>::allocate_limbs(
                 &mut cs.namespace(|| "allocate variables from constant limbs"),
                 limb_values,
-            )
+            ))
         } else {
             eprintln!("input must have constant limb values");
             Err(SynthesisError::Unsatisfiable)
@@ -594,7 +587,7 @@ where
         let res_alloc_limbs = EmulatedLimbs::allocate_limbs(
             &mut cs.namespace(|| "allocate result limbs"),
             &res_values,
-        )?;
+        );
 
         match &res_alloc_limbs {
             EmulatedLimbs::Allocated(res_limbs) => {

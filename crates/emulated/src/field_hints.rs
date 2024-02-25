@@ -1,7 +1,7 @@
 use std::ops::{Div, Rem};
 
 use bellpepper_core::{ConstraintSystem, SynthesisError};
-use ff::{PrimeField, PrimeFieldBits};
+use ff::PrimeFieldBits;
 use num_bigint::BigInt;
 use num_traits::Zero;
 
@@ -11,7 +11,7 @@ use crate::{field_element::EmulatedFieldElement, field_element::EmulatedFieldPar
 
 impl<F, P> EmulatedFieldElement<F, P>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
     P: EmulatedFieldParams,
 {
     /// Computes the remainder modulo the field modulus
@@ -59,7 +59,7 @@ where
         let res_limbs = EmulatedLimbs::<F>::allocate_limbs(
             &mut cs.namespace(|| "allocate from quotient value"),
             &res_limb_values,
-        )?;
+        );
 
         let res = Self::pack_limbs(
             &mut cs.namespace(|| "enforce bitwidths on quotient"),

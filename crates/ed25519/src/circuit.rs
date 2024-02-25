@@ -3,7 +3,7 @@ use bellpepper_core::{ConstraintSystem, SynthesisError};
 use bellpepper_emulated::field_element::{
     EmulatedFieldElement, EmulatedFieldParams, PseudoMersennePrime,
 };
-use ff::{PrimeField, PrimeFieldBits};
+use ff::PrimeFieldBits;
 use num_bigint::BigInt;
 
 use crate::{
@@ -48,7 +48,7 @@ type Ed25519Fp<F> = EmulatedFieldElement<F, Ed25519FpParams>;
 
 impl<F> From<&Fe25519> for Ed25519Fp<F>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     fn from(value: &Fe25519) -> Self {
         Self::from(&value.0)
@@ -56,13 +56,13 @@ where
 }
 
 #[derive(Clone)]
-pub struct AllocatedAffinePoint<F: PrimeField + PrimeFieldBits> {
+pub struct AllocatedAffinePoint<F: PrimeFieldBits> {
     x: Ed25519Fp<F>,
     y: Ed25519Fp<F>,
     value: AffinePoint,
 }
 
-impl<F: PrimeField + PrimeFieldBits> AllocatedAffinePoint<F> {
+impl<F: PrimeFieldBits> AllocatedAffinePoint<F> {
     pub fn get_point(&self) -> AffinePoint {
         self.value.clone()
     }

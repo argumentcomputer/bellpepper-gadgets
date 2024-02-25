@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use ff::{PrimeField, PrimeFieldBits};
+use ff::PrimeFieldBits;
 
 use crate::fields::{fp::FpElement, fp2::Fp2Element};
 
@@ -19,7 +19,7 @@ pub struct Bls12381G2Params<F> {
     _f: PhantomData<F>,
 }
 
-impl<F: PrimeField + PrimeFieldBits> EmulatedCurveParams<FpElement<F>> for Bls12381G1Params<F> {
+impl<F: PrimeFieldBits> EmulatedCurveParams<FpElement<F>> for Bls12381G1Params<F> {
     fn a() -> FpElement<F> {
         FpElement::<F>::zero()
     }
@@ -36,7 +36,7 @@ impl<F: PrimeField + PrimeFieldBits> EmulatedCurveParams<FpElement<F>> for Bls12
     }
 }
 
-impl<F: PrimeField + PrimeFieldBits> EmulatedCurveParams<Fp2Element<F>> for Bls12381G2Params<F> {
+impl<F: PrimeFieldBits> EmulatedCurveParams<Fp2Element<F>> for Bls12381G2Params<F> {
     fn a() -> Fp2Element<F> {
         Fp2Element::<F>::zero()
     }
@@ -54,7 +54,7 @@ impl<F: PrimeField + PrimeFieldBits> EmulatedCurveParams<Fp2Element<F>> for Bls1
     }
 }
 
-impl<F: PrimeField + PrimeFieldBits> Bls12381G2Params<F> {
+impl<F: PrimeFieldBits> Bls12381G2Params<F> {
     pub fn u1() -> FpElement<F> {
         FpElement::<F>::from_dec("4002409555221667392624310435006688643935503118305586438271171395842971157480381377015405980053539358417135540939437").unwrap()
     }
@@ -64,7 +64,7 @@ impl<F: PrimeField + PrimeFieldBits> Bls12381G2Params<F> {
     }
 }
 
-impl<F: PrimeField + PrimeFieldBits> Bls12381G1Params<F> {
+impl<F: PrimeFieldBits> Bls12381G1Params<F> {
     pub fn w() -> FpElement<F> {
         FpElement::<F>::from_dec("4002409555221667392624310435006688643935503118305586438271171395842971157480381377015405980053539358417135540939436").unwrap()
     }

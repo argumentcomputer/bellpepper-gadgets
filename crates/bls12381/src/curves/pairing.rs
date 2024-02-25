@@ -7,7 +7,7 @@ use bellpepper_core::{
 use bls12_381::fp12::Fp12 as BlsFp12;
 use bls12_381::fp2::Fp2 as BlsFp2;
 use bls12_381::fp6::Fp6 as BlsFp6;
-use ff::{PrimeField, PrimeFieldBits};
+use ff::PrimeFieldBits;
 use num_bigint::BigInt;
 
 use crate::fields::{fp12::Fp12Element, fp2::Fp2Element, fp6::Fp6Element, torus::Torus};
@@ -16,7 +16,7 @@ use super::{g1::G1Point, g2::G2Point};
 
 pub trait EmulatedPairing<F, G1Element, G2Element, GtElement>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     fn miller_loop<CS: ConstraintSystem<F>>(
         cs: &mut CS,
@@ -50,11 +50,11 @@ pub struct EmulatedBls12381Pairing<F> {
 /// LineEval represents a sparse Fp12 Elmt (result of the line evaluation)
 /// line: 1 + R0(x/y) + R1(1/y) = 0 instead of R0'*y + R1'*x + R2' = 0 This
 /// makes the multiplication by lines (MulBy014)
-pub struct LineEval<F: PrimeField + PrimeFieldBits> {
+pub struct LineEval<F: PrimeFieldBits> {
     pub(crate) r0: Fp2Element<F>,
     pub(crate) r1: Fp2Element<F>,
 }
-impl<F: PrimeField + PrimeFieldBits> LineEval<F> {
+impl<F: PrimeFieldBits> LineEval<F> {
     fn zero() -> Self {
         Self {
             r0: Fp2Element::zero(),
@@ -63,11 +63,11 @@ impl<F: PrimeField + PrimeFieldBits> LineEval<F> {
     }
 }
 
-pub struct LineEvals<F: PrimeField + PrimeFieldBits> {
+pub struct LineEvals<F: PrimeFieldBits> {
     pub(crate) v0: Vec<LineEval<F>>,
     pub(crate) v1: Vec<LineEval<F>>,
 }
-impl<F: PrimeField + PrimeFieldBits> LineEvals<F> {
+impl<F: PrimeFieldBits> LineEvals<F> {
     fn new() -> Self {
         let mut res = Self {
             v0: Vec::with_capacity(LOOP_COUNTER.len() - 1),
@@ -89,7 +89,7 @@ const LOOP_COUNTER: [u8; 64] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1,
 ];
 
-impl<F: PrimeField + PrimeFieldBits> EmulatedBls12381Pairing<F> {
+impl<F: PrimeFieldBits> EmulatedBls12381Pairing<F> {
     pub fn compute_lines<CS: ConstraintSystem<F>>(
         cs: &mut CS,
         q: &G2Point<F>,
@@ -445,7 +445,7 @@ impl<F: PrimeField + PrimeFieldBits> EmulatedBls12381Pairing<F> {
 
 impl<F> EmulatedPairing<F, G1Point<F>, G2Point<F>, Fp12Element<F>> for EmulatedBls12381Pairing<F>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     /// miller_loop computes the multi-Miller loop
     /// ∏ᵢ { fᵢ_{u,Q}(P) }

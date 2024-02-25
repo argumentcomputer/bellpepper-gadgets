@@ -1,21 +1,21 @@
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use bls12_381::fp2::Fp2 as BlsFp2;
 use bls12_381::{G2Affine, G2Projective};
-use ff::{PrimeField, PrimeFieldBits};
+use ff::PrimeFieldBits;
 use num_bigint::BigInt;
 
 use crate::curves::params::Bls12381G2Params;
 use crate::fields::fp2::Fp2Element;
 
 #[derive(Clone)]
-pub struct G2Point<F: PrimeField + PrimeFieldBits> {
+pub struct G2Point<F: PrimeFieldBits> {
     pub x: Fp2Element<F>,
     pub y: Fp2Element<F>,
 }
 
 impl<F> From<&G2Affine> for G2Point<F>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     fn from(value: &G2Affine) -> Self {
         let x = Fp2Element::<F>::from(&value.x);
@@ -26,7 +26,7 @@ where
 
 impl<F> From<&G2Point<F>> for G2Affine
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     fn from(value: &G2Point<F>) -> Self {
         let x = BlsFp2::from(&value.x);
@@ -41,7 +41,7 @@ where
     }
 }
 
-impl<F: PrimeField + PrimeFieldBits> G2Point<F> {
+impl<F: PrimeFieldBits> G2Point<F> {
     pub fn alloc_element<CS>(cs: &mut CS, value: &G2Affine) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,

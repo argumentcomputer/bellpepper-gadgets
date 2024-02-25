@@ -92,7 +92,7 @@ where
         proof.leaf().key().len(),
     );
 
-    let mut actual_root_hash = proof.leaf().hash().to_vec();
+    let mut actual_root_hash = proof.leaf().hash().clone();
 
     for (i, (bit, sibling_hash)) in proof
         .leaf()

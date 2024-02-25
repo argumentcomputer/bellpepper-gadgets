@@ -3,9 +3,9 @@
 //!
 //! [SHA-512]: https://tools.ietf.org/html/rfc6234
 
-use super::uint64::UInt64;
 use bellpepper::gadgets::multieq::MultiEq;
 use bellpepper_core::{boolean::Boolean, ConstraintSystem, SynthesisError};
+use bellpepper_uint64::UInt64;
 use ff::PrimeField;
 
 // Constants copied from https://github.com/RustCrypto/hashes/blob/master/sha2/src/consts.rs

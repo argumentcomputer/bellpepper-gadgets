@@ -69,9 +69,9 @@ impl<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> FoldStep<F, 
         // Next program
         let next_pc = match self.next_circuit() {
             Some(next_circuit) => {
-                AllocatedNum::alloc(cs.namespace(|| "next_circuit"), || Ok(*next_circuit))?
+                AllocatedNum::alloc_infallible(cs.namespace(|| "next_circuit"), || *next_circuit)
             }
-            None => AllocatedNum::alloc(cs.namespace(|| "next_circuit"), || Ok(F::ZERO))?,
+            None => AllocatedNum::alloc_infallible(cs.namespace(|| "next_circuit"), || F::ZERO),
         };
 
         // Next input

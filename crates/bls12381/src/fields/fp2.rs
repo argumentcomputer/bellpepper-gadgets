@@ -2,20 +2,20 @@ use bellpepper_core::boolean::{AllocatedBit, Boolean};
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use bls12_381::fp::Fp as BlsFp;
 use bls12_381::fp2::Fp2 as BlsFp2;
-use ff::{PrimeField, PrimeFieldBits};
+use ff::PrimeFieldBits;
 use num_bigint::BigInt;
 
 use super::fp::FpElement;
 
 #[derive(Clone)]
-pub struct Fp2Element<F: PrimeField + PrimeFieldBits> {
+pub struct Fp2Element<F: PrimeFieldBits> {
     pub(crate) a0: FpElement<F>,
     pub(crate) a1: FpElement<F>,
 }
 
 impl<F> From<&BlsFp2> for Fp2Element<F>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     fn from(value: &BlsFp2) -> Self {
         let a0 = FpElement::<F>::from(&value.c0);
@@ -26,7 +26,7 @@ where
 
 impl<F> From<&Fp2Element<F>> for BlsFp2
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     fn from(value: &Fp2Element<F>) -> Self {
         let c0 = BlsFp::from(&value.a0);
@@ -35,7 +35,7 @@ where
     }
 }
 
-impl<F: PrimeField + PrimeFieldBits> Fp2Element<F> {
+impl<F: PrimeFieldBits> Fp2Element<F> {
     pub fn from_dec(val: (&str, &str)) -> Option<Self> {
         let c0 = FpElement::from_dec(val.0);
         let c1 = FpElement::from_dec(val.1);
