@@ -139,9 +139,9 @@ struct MerkleChunkCircuit<F: PrimeField + PrimeFieldBits, C: ChunkStepCircuit<F>
 impl<F: PrimeField + PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize>
     MerkleChunkCircuit<F, C, N>
 {
-    fn new(inputs: &[F]) -> Self {
+    fn new(inputs: &[F], post_processing_step: Option<F>) -> Self {
         Self {
-            inner: InnerCircuit::new(inputs).unwrap(),
+            inner: InnerCircuit::new(inputs, post_processing_step).unwrap(),
         }
     }
 }
@@ -412,7 +412,10 @@ fn main() {
 
     //  Primary circuit
     type C1 = MerkleChunkCircuit<<E1 as Engine>::Scalar, ChunkStep<<E1 as Engine>::Scalar>, 3>;
-    let chunk_circuit = C1::new(&intermediate_key_hashes[3..6]);
+    let chunk_circuit = C1::new(
+        &intermediate_key_hashes[3..6],
+        Some(<E1 as Engine>::Scalar::from(2)),
+    );
 
     // Multipacking the leaf and root hashes
     let mut z0_primary =

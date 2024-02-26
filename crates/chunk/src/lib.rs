@@ -115,7 +115,10 @@ pub struct InnerCircuit<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
 impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> ChunkCircuitInner<F, C, N>
     for InnerCircuit<F, C, N>
 {
-    fn new(intermediate_steps_input: &[F]) -> anyhow::Result<Self, ChunkError> {
+    fn new(
+        intermediate_steps_input: &[F],
+        post_processing_circuit: Option<F>,
+    ) -> anyhow::Result<Self, ChunkError> {
         // We generate the `FoldStep` instances that are part of the circuit.
         let mut circuits = intermediate_steps_input
             .chunks(N)
@@ -150,7 +153,7 @@ impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> ChunkCircuitInner<F,
                 N
             },
             circuits.len(),
-            Some(F::from(2)),
+            post_processing_circuit,
         ));
 
         Ok(Self {
