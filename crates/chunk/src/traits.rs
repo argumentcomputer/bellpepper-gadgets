@@ -41,7 +41,10 @@ pub trait ChunkCircuitInner<F: PrimeField, C: ChunkStepCircuit<F>, const N: usiz
     ///
     /// As `intermediate_steps_input` represents the input values for each of the step circuits, there is currently a need
     /// to generate one last `FoldStep` instance to represent the last step in the circuit.
-    fn new(intermediate_steps_input: &[F]) -> anyhow::Result<Self, ChunkError>
+    fn new(
+        intermediate_steps_input: &[F],
+        post_processing_circuit: Option<F>,
+    ) -> anyhow::Result<Self, ChunkError>
     where
         Self: Sized;
     /// `initial_input` must return the first circuit to be proven/verified.

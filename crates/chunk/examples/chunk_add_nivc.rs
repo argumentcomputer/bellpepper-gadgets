@@ -179,18 +179,21 @@ fn main() {
     ];
 
     // Different instantiations of circuit for each of the nova fold steps
-    let inner_chunk_circuit = Inner::new(&[
-        <E1 as Engine>::Scalar::one(),
-        <E1 as Engine>::Scalar::from(2),
-        <E1 as Engine>::Scalar::from(3),
-        <E1 as Engine>::Scalar::from(4),
-        <E1 as Engine>::Scalar::from(5),
-        <E1 as Engine>::Scalar::from(6),
-        <E1 as Engine>::Scalar::from(7),
-        <E1 as Engine>::Scalar::from(8),
-        <E1 as Engine>::Scalar::from(9),
-        <E1 as Engine>::Scalar::from(10),
-    ])
+    let inner_chunk_circuit = Inner::new(
+        &[
+            <E1 as Engine>::Scalar::one(),
+            <E1 as Engine>::Scalar::from(2),
+            <E1 as Engine>::Scalar::from(3),
+            <E1 as Engine>::Scalar::from(4),
+            <E1 as Engine>::Scalar::from(5),
+            <E1 as Engine>::Scalar::from(6),
+            <E1 as Engine>::Scalar::from(7),
+            <E1 as Engine>::Scalar::from(8),
+            <E1 as Engine>::Scalar::from(9),
+            <E1 as Engine>::Scalar::from(10),
+        ],
+        None,
+    )
     .unwrap();
 
     let chunk_circuit = C1::new(inner_chunk_circuit);

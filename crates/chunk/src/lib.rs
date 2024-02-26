@@ -153,7 +153,7 @@ impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> ChunkCircuitInner<F,
                 N
             },
             circuits.len(),
-            post_processing_circuit,
+            post_processing_circuit.or(Some(F::ZERO)),
         ));
 
         Ok(Self {
