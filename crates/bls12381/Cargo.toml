@@ -2,7 +2,7 @@
 name = "bellpepper-bls12381"
 version = "0.2.0"
 edition = "2021"
-authors = ["Gustavo <gustavo@wrinqle.net>"]
+authors = ["Lurk Lab Engineering <engineering@lurk-lab.com>"]
 license.workspace=true
 description = "Bellpepper circuit implementation of BLS12-381 pairing and curve operations"
 documentation = "https://docs.rs/bellpepper-bls12381"
@@ -19,8 +19,8 @@ num-bigint = { workspace = true, features = ["rand"] }
 num-integer = { workspace = true }
 num-traits = { workspace = true}
 rand = { workspace = true}
-bls12_381 = { git = "https://github.com/wrinqle/bls12_381" }
+bls12_381 = { git = "https://github.com/wrinqle/bls12_381", features = ["experimental"] }
 
 [dev-dependencies]
 expect-test = "1.4.1"
-pasta_curves = "0.5.1"
+halo2curves = "0.6.1"

@@ -5,9 +5,11 @@ use bls12_381::{fp::Fp as BlsFp, G1Projective};
 use ff::PrimeFieldBits;
 use num_bigint::BigInt;
 
-use crate::curves::params::Bls12381G1Params;
 use crate::fields::fp::FpElement;
 
+use super::params::{Bls12381G1Params, EmulatedCurveParams};
+
+/// Represents an affine point on BLS12-381's G1 curve. Point at infinity is represented with (0, 0)
 #[derive(Clone)]
 pub struct G1Point<F: PrimeFieldBits> {
     pub x: FpElement<F>,
@@ -111,14 +113,15 @@ impl<F: PrimeFieldBits> G1Point<F> {
         Ok(())
     }
 
+    /// Returns `phi(P)` where the coefficient is a cube root of unity in Fp
     pub fn phi<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
-        let x = self.x.mul(
-            &mut cs.namespace(|| "x <- x * g1.w"),
-            &Bls12381G1Params::w(),
-        )?;
+        let phi_coeff = FpElement::from_dec("793479390729215512621379701633421447060886740281060493010456487427281649075476305620758731620350").unwrap();
+        let x = self
+            .x
+            .mul(&mut cs.namespace(|| "x <- x * phi_coeff"), &phi_coeff)?;
         Ok(Self {
             x,
             y: self.y.clone(),
@@ -219,6 +222,7 @@ impl<F: PrimeFieldBits> G1Point<F> {
         Ok(())
     }
 
+    /// Returns the EC addition between `self` and `value`. Requires that `self != value` and that neither point is the identity
     pub fn add<CS>(&self, cs: &mut CS, value: &Self) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -308,6 +312,7 @@ impl<F: PrimeFieldBits> G1Point<F> {
         Ok(res)
     }
 
+    /// Returns `-P`
     pub fn neg<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -318,6 +323,7 @@ impl<F: PrimeFieldBits> G1Point<F> {
         })
     }
 
+    /// Returns `self - value`. Requires that `self != -value` and neither point is the identity since it calls `add`
     pub fn sub<CS>(&self, cs: &mut CS, value: &Self) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -327,12 +333,13 @@ impl<F: PrimeFieldBits> G1Point<F> {
         Ok(res)
     }
 
+    /// Returns `self + self`
     pub fn double<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
-        let p = self;
         let cs = &mut cs.namespace(|| "G1::double(p)");
+        let p = self.reduce(&mut cs.namespace(|| "p <- p.reduce()"))?;
         // compute λ = (3p.x²)/2*p.y
         let xx3a = p.x.square(&mut cs.namespace(|| "xx3a <- p.x.square()"))?;
         let xx3a = xx3a.mul_const(&mut cs.namespace(|| "xx3a <- xx3a * 3"), &BigInt::from(3))?;
@@ -352,6 +359,30 @@ impl<F: PrimeFieldBits> G1Point<F> {
         Ok(Self { x: xr, y: yr })
     }
 
+    /// Calls `self.double()` repeated `n` times
+    pub fn double_n<CS>(&self, cs: &mut CS, n: usize) -> Result<Self, SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        let mut p: Option<&Self> = Some(self);
+        let mut tmp: Option<Self> = None;
+        let mut cs = cs.namespace(|| format!("G1::double_n(p, {n})"));
+        for i in 0..n {
+            if let Some(cur_p) = p {
+                let mut val =
+                    cur_p.double(&mut cs.namespace(|| format!("p <- p.double() ({i})")))?;
+                if i % 2 == 1 {
+                    val = val.reduce(&mut cs.namespace(|| format!("p <- p.reduce() ({i})")))?;
+                }
+                tmp = Some(val);
+                p = tmp.as_ref();
+            }
+        }
+
+        Ok(tmp.unwrap())
+    }
+
+    /// Returns `self + self + self`
     pub fn triple<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -389,6 +420,7 @@ impl<F: PrimeFieldBits> G1Point<F> {
         Ok(Self { x: xr, y: yr })
     }
 
+    /// Returns `2*self + value`
     pub fn double_and_add<CS>(&self, cs: &mut CS, value: &Self) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
@@ -449,14 +481,81 @@ impl<F: PrimeFieldBits> G1Point<F> {
         )?;
         Ok(Self { x, y })
     }
+
+    /// Returns `[x^2]P` where `x` is the BLS parameter for BLS12-381, `-15132376222941642752`
+    pub fn scalar_mul_by_seed_square<CS>(&self, cs: &mut CS) -> Result<Self, SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        let cs = &mut cs.namespace(|| "G1::scalar_mul_by_seed_square(q)");
+        let z = self.double(&mut cs.namespace(|| "z <- q.double()"))?;
+        let z = self.add(&mut cs.namespace(|| "z <- q + z"), &z)?;
+        let z = z.double(&mut cs.namespace(|| "z <- z.double()"))?;
+        let z = z.double_and_add(&mut cs.namespace(|| "z <- z.double_and_add(q) 1"), self)?;
+        let z = z.double_n(&mut cs.namespace(|| "z <- z.double_n(2)"), 2)?;
+        let z = z.double_and_add(&mut cs.namespace(|| "z <- z.double_and_add(q) 2"), self)?;
+        let z = z.double_n(&mut cs.namespace(|| "z <- z.double_n(8)"), 8)?;
+        let z = z.double_and_add(&mut cs.namespace(|| "z <- z.double_and_add(q) 3"), self)?;
+        let t0 = z.double(&mut cs.namespace(|| "t0 <- z.double()"))?;
+        let t0 = z.add(&mut cs.namespace(|| "t0 <- z + t0"), &t0)?;
+        let t0 = t0.double(&mut cs.namespace(|| "t0 <- t0.double()"))?;
+        let t0 = t0.double_and_add(&mut cs.namespace(|| "t0 <- t0.double_and_add(z) 1"), &z)?;
+        let t0 = t0.double_n(&mut cs.namespace(|| "t0 <- t0.double_n(2)"), 2)?;
+        let t0 = t0.double_and_add(&mut cs.namespace(|| "t0 <- t0.double_and_add(z) 2"), &z)?;
+        let t0 = t0.double_n(&mut cs.namespace(|| "t0 <- t0.double_n(8)"), 8)?;
+        let t0 = t0.double_and_add(&mut cs.namespace(|| "t0 <- t0.double_and_add(z) 3"), &z)?;
+        let t0 = t0.double_n(&mut cs.namespace(|| "t0 <- t0.double_n(31)"), 31)?;
+        let z = t0.add(&mut cs.namespace(|| "z <- t0 + z"), &z)?;
+        let z = z.double_n(&mut cs.namespace(|| "z <- z.double_n(32) 1"), 32)?;
+        let z = z.double_and_add(&mut cs.namespace(|| "z <- z.double_and_add(q) 4"), self)?;
+        let z = z.double_n(&mut cs.namespace(|| "z <- z.double_n(32) 2"), 32)?;
+
+        Ok(z)
+    }
+
+    /// Asserts that `phi(P) == [-x^2]P`
+    pub fn assert_subgroup_check<CS>(&self, cs: &mut CS) -> Result<(), SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        let a = self.phi(&mut cs.namespace(|| "a <- p.phi()"))?;
+        let b = self.scalar_mul_by_seed_square(
+            &mut cs.namespace(|| "b <- p.scalar_mul_by_seed_square()"),
+        )?;
+        let b = b.neg(&mut cs.namespace(|| "b <- -b"))?;
+        Self::assert_is_equal(&mut cs.namespace(|| "a == b"), &a, &b)?;
+        Ok(())
+    }
+
+    /// Asserts that y^2 = x^3 + ax + b
+    pub fn assert_is_on_curve<CS>(&self, cs: &mut CS) -> Result<(), SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        let y_2 = self.y.square(&mut cs.namespace(|| "y_2 <- p.y.square()"))?;
+        let x_2 = self.x.square(&mut cs.namespace(|| "x_2 <- p.x.square()"))?;
+        let x_3 = self.x.mul(&mut cs.namespace(|| "x_3 <- x * x_2"), &x_2)?;
+        let ax = self
+            .x
+            .mul(&mut cs.namespace(|| "ax <- x * a"), &Bls12381G1Params::a())?;
+        let rhs = x_3.add(&mut cs.namespace(|| "rhs <- x_3 + ax"), &ax)?;
+        let rhs = rhs.add(
+            &mut cs.namespace(|| "rhs <- rhs + b"),
+            &Bls12381G1Params::b(),
+        )?;
+        FpElement::assert_is_equal(&mut cs.namespace(|| "y_2 == rhs"), &y_2, &rhs)?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use bellpepper_core::test_cs::TestConstraintSystem;
-    use pasta_curves::group::Group;
-    use pasta_curves::Fp;
+    use bls12_381::Scalar;
+    use ff::Field;
+    use halo2curves::bn256::Fq as Fp;
+    use halo2curves::group::Group;
 
     use expect_test::{expect, Expect};
     fn expect_eq(computed: usize, expected: &Expect) {
@@ -484,8 +583,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["5063"]);
-        expect_eq(cs.num_constraints(), &expect!["5051"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["3009"]);
+        expect_eq(cs.num_constraints(), &expect!["2977"]);
     }
 
     #[test]
@@ -528,8 +627,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["28644"]);
-        expect_eq(cs.num_constraints(), &expect!["28836"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["19974"]);
+        expect_eq(cs.num_constraints(), &expect!["20120"]);
     }
 
     #[test]
@@ -585,8 +684,8 @@ mod tests {
         assert!(cs.is_satisfied());
 
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["15256"]);
-        expect_eq(cs.num_constraints(), &expect!["15488"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["14672"]);
+        expect_eq(cs.num_constraints(), &expect!["14932"]);
     }
 
     #[test]
@@ -608,8 +707,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["542"]);
-        expect_eq(cs.num_constraints(), &expect!["524"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["474"]);
+        expect_eq(cs.num_constraints(), &expect!["452"]);
     }
 
     #[test]
@@ -631,8 +730,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["8894"]);
-        expect_eq(cs.num_constraints(), &expect!["8912"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["4764"]);
+        expect_eq(cs.num_constraints(), &expect!["4750"]);
     }
 
     #[test]
@@ -654,8 +753,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["5068"]);
-        expect_eq(cs.num_constraints(), &expect!["5068"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["3014"]);
+        expect_eq(cs.num_constraints(), &expect!["2996"]);
     }
 
     #[test]
@@ -679,8 +778,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["5063"]);
-        expect_eq(cs.num_constraints(), &expect!["5051"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["3009"]);
+        expect_eq(cs.num_constraints(), &expect!["2977"]);
     }
 
     #[test]
@@ -711,8 +810,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["8913"]);
-        expect_eq(cs.num_constraints(), &expect!["8919"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["4769"]);
+        expect_eq(cs.num_constraints(), &expect!["4741"]);
     }
 
     #[test]
@@ -755,7 +854,112 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["9015"]);
-        expect_eq(cs.num_constraints(), &expect!["9078"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["6713"]);
+        expect_eq(cs.num_constraints(), &expect!["6765"]);
+    }
+
+    #[test]
+    fn test_random_mul_by_seed_square() {
+        let mut rng = rand::thread_rng();
+        let a = G1Projective::random(&mut rng);
+        let x0 = bls12_381::Scalar::from(15132376222941642752);
+        let c = a * (x0 * x0);
+        let a = G1Affine::from(a);
+        let c = G1Affine::from(c);
+
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = a_alloc
+            .scalar_mul_by_seed_square(&mut cs.namespace(|| "a.mul_by_seed_square()"))
+            .unwrap();
+        G1Point::assert_is_equal(
+            &mut cs.namespace(|| "a.mul_by_seed_square() = c"),
+            &res_alloc,
+            &c_alloc,
+        )
+        .unwrap();
+        if !cs.is_satisfied() {
+            eprintln!("{:?}", cs.which_is_unsatisfied())
+        }
+        assert!(cs.is_satisfied());
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["489860"]);
+        expect_eq(cs.num_constraints(), &expect!["491128"]);
+    }
+
+    #[test]
+    fn test_random_subgroup_check() {
+        let mut rng = rand::thread_rng();
+        let n = Scalar::random(&mut rng);
+        let a = G1Affine::from(G1Projective::generator() * n);
+
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        a_alloc
+            .assert_subgroup_check(&mut cs.namespace(|| "a.subgroup_check()"))
+            .unwrap();
+        if !cs.is_satisfied() {
+            eprintln!("{:?}", cs.which_is_unsatisfied())
+        }
+        assert!(cs.is_satisfied());
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["490240"]);
+        expect_eq(cs.num_constraints(), &expect!["491522"]);
+    }
+
+    #[test]
+    fn test_random_subgroup_check_negative() {
+        use crate::curves::params::EmulatedCurveParams;
+        let b = BlsFp::from(&Bls12381G1Params::<Fp>::b());
+        use rand::RngCore;
+        let mut rng = rand::thread_rng();
+        let mut random_point = || loop {
+            let x = BlsFp::random(&mut rng);
+            let y = ((x.square() * x) + b).sqrt();
+            if y.is_some().into() {
+                let flip_sign = rng.next_u32() % 2 != 0;
+                return G1Affine {
+                    x,
+                    y: if flip_sign { -y.unwrap() } else { y.unwrap() },
+                    infinity: 0.into(),
+                };
+            }
+        };
+        let mut a = random_point();
+        while a.is_torsion_free().into() {
+            a = random_point();
+        }
+
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        a_alloc
+            .assert_subgroup_check(&mut cs.namespace(|| "a.subgroup_check()"))
+            .unwrap();
+        assert!(!cs.is_satisfied());
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["490240"]);
+        expect_eq(cs.num_constraints(), &expect!["491522"]);
+    }
+
+    #[test]
+    fn test_random_phi() {
+        let mut rng = rand::thread_rng();
+        let a = G1Affine::from(G1Projective::random(&mut rng));
+        let c = bls12_381::g1::endomorphism(&a);
+
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let res_alloc = a_alloc.phi(&mut cs.namespace(|| "a.phi()")).unwrap();
+        G1Point::assert_is_equal(&mut cs.namespace(|| "a.phi() = c"), &res_alloc, &c_alloc)
+            .unwrap();
+        if !cs.is_satisfied() {
+            eprintln!("{:?}", cs.which_is_unsatisfied())
+        }
+        assert!(cs.is_satisfied());
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["868"]);
+        expect_eq(cs.num_constraints(), &expect!["846"]);
     }
 }

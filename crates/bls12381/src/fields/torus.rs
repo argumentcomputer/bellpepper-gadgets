@@ -58,13 +58,11 @@ impl<F: PrimeFieldBits> Torus<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        // NOTE: if we don't alloc_element and try to just use Fp6Element::one() instead, this fails
-        // (presumably because one() returns a non-allocated constant)
-        let alloc_one = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc 1"), &BlsFp6::one())?;
-        let neg_one = alloc_one.neg(&mut cs.namespace(|| "-1"))?;
+        let one = Fp6Element::one();
+        let neg_one = one.neg(&mut cs.namespace(|| "-1"))?;
         let n = Fp12Element {
             c0: self.0.clone(),
-            c1: alloc_one,
+            c1: one,
         };
         let d = Fp12Element {
             c0: self.0.clone(),
@@ -174,7 +172,7 @@ impl<F: PrimeFieldBits> Torus<F> {
         let t2 =
             t2.mul_by_nonresidue_1pow4(&mut cs.namespace(|| "t2 <- t2.mul_by_nonresidue_1pow4()"))?;
 
-        let v0 = Fp2Element::<F>::from_dec(("877076961050607968509681729531255177986764537961432449499635504522207616027455086505066378536590128544573588734230", "877076961050607968509681729531255177986764537961432449499635504522207616027455086505066378536590128544573588734230")).unwrap();
+        let v0 = Fp2Element::<F>::from_dec("877076961050607968509681729531255177986764537961432449499635504522207616027455086505066378536590128544573588734230", "877076961050607968509681729531255177986764537961432449499635504522207616027455086505066378536590128544573588734230").unwrap();
         let res = Fp6Element {
             b0: t0,
             b1: t1,
@@ -302,7 +300,7 @@ impl<F: PrimeFieldBits> Torus<F> {
 mod tests {
     use super::*;
     use bellpepper_core::test_cs::TestConstraintSystem;
-    use pasta_curves::Fp;
+    use halo2curves::bn256::Fq as Fp;
 
     use expect_test::{expect, Expect};
     fn expect_eq(computed: usize, expected: &Expect) {
@@ -330,8 +328,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["5907"]);
-        expect_eq(cs.num_constraints(), &expect!["5799"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["5541"]);
+        expect_eq(cs.num_constraints(), &expect!["5409"]);
     }
 
     #[test]
@@ -358,8 +356,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["12075"]);
-        expect_eq(cs.num_constraints(), &expect!["11931"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["11019"]);
+        expect_eq(cs.num_constraints(), &expect!["10881"]);
     }
 
     #[test]
@@ -395,7 +393,7 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["14709"]);
-        expect_eq(cs.num_constraints(), &expect!["14493"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["14055"]);
+        expect_eq(cs.num_constraints(), &expect!["13791"]);
     }
 }

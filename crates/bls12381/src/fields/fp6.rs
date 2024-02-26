@@ -378,11 +378,6 @@ impl<F: PrimeFieldBits> Fp6Element<F> {
         // x*inv = 1
         let prod = inv_alloc.mul(&mut cs.namespace(|| "x*inv"), self)?;
 
-        // TODO: An alternative implementation would be calling
-        // `assert_equality_to_constant(1)`, however that seems to only work if
-        // we `reduce` the value first, and then the constraint count of just
-        // calling `assert_is_equal` ends up being lower instead.
-
         Self::assert_is_equal(&mut cs.namespace(|| "x*inv = 1 mod P"), &prod, &Self::one())?;
 
         Ok(inv_alloc)
@@ -448,7 +443,7 @@ impl<F: PrimeFieldBits> Fp6Element<F> {
 mod tests {
     use super::*;
     use bellpepper_core::test_cs::TestConstraintSystem;
-    use pasta_curves::Fp;
+    use halo2curves::bn256::Fq as Fp;
 
     use expect_test::{expect, Expect};
     fn expect_eq(computed: usize, expected: &Expect) {
@@ -473,8 +468,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["1662"]);
-        expect_eq(cs.num_constraints(), &expect!["1572"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["1464"]);
+        expect_eq(cs.num_constraints(), &expect!["1356"]);
     }
 
     #[test]
@@ -495,8 +490,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["1662"]);
-        expect_eq(cs.num_constraints(), &expect!["1572"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["1464"]);
+        expect_eq(cs.num_constraints(), &expect!["1356"]);
     }
 
     #[test]
@@ -515,8 +510,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["1626"]);
-        expect_eq(cs.num_constraints(), &expect!["1572"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["1422"]);
+        expect_eq(cs.num_constraints(), &expect!["1356"]);
     }
 
     #[test]
@@ -539,8 +534,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["4317"]);
-        expect_eq(cs.num_constraints(), &expect!["4227"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["4161"]);
+        expect_eq(cs.num_constraints(), &expect!["4053"]);
     }
 
     #[test]
@@ -562,8 +557,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["1626"]);
-        expect_eq(cs.num_constraints(), &expect!["1572"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["1422"]);
+        expect_eq(cs.num_constraints(), &expect!["1356"]);
     }
 
     #[test]
@@ -582,8 +577,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["4248"]);
-        expect_eq(cs.num_constraints(), &expect!["4194"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["4074"]);
+        expect_eq(cs.num_constraints(), &expect!["4008"]);
     }
 
     #[test]
@@ -610,8 +605,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["5907"]);
-        expect_eq(cs.num_constraints(), &expect!["5799"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["5541"]);
+        expect_eq(cs.num_constraints(), &expect!["5409"]);
     }
 
     #[test]
@@ -634,8 +629,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["4131"]);
-        expect_eq(cs.num_constraints(), &expect!["4065"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["3953"]);
+        expect_eq(cs.num_constraints(), &expect!["3873"]);
     }
 
     #[test]
@@ -663,8 +658,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["4155"]);
-        expect_eq(cs.num_constraints(), &expect!["4089"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["3977"]);
+        expect_eq(cs.num_constraints(), &expect!["3897"]);
     }
 
     #[test]
@@ -694,8 +689,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["4266"]);
-        expect_eq(cs.num_constraints(), &expect!["4188"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["4102"]);
+        expect_eq(cs.num_constraints(), &expect!["4008"]);
     }
 
     #[test]
@@ -720,8 +715,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["4266"]);
-        expect_eq(cs.num_constraints(), &expect!["4188"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["4102"]);
+        expect_eq(cs.num_constraints(), &expect!["4008"]);
     }
 
     #[test]
@@ -740,8 +735,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["1626"]);
-        expect_eq(cs.num_constraints(), &expect!["1572"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["1422"]);
+        expect_eq(cs.num_constraints(), &expect!["1356"]);
     }
 
     #[test]
@@ -761,8 +756,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["5871"]);
-        expect_eq(cs.num_constraints(), &expect!["5799"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["5499"]);
+        expect_eq(cs.num_constraints(), &expect!["5409"]);
     }
 
     #[test]
@@ -775,9 +770,8 @@ mod tests {
         let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
         let b_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
         let res_alloc = a_alloc.sub(&mut cs.namespace(|| "a-a"), &a_alloc).unwrap();
-        let z_alloc =
-            Fp6Element::alloc_element(&mut cs.namespace(|| "alloc zero"), &BlsFp6::zero()).unwrap();
-        Fp6Element::assert_is_equal(&mut cs.namespace(|| "a-a = 0"), &res_alloc, &z_alloc).unwrap();
+        let zero = Fp6Element::zero();
+        Fp6Element::assert_is_equal(&mut cs.namespace(|| "a-a = 0"), &res_alloc, &zero).unwrap();
         let zbit_alloc = res_alloc
             .alloc_is_zero(&mut cs.namespace(|| "z <- a-a ?= 0"))
             .unwrap();
@@ -799,7 +793,7 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["7199"]);
-        expect_eq(cs.num_constraints(), &expect!["7181"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["6551"]);
+        expect_eq(cs.num_constraints(), &expect!["6563"]);
     }
 }

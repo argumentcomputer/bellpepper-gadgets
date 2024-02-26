@@ -1,7 +1,6 @@
 use bellpepper_core::boolean::{AllocatedBit, Boolean};
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use bls12_381::fp12::Fp12 as BlsFp12;
-use bls12_381::fp2::Fp2 as BlsFp2;
 use bls12_381::fp6::Fp6 as BlsFp6;
 use ff::PrimeFieldBits;
 
@@ -185,8 +184,7 @@ impl<F: PrimeFieldBits> Fp12Element<F> {
             b2: z.c1.b1.clone(),
         };
 
-        let one = Fp2Element::<F>::one();
-        let d = c1.add(&mut cs.namespace(|| "d <- c1 + 1"), &one)?;
+        let d = c1.add(&mut cs.namespace(|| "d <- c1 + 1"), &Fp2Element::one())?;
 
         let rc1 =
             z.c1.add(&mut cs.namespace(|| "rc1 <- z.c1 + z.c0"), &z.c0)?;
@@ -245,9 +243,6 @@ impl<F: PrimeFieldBits> Fp12Element<F> {
         let zc0b0 = Fp2Element::<F>::non_residue();
         let zc0b0 = zc0b0.add(&mut cs.namespace(|| "zc0b0 <- non_residue() + x0"), &x0)?;
 
-        // TODO: double check if we need to actually alloc here or if this could be a constant
-        let c1b0 =
-            Fp2Element::<F>::alloc_element(&mut cs.namespace(|| "c1b0 <- 0"), &BlsFp2::zero())?;
         Ok(Self {
             c0: Fp6Element {
                 b0: zc0b0,
@@ -255,7 +250,7 @@ impl<F: PrimeFieldBits> Fp12Element<F> {
                 b2: x1,
             },
             c1: Fp6Element {
-                b0: c1b0,
+                b0: Fp2Element::zero(),
                 b1: x04,
                 b2: x14,
             },
@@ -313,8 +308,14 @@ impl<F: PrimeFieldBits> Fp12Element<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let x = self;
         let mut cs = cs.namespace(|| "Fp12::square(x)");
+
+        // This explicit reduction is single-handedly responsible for saving
+        // millions of constraints during a pairing operation. This function is
+        // repeatedly called inside `miller_loop_lines`, and is responsible for
+        // a considerable chunk of the constraints
+        let x = self.reduce(&mut cs.namespace(|| "x <- x.reduce()"))?;
+
         let c0 = x.c0.sub(&mut cs.namespace(|| "c0 <- x.c0 - x.c1"), &x.c1)?;
         let c3 =
             x.c1.mul_by_nonresidue(&mut cs.namespace(|| "c3 <- x.c1.mul_by_nonresidue()"))?;
@@ -345,11 +346,6 @@ impl<F: PrimeFieldBits> Fp12Element<F> {
 
         // x*inv = 1
         let prod = inv_alloc.mul(&mut cs.namespace(|| "x*inv"), self)?;
-
-        // TODO: An alternative implementation would be calling
-        // `assert_equality_to_constant(1)`, however that seems to only work if
-        // we `reduce` the value first, and then the constraint count of just
-        // calling `assert_is_equal` ends up being lower instead.
 
         Self::assert_is_equal(&mut cs.namespace(|| "x*inv = 1 mod P"), &prod, &Self::one())?;
 
@@ -410,7 +406,7 @@ impl<F: PrimeFieldBits> Fp12Element<F> {
 mod tests {
     use super::*;
     use bellpepper_core::test_cs::TestConstraintSystem;
-    use pasta_curves::Fp;
+    use halo2curves::bn256::Fq as Fp;
 
     use expect_test::{expect, Expect};
     fn expect_eq(computed: usize, expected: &Expect) {
@@ -436,8 +432,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["3324"]);
-        expect_eq(cs.num_constraints(), &expect!["3144"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["2928"]);
+        expect_eq(cs.num_constraints(), &expect!["2712"]);
     }
 
     #[test]
@@ -459,8 +455,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["3324"]);
-        expect_eq(cs.num_constraints(), &expect!["3144"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["2928"]);
+        expect_eq(cs.num_constraints(), &expect!["2712"]);
     }
 
     #[test]
@@ -484,8 +480,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["8895"]);
-        expect_eq(cs.num_constraints(), &expect!["8715"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["8619"]);
+        expect_eq(cs.num_constraints(), &expect!["8403"]);
     }
 
     #[test]
@@ -504,8 +500,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["8742"]);
-        expect_eq(cs.num_constraints(), &expect!["8634"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["8418"]);
+        expect_eq(cs.num_constraints(), &expect!["8286"]);
     }
 
     #[test]
@@ -532,8 +528,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["12075"]);
-        expect_eq(cs.num_constraints(), &expect!["11859"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["11379"]);
+        expect_eq(cs.num_constraints(), &expect!["11115"]);
     }
 
     #[test]
@@ -577,8 +573,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["8562"]);
-        expect_eq(cs.num_constraints(), &expect!["8430"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["8230"]);
+        expect_eq(cs.num_constraints(), &expect!["8070"]);
     }
 
     #[test]
@@ -637,8 +633,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["7437"]);
-        expect_eq(cs.num_constraints(), &expect!["7341"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["7053"]);
+        expect_eq(cs.num_constraints(), &expect!["6949"]);
     }
 
     #[test]
@@ -691,8 +687,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["8844"]);
-        expect_eq(cs.num_constraints(), &expect!["8676"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["8560"]);
+        expect_eq(cs.num_constraints(), &expect!["8358"]);
     }
 
     #[test]
@@ -718,8 +714,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["3252"]);
-        expect_eq(cs.num_constraints(), &expect!["3144"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["2844"]);
+        expect_eq(cs.num_constraints(), &expect!["2712"]);
     }
 
     #[test]
@@ -739,8 +735,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["12003"]);
-        expect_eq(cs.num_constraints(), &expect!["11859"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["11295"]);
+        expect_eq(cs.num_constraints(), &expect!["11115"]);
     }
 
     #[test]
@@ -753,11 +749,8 @@ mod tests {
         let a_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
         let b_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
         let res_alloc = a_alloc.sub(&mut cs.namespace(|| "a-a"), &a_alloc).unwrap();
-        let z_alloc =
-            Fp12Element::alloc_element(&mut cs.namespace(|| "alloc zero"), &BlsFp12::zero())
-                .unwrap();
-        Fp12Element::assert_is_equal(&mut cs.namespace(|| "a-a = 0"), &res_alloc, &z_alloc)
-            .unwrap();
+        let zero = Fp12Element::zero();
+        Fp12Element::assert_is_equal(&mut cs.namespace(|| "a-a = 0"), &res_alloc, &zero).unwrap();
         let zbit_alloc = res_alloc
             .alloc_is_zero(&mut cs.namespace(|| "z <- a-a ?= 0"))
             .unwrap();
@@ -779,7 +772,7 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["14399"]);
-        expect_eq(cs.num_constraints(), &expect!["14363"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["13103"]);
+        expect_eq(cs.num_constraints(), &expect!["13127"]);
     }
 }

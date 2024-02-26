@@ -37,11 +37,8 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ${{ matrix.os }}
+    runs-on: gh-32vcpu-128gbram-ubuntu-2204
     strategy:
-      matrix:
-        os:
-          - ubuntu-latest
       fail-fast: false
     env:
       RUSTFLAGS: -D warnings
