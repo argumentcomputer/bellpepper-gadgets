@@ -26,7 +26,9 @@ fn expected_circuit_constraints<GD: GadgetDigest<Scalar>>(
     hasher_constraints: usize,
     nbr_siblings: usize,
 ) -> usize {
-    3 * GD::output_size() * 8 + (GD::output_size() * 8 + hasher_constraints + 1) * nbr_siblings
+    3 * GD::output_size() * 8
+        + (GD::output_size() * 8 + hasher_constraints + 1) * nbr_siblings
+        + nbr_siblings * 4 * 8 * GD::output_size()
 }
 
 fn verify_inclusion_merkle<GD: GadgetDigest<Scalar>, O: BitOrder>() {
@@ -105,11 +107,16 @@ fn verify_incorrect_sibling_hashes<GD: GadgetDigest<Scalar>, O: BitOrder>() {
         ],
     );
 
-    let cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
-    let res = verify_proof::<_, _, GD>(cs, &bytes_to_bitvec::<O>(simple_tree.root()), &proof);
+    let mut cs = TestConstraintSystem::<<Bls12 as Engine>::Fr>::new();
+    verify_proof::<_, _, GD>(
+        &mut cs.namespace(|| "verify proof"),
+        &bytes_to_bitvec::<O>(simple_tree.root()),
+        &proof,
+    )
+    .expect("verify_proof should end with Ok");
 
     assert!(
-        res.is_err(),
+        !cs.is_satisfied(),
         "Proof verification should fail with incorrect sibling hashes."
     );
 }

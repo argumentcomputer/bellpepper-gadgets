@@ -1,6 +1,8 @@
 pub mod traits;
+mod utils;
 
 use crate::traits::GadgetDigest;
+use crate::utils::conditionally_select_vec;
 use bellpepper_core::boolean::Boolean;
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use ff::PrimeField;
@@ -126,17 +128,12 @@ where
     GD: GadgetDigest<E>,
 {
     // Determine the order of hashing based on the bit value.
-    let hash_order: Vec<Boolean> = if bit.get_value() == Some(true) {
-        vec![sibling.to_owned(), acc.to_vec()]
-            .into_iter()
-            .flatten()
-            .collect()
-    } else {
-        vec![acc.to_vec(), sibling.to_owned()]
-            .into_iter()
-            .flatten()
-            .collect()
-    };
+    let hash_order: Vec<Boolean> = conditionally_select_vec(
+        &mut cs.namespace(|| "hash order"),
+        &[sibling, acc].concat(),
+        &[acc, sibling].concat(),
+        bit,
+    )?;
 
     // Compute the new hash.
     let new_acc = GD::digest(&mut cs.namespace(|| "digest leaf & sibling"), &hash_order)?;

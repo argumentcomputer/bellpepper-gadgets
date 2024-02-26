@@ -140,7 +140,7 @@ fn verify_chunk_circuit<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize>()
 
     let expected = (test_inputs.len() / N) + if test_inputs.len() % N != 0 { 2 } else { 1 };
 
-    let circuit = InnerCircuit::<F, C, N>::new(&test_inputs).unwrap();
+    let circuit = InnerCircuit::<F, C, N>::new(&test_inputs, None).unwrap();
 
     let actual = circuit.num_fold_steps();
 

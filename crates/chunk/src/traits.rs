@@ -36,6 +36,7 @@ pub trait ChunkCircuitInner<F: PrimeField, C: ChunkStepCircuit<F>, const N: usiz
     /// `new` must return a new instance of the chunk circuit.
     /// # Arguments
     /// * `intermediate_steps_input` - The intermediate input values for each of the step circuits.
+    /// * `post_processing_circuit` - The post processing circuit to be used after the loop of steps.
     ///
     /// # Note
     ///

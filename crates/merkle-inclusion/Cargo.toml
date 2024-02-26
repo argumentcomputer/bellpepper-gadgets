@@ -12,9 +12,11 @@ rust-version = "1.71.1"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+bellpepper = { workspace = true }
 bellpepper-core = { workspace = true }
 digest = "0.11.0-pre.4"
 ff = { workspace = true }
+itertools = "0.12.1"
 
 [dev-dependencies]
 bellpepper-keccak = { path="../keccak", version = "0.1.0" }

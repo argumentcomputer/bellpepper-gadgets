@@ -4,22 +4,17 @@ use arecibo::supernova::{
 };
 use arecibo::traits::snark::default_ck_hint;
 use arecibo::traits::{CurveCycleEquipped, Dual, Engine};
-use bellpepper::gadgets::boolean::{field_into_boolean_vec_le, Boolean};
+use bellpepper::gadgets::boolean::Boolean;
 use bellpepper::gadgets::multipack::{bytes_to_bits_le, compute_multipacking, pack_bits};
 use bellpepper::gadgets::num::AllocatedNum;
-use bellpepper::gadgets::Assignment;
 use bellpepper_chunk::traits::{ChunkCircuitInner, ChunkStepCircuit};
 use bellpepper_chunk::{FoldStep, InnerCircuit};
-use bellpepper_core::boolean::{field_into_allocated_bits_le, AllocatedBit};
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use bellpepper_keccak::sha3;
 use bellpepper_merkle_inclusion::traits::GadgetDigest;
-use bellpepper_merkle_inclusion::{create_gadget_digest_impl, hash_equality};
-use bitvec::order::Lsb0;
-use bitvec::prelude::BitVec;
+use bellpepper_merkle_inclusion::{conditional_hash, create_gadget_digest_impl, hash_equality};
 use ff::{Field, PrimeField, PrimeFieldBits};
 use halo2curves::bn256::Bn256;
-use itertools::Itertools;
 use sha3::digest::Output;
 use sha3::{Digest, Sha3_256};
 use std::marker::PhantomData;
@@ -57,7 +52,7 @@ fn reconstruct_hash<F: PrimeField + PrimeFieldBits, CS: ConstraintSystem<F>>(
 ) -> Vec<Boolean> {
     // Compute the bit sizes of the field elements
     let mut scalar_bit_sizes: Vec<usize> = (0..bit_size / F::CAPACITY as usize)
-        .map(|i| F::CAPACITY as usize)
+        .map(|_| F::CAPACITY as usize)
         .collect();
     // If the bit size is not a multiple of 253, we need to add the remaining bits
     if bit_size % F::CAPACITY as usize != 0 {
@@ -84,48 +79,6 @@ fn reconstruct_hash<F: PrimeField + PrimeFieldBits, CS: ConstraintSystem<F>>(
     }
 
     result
-}
-
-pub fn conditionally_select<F: PrimeField, CS: ConstraintSystem<F>>(
-    mut cs: CS,
-    a: &AllocatedNum<F>,
-    b: &AllocatedNum<F>,
-    condition: &Boolean,
-) -> Result<AllocatedNum<F>, SynthesisError> {
-    let c = AllocatedNum::alloc(cs.namespace(|| "conditional select result"), || {
-        if *condition.get_value().get()? {
-            Ok(*a.get_value().get()?)
-        } else {
-            Ok(*b.get_value().get()?)
-        }
-    })?;
-
-    // a * condition + b*(1-condition) = c ->
-    // a * condition - b*condition = c - b
-    cs.enforce(
-        || "conditional select constraint",
-        |lc| lc + a.get_variable() - b.get_variable(),
-        |_| condition.lc(CS::one(), F::ONE),
-        |lc| lc + c.get_variable() - b.get_variable(),
-    );
-
-    Ok(c)
-}
-
-/// If condition return a otherwise b
-pub fn conditionally_select_vec<F: PrimeField, CS: ConstraintSystem<F>>(
-    mut cs: CS,
-    a: &[AllocatedNum<F>],
-    b: &[AllocatedNum<F>],
-    condition: &Boolean,
-) -> Result<Vec<AllocatedNum<F>>, SynthesisError> {
-    a.iter()
-        .zip_eq(b.iter())
-        .enumerate()
-        .map(|(i, (a, b))| {
-            conditionally_select(cs.namespace(|| format!("select_{i}")), a, b, condition)
-        })
-        .collect::<Result<Vec<AllocatedNum<F>>, SynthesisError>>()
 }
 
 /*****************************************
@@ -193,14 +146,13 @@ impl<E1: CurveCycleEquipped, C: ChunkStepCircuit<E1::Scalar>, const N: usize> No
     }
 
     fn primary_circuit(&self, circuit_index: usize) -> Self::C1 {
-        match circuit_index {
-            2 => Self::C1::CheckEquality(EqualityCircuit::new()),
-            _ => {
-                if let Some(fold_step) = self.inner.circuits().get(circuit_index) {
-                    return Self::C1::IterStep(FoldStepWrapper::new(fold_step.clone()));
-                }
-                panic!("No circuit found for index {}", circuit_index)
+        if circuit_index == 2 {
+            Self::C1::CheckEquality(EqualityCircuit::new())
+        } else {
+            if let Some(fold_step) = self.inner.circuits().get(circuit_index) {
+                return Self::C1::IterStep(FoldStepWrapper::new(fold_step.clone()));
             }
+            panic!("No circuit found for index {}", circuit_index)
         }
     }
 
@@ -243,32 +195,24 @@ impl<F: PrimeField + PrimeFieldBits> ChunkStepCircuit<F> for ChunkStep<F> {
             .to_bits_le(&mut cs.namespace(|| "get positional bit"))
             .unwrap()[0];
 
-        let hash_order = conditionally_select_vec(
-            &mut cs.namespace(|| "conditional ordering"),
-            &[&chunk_in[1..3], &z[0..2]].concat(),
-            &[&z[0..2], &chunk_in[1..3]].concat(),
+        let acc = reconstruct_hash(&mut cs.namespace(|| "reconstruct acc hash"), &z[0..2], 256);
+
+        let sibling = reconstruct_hash(
+            &mut cs.namespace(|| "reconstruct_sibling_hash"),
+            &chunk_in[1..3],
+            256,
+        );
+
+        let new_acc = conditional_hash::<_, _, Sha3>(
+            &mut cs.namespace(|| "conditional_hash"),
+            &acc,
+            &sibling,
             boolean,
         )?;
 
-        let mut first_hash = reconstruct_hash(
-            &mut cs.namespace(|| "reconstruct acc hash"),
-            &hash_order[0..2],
-            256,
-        );
-
-        let mut second_hash = reconstruct_hash(
-            &mut cs.namespace(|| "reconstruct_sibling_hash"),
-            &hash_order[2..],
-            256,
-        );
-        first_hash.append(&mut second_hash);
-
-        let new_acc = sha3(&mut cs.namespace(|| "hash new acc"), &first_hash)?;
-
         let new_acc_f_1 = pack_bits(&mut cs.namespace(|| "pack_bits new_acc 1"), &new_acc[..253])?;
         let new_acc_f_2 = pack_bits(&mut cs.namespace(|| "pack_bits new_acc 2"), &new_acc[253..])?;
-        dbg!(&new_acc_f_1);
-        dbg!(&new_acc_f_2);
+
         let z_out = vec![new_acc_f_1, new_acc_f_2, z[2].clone(), z[3].clone()];
 
         Ok(z_out)
@@ -378,7 +322,7 @@ fn main() {
     // Leaf and root hashes
     let a_leaf_hash =
         hash::<<Sha3 as GadgetDigest<<E1 as Engine>::Scalar>>::OutOfCircuitHasher>("a".as_bytes());
-    let mut b_leaf_hash =
+    let b_leaf_hash =
         hash::<<Sha3 as GadgetDigest<<E1 as Engine>::Scalar>>::OutOfCircuitHasher>("b".as_bytes());
     let c_leaf_hash =
         hash::<<Sha3 as GadgetDigest<<E1 as Engine>::Scalar>>::OutOfCircuitHasher>("c".as_bytes());
@@ -388,9 +332,6 @@ fn main() {
     let ab_leaf_hash = hash::<<Sha3 as GadgetDigest<<E1 as Engine>::Scalar>>::OutOfCircuitHasher>(
         &[a_leaf_hash, b_leaf_hash].concat(),
     );
-    dbg!(compute_multipacking::<<E1 as Engine>::Scalar>(
-        &bytes_to_bits_le(&ab_leaf_hash)
-    ));
     let cd_leaf_hash = hash::<<Sha3 as GadgetDigest<<E1 as Engine>::Scalar>>::OutOfCircuitHasher>(
         &[c_leaf_hash, d_leaf_hash].concat(),
     );
@@ -400,10 +341,9 @@ fn main() {
     );
 
     // Intermediate hashes
-    let mut intermediate_hashes: Vec<<E1 as Engine>::Scalar> = vec![a_leaf_hash, cd_leaf_hash]
+    let intermediate_hashes: Vec<<E1 as Engine>::Scalar> = [a_leaf_hash, cd_leaf_hash]
         .iter()
-        .map(|h| compute_multipacking::<<E1 as Engine>::Scalar>(&bytes_to_bits_le(h)))
-        .flatten()
+        .flat_map(|h| compute_multipacking::<<E1 as Engine>::Scalar>(&bytes_to_bits_le(h)))
         .collect();
     let mut intermediate_key_hashes = vec![<E1 as Engine>::Scalar::ONE];
     intermediate_key_hashes.append(&mut intermediate_hashes[0..2].to_vec());
@@ -420,7 +360,7 @@ fn main() {
     // Multipacking the leaf and root hashes
     let mut z0_primary =
         compute_multipacking::<<E1 as Engine>::Scalar>(&bytes_to_bits_le(&b_leaf_hash));
-    let mut root_fields =
+    let root_fields =
         compute_multipacking::<<E1 as Engine>::Scalar>(&bytes_to_bits_le(&abcd_leaf_hash));
 
     // The accumulator elements are initialized to 0
@@ -456,17 +396,6 @@ fn main() {
         assert!(res.is_ok());
         println!(
             "RecursiveSNARK::prove_step {}: {:?}, took {:?} ",
-            step,
-            res.is_ok(),
-            start.elapsed()
-        );
-
-        let start = Instant::now();
-
-        let res = recursive_snark.verify(&pp, &z0_primary, &z0_secondary);
-        assert!(res.is_ok());
-        println!(
-            "RecursiveSNARK::verify {}: {:?}, took {:?} ",
             step,
             res.is_ok(),
             start.elapsed()
