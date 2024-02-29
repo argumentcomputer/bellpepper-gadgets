@@ -66,7 +66,7 @@ impl<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> IterationSte
             pc,
             z_in,
             // Only keep inputs that were part of the original input set
-            chunk_in,
+            chunk_in.split_at(self.input_nbr).0,
         )?;
 
         // Next program

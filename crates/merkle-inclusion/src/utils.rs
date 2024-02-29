@@ -4,6 +4,7 @@ use ff::PrimeField;
 use itertools::Itertools;
 use std::ops::Sub;
 
+// TODO should live in bellpepper, close to the Boolean struct
 pub fn conditionally_select_bool<F: PrimeField, CS: ConstraintSystem<F>>(
     mut cs: CS,
     a: &Boolean,
@@ -31,6 +32,7 @@ pub fn conditionally_select_bool<F: PrimeField, CS: ConstraintSystem<F>>(
     Ok(result)
 }
 
+// TODO should live in bellepper, close to the Boolean struct
 /// If condition return a otherwise b
 pub fn conditionally_select_vec<F: PrimeField, CS: ConstraintSystem<F>>(
     mut cs: CS,
