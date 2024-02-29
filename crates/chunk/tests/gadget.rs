@@ -1,8 +1,7 @@
 use arecibo::provider::Bn256EngineKZG;
-use arecibo::supernova::{NonUniformCircuit, StepCircuit, TrivialSecondaryCircuit};
-use arecibo::traits::{CurveCycleEquipped, Dual, Engine};
-use bellpepper_chunk::traits::{ChunkCircuitInner, ChunkStepCircuit};
-use bellpepper_chunk::{FoldStep, InnerCircuit};
+use arecibo::traits::Engine;
+use bellpepper_chunk::traits::ChunkStepCircuit;
+use bellpepper_chunk::IterationStep;
 use bellpepper_core::num::AllocatedNum;
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use ff::PrimeField;
@@ -39,110 +38,14 @@ impl<F: PrimeField> ChunkStepCircuit<F> for ChunkStep<F> {
     }
 }
 
-// NIVC `StepCircuit`` implementation
-#[derive(Clone, Debug)]
-struct FoldStepWrapper<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
-    inner: FoldStep<F, C, N>,
-}
-
-impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> FoldStepWrapper<F, C, N> {
-    pub fn new(fold_step: FoldStep<F, C, N>) -> Self {
-        Self { inner: fold_step }
-    }
-}
-
-impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> StepCircuit<F>
-    for FoldStepWrapper<F, C, N>
-{
-    fn arity(&self) -> usize {
-        self.inner.arity()
-    }
-
-    fn circuit_index(&self) -> usize {
-        *self.inner.step_nbr()
-    }
-
-    fn synthesize<CS: ConstraintSystem<F>>(
-        &self,
-        cs: &mut CS,
-        pc: Option<&AllocatedNum<F>>,
-        z: &[AllocatedNum<F>],
-    ) -> Result<(Option<AllocatedNum<F>>, Vec<AllocatedNum<F>>), SynthesisError> {
-        let (next_pc, res_inner_synth) =
-            self.inner
-                .synthesize(&mut cs.namespace(|| "fold_step_wrapper"), pc, z)?;
-
-        Ok((next_pc, res_inner_synth))
-    }
-}
-
-// NIVC `NonUniformCircuit` implementation
-struct ChunkCircuit<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
-    inner: InnerCircuit<F, C, N>,
-}
-
-#[derive(Clone, Debug)]
-enum ChunkCircuitSet<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
-    IterStep(FoldStepWrapper<F, C, N>),
-}
-
-impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> StepCircuit<F>
-    for ChunkCircuitSet<F, C, N>
-{
-    fn arity(&self) -> usize {
-        match self {
-            Self::IterStep(fold_step) => fold_step.inner.arity(),
-        }
-    }
-
-    fn circuit_index(&self) -> usize {
-        match self {
-            Self::IterStep(fold_step) => *fold_step.inner.step_nbr(),
-        }
-    }
-
-    fn synthesize<CS: ConstraintSystem<F>>(
-        &self,
-        cs: &mut CS,
-        pc: Option<&AllocatedNum<F>>,
-        z: &[AllocatedNum<F>],
-    ) -> Result<(Option<AllocatedNum<F>>, Vec<AllocatedNum<F>>), SynthesisError> {
-        match self {
-            Self::IterStep(fold_step) => fold_step.synthesize(cs, pc, z),
-        }
-    }
-}
-
-impl<E1: CurveCycleEquipped, C: ChunkStepCircuit<E1::Scalar>, const N: usize> NonUniformCircuit<E1>
-    for ChunkCircuit<E1::Scalar, C, N>
-{
-    type C1 = ChunkCircuitSet<E1::Scalar, C, N>;
-    type C2 = TrivialSecondaryCircuit<<Dual<E1> as Engine>::Scalar>;
-
-    fn num_circuits(&self) -> usize {
-        self.inner.num_fold_steps()
-    }
-
-    fn primary_circuit(&self, circuit_index: usize) -> Self::C1 {
-        if let Some(fold_step) = self.inner.circuits().get(circuit_index) {
-            return Self::C1::IterStep(FoldStepWrapper::new(fold_step.clone()));
-        }
-        unreachable!()
-    }
-
-    fn secondary_circuit(&self) -> Self::C2 {
-        Default::default()
-    }
-}
-
 fn verify_chunk_circuit<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize>() {
     let test_inputs = vec![F::ONE; 18];
 
     let expected = (test_inputs.len() / N) + if test_inputs.len() % N != 0 { 2 } else { 1 };
 
-    let circuit = InnerCircuit::<F, C, N>::new(&test_inputs, None).unwrap();
+    let circuits = IterationStep::<F, C, N>::from_inputs(0, &test_inputs, F::ONE).unwrap();
 
-    let actual = circuit.num_fold_steps();
+    let actual = circuits.len();
 
     assert_eq!(
         &expected, &actual,
@@ -158,26 +61,42 @@ fn verify_chunk_circuit<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize>()
         }
     }
 
-    let actual_init = circuit.initial_input().unwrap();
-    let expected_init =
-        FoldStep::<F, C, N>::new(C::new(), expected_first_chunk, N, 0, Some(F::ONE));
+    let actual_first = &circuits[0];
+    let expected_first =
+        IterationStep::<F, C, N>::new(0, C::new(), expected_first_chunk, N, 0, F::ZERO);
 
     assert_eq!(
-        *actual_init, expected_init,
-        "Expected initial input to be {:?}, got {:?}",
-        expected_init, actual_init
+        actual_first, &expected_first,
+        "Expected first iteration step to be {:?}, got {:?}",
+        expected_first, actual_first
     );
 
-    let actual_circuits = circuit.circuits();
-
-    for (i, actual_circuit) in actual_circuits.iter().enumerate() {
+    for (i, circuit) in circuits[..circuits.len() - 1].iter().enumerate() {
         assert_eq!(
             &i,
-            actual_circuit.step_nbr(),
+            circuit.step_nbr(),
             "Expected inner step nbr to be {:?}, got {:?}",
             i,
-            actual_circuit.step_nbr()
+            circuit.step_nbr()
         );
+
+        if i == circuits.len() - 1 {
+            assert_eq!(
+                &F::ONE,
+                circuit.next_pc(),
+                "Expected inner step nbr to be {:?}, got {:?}",
+                F::from(1),
+                circuit.next_pc()
+            );
+        } else {
+            assert_eq!(
+                &F::ZERO,
+                circuit.next_pc(),
+                "Expected inner step nbr to be {:?}, got {:?}",
+                F::from(0),
+                circuit.next_pc()
+            );
+        }
     }
 }
 

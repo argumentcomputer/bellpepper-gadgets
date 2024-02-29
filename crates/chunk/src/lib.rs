@@ -1,5 +1,5 @@
 use crate::error::ChunkError;
-use crate::traits::{ChunkCircuitInner, ChunkStepCircuit};
+use crate::traits::ChunkStepCircuit;
 use bellpepper_core::num::AllocatedNum;
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use ff::PrimeField;
@@ -8,40 +8,43 @@ use getset::Getters;
 pub mod error;
 pub mod traits;
 
-/// `FoldStep` is the wrapper struct for a `ChunkStepCircuit` implemented by a user. It exist to synthesize multiple of
-/// the `ChunkStepCircuit` instances at once.
+/// `IterationStep` is the wrapper struct for a `ChunkStepCircuit` implemented by a user.
 #[derive(Eq, PartialEq, Debug, Getters)]
 #[getset(get = "pub")]
-pub struct FoldStep<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> {
-    /// The step number of the `FoldStep` in the circuit.
-    step_nbr: usize,
-    /// Next circuit index.
-    next_circuit: Option<F>,
+pub struct IterationStep<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> {
+    /// The circuit index in the higher order `NonUniformCircuit`.
+    circuit_index: usize,
     /// The `ChunkStepCircuit` instance to be used in the `FoldStep`.
     circuit: C,
+    /// The step number of the `FoldStep` in the circuit.
+    step_nbr: usize,
     /// Number of input to be expected
     input_nbr: usize,
     /// The next input values for the next `ChunkStepCircuit` instance.
     next_input: [F; N],
+    /// Next program counter.
+    next_pc: F,
 }
 
-impl<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> FoldStep<F, C, N> {
+impl<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> IterationStep<F, C, N> {
     pub fn arity(&self) -> usize {
         N + C::arity()
     }
     pub fn new(
+        circuit_index: usize,
         circuit: C,
         inputs: [F; N],
         input_nbr: usize,
         step_nbr: usize,
-        next_circuit: Option<F>,
+        next_circuit: F,
     ) -> Self {
         Self {
+            circuit_index,
             circuit,
             next_input: inputs,
             input_nbr,
             step_nbr,
-            next_circuit,
+            next_pc: next_circuit,
         }
     }
 
@@ -63,16 +66,12 @@ impl<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> FoldStep<F, 
             pc,
             z_in,
             // Only keep inputs that were part of the original input set
-            chunk_in.split_at(self.input_nbr).0,
+            chunk_in,
         )?;
 
         // Next program
-        let next_pc = match self.next_circuit() {
-            Some(next_circuit) => {
-                AllocatedNum::alloc_infallible(cs.namespace(|| "next_circuit"), || *next_circuit)
-            }
-            None => AllocatedNum::alloc_infallible(cs.namespace(|| "next_circuit"), || F::ZERO),
-        };
+        let next_pc =
+            AllocatedNum::alloc_infallible(cs.namespace(|| "next_circuit"), || self.next_pc);
 
         // Next input
         let next_inputs_allocated = self
@@ -87,38 +86,12 @@ impl<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> FoldStep<F, 
         z_out.extend(next_inputs_allocated);
         Ok((Some(next_pc), z_out))
     }
-}
 
-impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> Clone for FoldStep<F, C, N> {
-    fn clone(&self) -> Self {
-        Self {
-            step_nbr: self.step_nbr,
-            circuit: self.circuit.clone(),
-            next_input: self.next_input,
-            next_circuit: self.next_circuit,
-            input_nbr: self.input_nbr,
-        }
-    }
-}
-
-/// `Circuit` is a helper structure that handles the plumbing of generating the necessary number of `FoldStep` instances
-/// to properly prove and verifiy a circuit.
-#[derive(Debug, Getters)]
-pub struct InnerCircuit<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
-    /// The `FoldStep` instances that are part of the circuit.
-    #[getset(get = "pub")]
-    circuits: Vec<FoldStep<F, C, N>>,
-    /// The number of folding step required in the recursive snark to prove and verify the circuit.
-    num_fold_steps: usize,
-}
-
-impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> ChunkCircuitInner<F, C, N>
-    for InnerCircuit<F, C, N>
-{
-    fn new(
+    pub fn from_inputs(
+        circuit_index: usize,
         intermediate_steps_input: &[F],
-        post_processing_circuit: Option<F>,
-    ) -> anyhow::Result<Self, ChunkError> {
+        pc_post_iter: F,
+    ) -> anyhow::Result<Vec<Self>> {
         // We generate the `FoldStep` instances that are part of the circuit.
         let mut circuits = intermediate_steps_input
             .chunks(N)
@@ -132,19 +105,21 @@ impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> ChunkCircuitInner<F,
                     *input = *value;
                 }
 
-                Ok(FoldStep::new(
+                Ok(IterationStep::new(
+                    circuit_index,
                     C::new(),
                     inputs,
                     N,
                     i,
-                    Some(F::from(i as u64 + 1)),
+                    F::from(circuit_index as u64),
                 ))
             })
             .collect::<anyhow::Result<Vec<_>, ChunkError>>()?;
 
         // As the input represents the generated values by the inner loop, we need to add one more execution to have
         // a complete circuit and a proper accumulator value.
-        circuits.push(FoldStep::new(
+        circuits.push(IterationStep::new(
+            circuit_index,
             C::new(),
             [F::ZERO; N],
             if intermediate_steps_input.len() % N != 0 {
@@ -153,25 +128,22 @@ impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> ChunkCircuitInner<F,
                 N
             },
             circuits.len(),
-            post_processing_circuit.or(Some(F::ZERO)),
+            pc_post_iter,
         ));
 
-        Ok(Self {
-            circuits,
-            num_fold_steps: (intermediate_steps_input.len() / N)
-                + if intermediate_steps_input.len() % N != 0 {
-                    2
-                } else {
-                    1
-                },
-        })
+        Ok(circuits)
     }
+}
 
-    fn initial_input(&self) -> Option<&FoldStep<F, C, N>> {
-        self.circuits.first()
-    }
-
-    fn num_fold_steps(&self) -> usize {
-        self.num_fold_steps
+impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> Clone for IterationStep<F, C, N> {
+    fn clone(&self) -> Self {
+        Self {
+            circuit_index: self.circuit_index,
+            step_nbr: self.step_nbr,
+            circuit: self.circuit.clone(),
+            next_input: self.next_input,
+            next_pc: self.next_pc,
+            input_nbr: self.input_nbr,
+        }
     }
 }

@@ -7,8 +7,8 @@ use arecibo::traits::{CurveCycleEquipped, Dual, Engine};
 use bellpepper::gadgets::boolean::Boolean;
 use bellpepper::gadgets::multipack::{bytes_to_bits_le, compute_multipacking, pack_bits};
 use bellpepper::gadgets::num::AllocatedNum;
-use bellpepper_chunk::traits::{ChunkCircuitInner, ChunkStepCircuit};
-use bellpepper_chunk::{FoldStep, InnerCircuit};
+use bellpepper_chunk::traits::ChunkStepCircuit;
+use bellpepper_chunk::IterationStep;
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use bellpepper_keccak::sha3;
 use bellpepper_merkle_inclusion::traits::GadgetDigest;
@@ -86,22 +86,31 @@ fn reconstruct_hash<F: PrimeField + PrimeFieldBits, CS: ConstraintSystem<F>>(
  *****************************************/
 
 struct MerkleChunkCircuit<F: PrimeField + PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize> {
-    inner: InnerCircuit<F, C, N>,
+    pub(crate) iteration_steps: Vec<IterationStep<F, C, N>>,
 }
 
 impl<F: PrimeField + PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize>
     MerkleChunkCircuit<F, C, N>
 {
-    fn new(inputs: &[F], post_processing_step: Option<F>) -> Self {
+    fn new(inputs: &[F]) -> Self {
         Self {
-            inner: InnerCircuit::new(inputs, post_processing_step).unwrap(),
+            // We expect EqualityCircuit to be called once the last `IterationStep` is done.
+            iteration_steps: IterationStep::from_inputs(0, inputs, F::ONE).unwrap(),
         }
+    }
+
+    fn get_iteration_step(&self, step: usize) -> IterationStep<F, C, N> {
+        self.iteration_steps[step].clone()
+    }
+
+    fn get_iteration_circuit(&self, step: usize) -> ChunkCircuitSet<F, C, N> {
+        ChunkCircuitSet::IterationStep(IterationStepWrapper::new(self.get_iteration_step(step)))
     }
 }
 
 #[derive(Clone, Debug)]
 enum ChunkCircuitSet<F: PrimeField + PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize> {
-    IterStep(FoldStepWrapper<F, C, N>),
+    IterationStep(IterationStepWrapper<F, C, N>),
     CheckEquality(EqualityCircuit<F>),
 }
 
@@ -110,15 +119,15 @@ impl<F: PrimeField + PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize> Ste
 {
     fn arity(&self) -> usize {
         match self {
-            Self::IterStep(fold_step) => fold_step.inner.arity(),
+            Self::IterationStep(iteration_step) => iteration_step.inner.arity(),
             Self::CheckEquality(equality_circuit) => equality_circuit.arity(),
         }
     }
 
     fn circuit_index(&self) -> usize {
         match self {
-            Self::IterStep(fold_step) => *fold_step.inner.step_nbr(),
-            Self::CheckEquality(equality_circuit) => equality_circuit.circuit_index(),
+            Self::IterationStep(iteration_step) => *iteration_step.inner.circuit_index(),
+            Self::CheckEquality(equality_circuit) => equality_circuit.circuit_index(),²
         }
     }
 
@@ -129,7 +138,7 @@ impl<F: PrimeField + PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize> Ste
         z: &[AllocatedNum<F>],
     ) -> Result<(Option<AllocatedNum<F>>, Vec<AllocatedNum<F>>), SynthesisError> {
         match self {
-            Self::IterStep(fold_step) => fold_step.synthesize(cs, pc, z),
+            Self::IterationStep(iteration_step) => iteration_step.synthesize(cs, pc, z),
             Self::CheckEquality(equality_circuit) => equality_circuit.synthesize(cs, pc, z),
         }
     }
@@ -142,17 +151,14 @@ impl<E1: CurveCycleEquipped, C: ChunkStepCircuit<E1::Scalar>, const N: usize> No
     type C2 = TrivialSecondaryCircuit<<Dual<E1> as Engine>::Scalar>;
 
     fn num_circuits(&self) -> usize {
-        self.inner.num_fold_steps() + 1
+        2
     }
 
     fn primary_circuit(&self, circuit_index: usize) -> Self::C1 {
-        if circuit_index == 2 {
-            Self::C1::CheckEquality(EqualityCircuit::new())
-        } else {
-            if let Some(fold_step) = self.inner.circuits().get(circuit_index) {
-                return Self::C1::IterStep(FoldStepWrapper::new(fold_step.clone()));
-            }
-            panic!("No circuit found for index {}", circuit_index)
+        match circuit_index {
+            0 => self.get_iteration_circuit(0),
+            1 => Self::C1::CheckEquality(EqualityCircuit::new()),
+            _ => panic!("No circuit found for index {}", circuit_index),
         }
     }
 
@@ -195,23 +201,26 @@ impl<F: PrimeField + PrimeFieldBits> ChunkStepCircuit<F> for ChunkStep<F> {
             .to_bits_le(&mut cs.namespace(|| "get positional bit"))
             .unwrap()[0];
 
-        let acc = reconstruct_hash(&mut cs.namespace(|| "reconstruct acc hash"), &z[0..2], 256);
+        let mut acc = reconstruct_hash(&mut cs.namespace(|| "reconstruct acc hash"), &z[0..2], 256);
 
-        let sibling = reconstruct_hash(
-            &mut cs.namespace(|| "reconstruct_sibling_hash"),
-            &chunk_in[1..3],
-            256,
-        );
+        // The inputs we handle for one inner iterations are multiple of 3.
+        for chunk in chunk_in.chunks(3) {
+            let sibling = reconstruct_hash(
+                &mut cs.namespace(|| "reconstruct_sibling_hash"),
+                &chunk[1..3],
+                256,
+            );
 
-        let new_acc = conditional_hash::<_, _, Sha3>(
-            &mut cs.namespace(|| "conditional_hash"),
-            &acc,
-            &sibling,
-            boolean,
-        )?;
+            acc = conditional_hash::<_, _, Sha3>(
+                &mut cs.namespace(|| "conditional_hash"),
+                &acc,
+                &sibling,
+                boolean,
+            )?;
+        }
 
-        let new_acc_f_1 = pack_bits(&mut cs.namespace(|| "pack_bits new_acc 1"), &new_acc[..253])?;
-        let new_acc_f_2 = pack_bits(&mut cs.namespace(|| "pack_bits new_acc 2"), &new_acc[253..])?;
+        let new_acc_f_1 = pack_bits(&mut cs.namespace(|| "pack_bits new_acc 1"), &acc[..253])?;
+        let new_acc_f_2 = pack_bits(&mut cs.namespace(|| "pack_bits new_acc 2"), &acc[253..])?;
 
         let z_out = vec![new_acc_f_1, new_acc_f_2, z[2].clone(), z[3].clone()];
 
@@ -220,25 +229,27 @@ impl<F: PrimeField + PrimeFieldBits> ChunkStepCircuit<F> for ChunkStep<F> {
 }
 
 #[derive(Clone, Debug)]
-struct FoldStepWrapper<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
-    inner: FoldStep<F, C, N>,
+struct IterationStepWrapper<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
+    inner: IterationStep<F, C, N>,
 }
 
-impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> FoldStepWrapper<F, C, N> {
-    pub fn new(fold_step: FoldStep<F, C, N>) -> Self {
-        Self { inner: fold_step }
+impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> IterationStepWrapper<F, C, N> {
+    pub fn new(iteration_step: IterationStep<F, C, N>) -> Self {
+        Self {
+            inner: iteration_step,
+        }
     }
 }
 
 impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> StepCircuit<F>
-    for FoldStepWrapper<F, C, N>
+    for IterationStepWrapper<F, C, N>
 {
     fn arity(&self) -> usize {
         self.inner.arity()
     }
 
     fn circuit_index(&self) -> usize {
-        *self.inner.step_nbr()
+        *self.inner.circuit_index()
     }
 
     fn synthesize<CS: ConstraintSystem<F>>(
@@ -247,11 +258,8 @@ impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> StepCircuit<F>
         pc: Option<&AllocatedNum<F>>,
         z: &[AllocatedNum<F>],
     ) -> Result<(Option<AllocatedNum<F>>, Vec<AllocatedNum<F>>), SynthesisError> {
-        let (next_pc, res_inner_synth) =
-            self.inner
-                .synthesize(&mut cs.namespace(|| "fold_step_wrapper"), pc, z)?;
-
-        Ok((next_pc, res_inner_synth))
+        self.inner
+            .synthesize(&mut cs.namespace(|| "iteration_step_wrapper"), pc, z)
     }
 }
 
@@ -274,7 +282,7 @@ impl<F: PrimeField + PrimeFieldBits> StepCircuit<F> for EqualityCircuit<F> {
     }
 
     fn circuit_index(&self) -> usize {
-        2
+        1
     }
 
     fn synthesize<CS: ConstraintSystem<F>>(
@@ -315,6 +323,8 @@ impl<F: PrimeField + PrimeFieldBits> StepCircuit<F> for EqualityCircuit<F> {
     }
 }
 
+const NBR_CHUNK_INPUT: usize = 3;
+
 fn main() {
     // produce public parameters
     let start = Instant::now();
@@ -351,11 +361,12 @@ fn main() {
     intermediate_key_hashes.append(&mut intermediate_hashes[2..4].to_vec());
 
     //  Primary circuit
-    type C1 = MerkleChunkCircuit<<E1 as Engine>::Scalar, ChunkStep<<E1 as Engine>::Scalar>, 3>;
-    let chunk_circuit = C1::new(
-        &intermediate_key_hashes[3..6],
-        Some(<E1 as Engine>::Scalar::from(2)),
-    );
+    type C1 = MerkleChunkCircuit<
+        <E1 as Engine>::Scalar,
+        ChunkStep<<E1 as Engine>::Scalar>,
+        NBR_CHUNK_INPUT,
+    >;
+    let chunk_circuit = C1::new(&intermediate_key_hashes[NBR_CHUNK_INPUT..]);
 
     // Multipacking the leaf and root hashes
     let mut z0_primary =
@@ -365,7 +376,7 @@ fn main() {
 
     // The accumulator elements are initialized to 0
     z0_primary.append(&mut root_fields.clone());
-    z0_primary.append(&mut intermediate_key_hashes[0..3].to_vec());
+    z0_primary.append(&mut intermediate_key_hashes[..NBR_CHUNK_INPUT].to_vec());
 
     let circuit_primary = <C1 as NonUniformCircuit<E1>>::primary_circuit(&chunk_circuit, 0);
 
@@ -389,8 +400,15 @@ fn main() {
     )
     .unwrap();
 
-    for step in 0..<C1 as NonUniformCircuit<E1>>::num_circuits(&chunk_circuit) {
-        let circuit_primary = <C1 as NonUniformCircuit<E1>>::primary_circuit(&chunk_circuit, step);
+    // We expect nbr_inputs/chunk_value + 1 (post processning circuit) iterations.
+    for step in 0..intermediate_key_hashes.len() / NBR_CHUNK_INPUT + 1 {
+        let circuit_primary = if step == intermediate_key_hashes.len() / NBR_CHUNK_INPUT {
+            // Check equality
+            <C1 as NonUniformCircuit<E1>>::primary_circuit(&chunk_circuit, 1)
+        } else {
+            // Iteration step
+            chunk_circuit.get_iteration_circuit(step)
+        };
 
         let res = recursive_snark.prove_step(&pp, &circuit_primary, &circuit_secondary);
         assert!(res.is_ok());
