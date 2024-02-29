@@ -127,7 +127,7 @@ impl<F: PrimeField + PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize> Ste
     fn circuit_index(&self) -> usize {
         match self {
             Self::IterationStep(iteration_step) => *iteration_step.inner.circuit_index(),
-            Self::CheckEquality(equality_circuit) => equality_circuit.circuit_index(),²
+            Self::CheckEquality(equality_circuit) => equality_circuit.circuit_index(),
         }
     }
 

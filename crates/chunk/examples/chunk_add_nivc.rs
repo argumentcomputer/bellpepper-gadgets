@@ -234,7 +234,7 @@ fn main() {
         &chunk_circuit,
         &circuit_primary,
         &circuit_secondary,
-        &z0_primary,
+        z0_primary,
         &z0_secondary,
     )
     .unwrap();
@@ -243,14 +243,8 @@ fn main() {
 
     // We +1 the number of folding steps to account for the modulo of intermediate_inputs.len() by NUM_ITERS_PER_STEP being != 0
     for step in 0..inputs.len() / NUM_ITERS_PER_STEP + 1 {
-        dbg!(format!(
-            "-----------------------------------{}-------------------------------------",
-            step
-        ));
         let circuit_primary = chunk_circuit.get_iteration_circuit(step);
-        dbg!(chunk_circuit.get_iteration_step(step).next_input());
         let res = recursive_snark.prove_step(&pp, &circuit_primary, &circuit_secondary);
-        dbg!(&res);
         assert!(res.is_ok());
         println!(
             "RecursiveSNARK::prove_step {}: {:?}, took {:?} ",
@@ -258,10 +252,6 @@ fn main() {
             res.is_ok(),
             start.elapsed()
         );
-
-        let res = recursive_snark.verify(&pp, &z0_primary, &z0_secondary);
-        dbg!(&res);
-        assert!(res.is_ok());
     }
     assert_eq!(
         &<E1 as Engine>::Scalar::from(55),
@@ -288,7 +278,7 @@ fn main() {
     // verify the compressed SNARK
     println!("Verifying a CompressedSNARK...");
     let start = Instant::now();
-    let res = compressed_snark.verify(&pp, &verifier_key, &z0_primary, &z0_secondary);
+    let res = compressed_snark.verify(&pp, &verifier_key, z0_primary, &z0_secondary);
     println!(
         "CompressedSNARK::verify: {:?}, took {:?}",
         res.is_ok(),

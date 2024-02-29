@@ -61,17 +61,20 @@ impl<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> IterationSte
     ) -> Result<(Option<AllocatedNum<F>>, Vec<AllocatedNum<F>>), SynthesisError> {
         let (z_in, chunk_in) = z.split_at(C::arity());
 
+        // TODO need to find a way to constrain the chunk_in length based on the input_nbr
         let mut z_out = self.circuit.synthesize(
             &mut cs.namespace(|| format!("chunk_folding_step_{}", self.step_nbr)),
             pc,
             z_in,
             // Only keep inputs that were part of the original input set
-            chunk_in.split_at(self.input_nbr).0,
+            chunk_in,
         )?;
 
         // Next program
         let next_pc =
-            AllocatedNum::alloc_infallible(cs.namespace(|| "next_circuit"), || self.next_pc);
+            AllocatedNum::alloc_infallible(cs.namespace(|| "next_program_counter"), || {
+                self.next_pc
+            });
 
         // Next input
         let next_inputs_allocated = self
@@ -105,7 +108,7 @@ impl<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> IterationSte
                     *input = *value;
                 }
 
-                Ok(IterationStep::new(
+                Ok(Self::new(
                     circuit_index,
                     C::new(),
                     inputs,
@@ -118,7 +121,7 @@ impl<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> IterationSte
 
         // As the input represents the generated values by the inner loop, we need to add one more execution to have
         // a complete circuit and a proper accumulator value.
-        circuits.push(IterationStep::new(
+        circuits.push(Self::new(
             circuit_index,
             C::new(),
             [F::ZERO; N],
