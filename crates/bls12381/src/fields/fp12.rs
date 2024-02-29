@@ -1,8 +1,12 @@
 use bellpepper_core::boolean::{AllocatedBit, Boolean};
+use bellpepper_core::num::Num;
 use bellpepper_core::{ConstraintSystem, SynthesisError};
+use bellpepper_emulated::field_element::EmulatedFieldParams;
 use bls12_381::fp12::Fp12 as BlsFp12;
 use bls12_381::fp6::Fp6 as BlsFp6;
 use ff::PrimeFieldBits;
+
+use crate::fields::fp::Bls12381FpParams;
 
 use super::fp2::Fp2Element;
 use super::fp6::Fp6Element;
@@ -48,6 +52,25 @@ impl<F: PrimeFieldBits> Fp12Element<F> {
             c0: Fp6Element::one(),
             c1: Fp6Element::zero(),
         }
+    }
+
+    pub fn from_limbs<CS>(cs: &mut CS, limbs: &[Num<F>]) -> Result<Self, SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        let n = Bls12381FpParams::num_limbs();
+        assert_eq!(limbs.len(), 12 * n);
+        let c0 = Fp6Element::from_limbs(&mut cs.namespace(|| "from_limbs c0"), &limbs[..6 * n])?;
+        let c1 = Fp6Element::from_limbs(&mut cs.namespace(|| "from_limbs c1"), &limbs[6 * n..])?;
+
+        Ok(Self { c0, c1 })
+    }
+
+    pub fn get_limbs(&self) -> Result<Vec<Num<F>>, SynthesisError> {
+        let mut c0 = self.c0.get_limbs()?;
+        let c1 = self.c1.get_limbs()?;
+        c0.extend(c1.into_iter());
+        Ok(c0)
     }
 
     pub fn alloc_element<CS>(cs: &mut CS, value: &BlsFp12) -> Result<Self, SynthesisError>
@@ -337,7 +360,7 @@ impl<F: PrimeFieldBits> Fp12Element<F> {
     {
         let val = BlsFp12::from(self);
         if val.is_zero().into() {
-            eprintln!("Inverse of zero element cannot be calculated");
+            eprintln!("Inverse of zero element cannot be calculated HERE");
             return Err(SynthesisError::DivisionByZero);
         }
         let inv = val.invert().unwrap();
@@ -362,7 +385,7 @@ impl<F: PrimeFieldBits> Fp12Element<F> {
 
         let y = BlsFp12::from(value);
         if y.is_zero().into() {
-            eprintln!("Inverse of zero element cannot be calculated");
+            eprintln!("Inverse of zero element cannot be calculated HERE2");
             return Err(SynthesisError::DivisionByZero);
         }
         let y_inv = y.invert().unwrap();

@@ -1,4 +1,5 @@
 use bellpepper_core::boolean::{AllocatedBit, Boolean};
+use bellpepper_core::num::Num;
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use bellpepper_emulated::field_element::EmulatedFieldParams;
 use bls12_381::fp2::Fp2 as BlsFp2;
@@ -41,7 +42,7 @@ where
 {
     fn from(value: &G2Point<F>) -> Self {
         let x = BlsFp2::from(&value.x);
-        let y = BlsFp2::from(&value.x);
+        let y = BlsFp2::from(&value.y);
         let z = if x.is_zero().into() && y.is_zero().into() {
             BlsFp2::zero()
         } else {
@@ -53,6 +54,25 @@ where
 }
 
 impl<F: PrimeFieldBits> G2Point<F> {
+    // TODO: read from the compressed representation
+    pub fn from_limbs<CS>(
+        cs: &mut CS,
+        x_limbs: &[Num<F>],
+        y_limbs: &[Num<F>],
+    ) -> Result<Self, SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        let x = Fp2Element::from_limbs(&mut cs.namespace(|| "from_limbs x"), x_limbs)?;
+        let y = Fp2Element::from_limbs(&mut cs.namespace(|| "from_limbs y"), y_limbs)?;
+
+        Ok(Self { x, y })
+    }
+
+    pub fn get_limbs(&self) -> Result<(Vec<Num<F>>, Vec<Num<F>>), SynthesisError> {
+        Ok((self.x.get_limbs()?, self.y.get_limbs()?))
+    }
+
     pub fn alloc_element<CS>(cs: &mut CS, value: &G2Affine) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,

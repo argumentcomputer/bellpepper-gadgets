@@ -77,13 +77,16 @@ where
         let mut a_int: BigInt = self.into();
         let p = P::modulus();
         a_int = a_int.rem(&p);
-        if a_int.is_zero() {
-            eprintln!("Inverse of zero element cannot be calculated");
-            return Err(SynthesisError::DivisionByZero);
-        }
+        let a_inv_int = if a_int.is_zero() {
+            // eprintln!("Inverse of zero element cannot be calculated INV");
+            // return Err(SynthesisError::DivisionByZero);
+            BigInt::zero()
+        } else {
         let p_minus_2 = &p - BigInt::from(2);
         // a^(p-1) = 1 mod p for non-zero a. So a^(-1) = a^(p-2)
         let a_inv_int = a_int.modpow(&p_minus_2, &p);
+            a_inv_int
+        };
         let a_inv_value = Self::from(&a_inv_int);
 
         let a_inv_limbs =
@@ -112,7 +115,7 @@ where
         let p = P::modulus();
         denom_int = denom_int.rem(&p);
         if denom_int.is_zero() {
-            eprintln!("Inverse of zero element cannot be calculated");
+            eprintln!("Inverse of zero element cannot be calculated RATIO");
             return Err(SynthesisError::DivisionByZero);
         }
         let p_minus_2 = &p - BigInt::from(2);

@@ -220,6 +220,34 @@ where
         matches!(self.limbs, EmulatedLimbs::Constant(_))
     }
 
+    pub fn from_limbs<CS>(cs: &mut CS, limbs: &[Num<F>]) -> Result<Self, SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        let limbs = EmulatedLimbs::Allocated(limbs.to_vec());
+        let res = Self {
+            limbs,
+            overflow: 0,
+            internal: true, // FIXME: is this necessary?
+            marker: PhantomData,
+        };
+        // FIXME: just use pack_limbs instead?
+        res.enforce_width(
+            &mut cs.namespace(|| "enforce with for preallocated values"),
+            true,
+        )?;
+        Ok(res)
+    }
+
+    // FIXME
+    pub fn get_limbs(&self) -> Result<Vec<Num<F>>, SynthesisError> {
+        assert!(!self.is_constant());
+        match &self.limbs {
+            EmulatedLimbs::Allocated(v) => Ok(v.clone()),
+            EmulatedLimbs::Constant(_) => unreachable!(),
+        }
+    }
+
     pub fn allocate_limbs<CS>(&self, cs: &mut CS) -> Result<EmulatedLimbs<F>, SynthesisError>
     where
         CS: ConstraintSystem<F>,

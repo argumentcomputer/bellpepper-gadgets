@@ -43,11 +43,14 @@ impl<F: PrimeFieldBits> Torus<F> {
     fn compress_native(x: &BlsFp12) -> Result<BlsFp6, SynthesisError> {
         let y = x.c0 + BlsFp6::one();
 
-        if x.c1.is_zero().into() {
-            eprintln!("Inverse of zero element cannot be calculated");
-            return Err(SynthesisError::DivisionByZero);
-        }
-        let div = x.c1.invert().unwrap();
+        let div = if x.c1.is_zero().into() {
+            // eprintln!("Inverse of zero element cannot be calculated TORUS1");
+            // return Err(SynthesisError::DivisionByZero);
+            BlsFp6::zero()
+        } else {
+            let div = x.c1.invert().unwrap();
+            div
+        };
 
         let y = y * div;
         Ok(y)
@@ -83,11 +86,14 @@ impl<F: PrimeFieldBits> Torus<F> {
             c0: *val,
             c1: -BlsFp6::one(),
         };
-        if d.is_zero().into() {
-            eprintln!("Inverse of zero element cannot be calculated");
-            return Err(SynthesisError::DivisionByZero);
-        }
-        let div = d.invert().unwrap();
+        let div = if d.is_zero().into() {
+            // eprintln!("Inverse of zero element cannot be calculated TORUS2");
+            // return Err(SynthesisError::DivisionByZero);
+            BlsFp12::zero()
+        } else {
+            let div = d.invert().unwrap();
+            div
+        };
 
         let x = n * div;
         Ok(x)

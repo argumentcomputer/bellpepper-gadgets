@@ -1,5 +1,6 @@
 use bellpepper_core::{
     boolean::{AllocatedBit, Boolean},
+    num::Num,
     ConstraintSystem, SynthesisError,
 };
 use bellpepper_emulated::field_element::{
@@ -156,6 +157,19 @@ impl<F: PrimeFieldBits> FpElement<F> {
 
     pub fn one() -> Self {
         Self(Bls12381Fp::one())
+    }
+
+    pub fn from_limbs<CS>(cs: &mut CS, limbs: &[Num<F>]) -> Result<Self, SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        let elem = Bls12381Fp::from_limbs(cs, limbs)?;
+        Ok(Self(elem))
+    }
+
+    // FIXME: this should not return SynthesisError
+    pub fn get_limbs(&self) -> Result<Vec<Num<F>>, SynthesisError> {
+        self.0.get_limbs()
     }
 
     pub fn alloc_element<CS>(cs: &mut CS, value: &BlsFp) -> Result<Self, SynthesisError>

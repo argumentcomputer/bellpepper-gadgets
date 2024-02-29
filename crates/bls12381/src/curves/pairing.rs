@@ -604,14 +604,110 @@ where
 mod tests {
     use super::*;
     use bellpepper_core::test_cs::TestConstraintSystem;
+    use ff::Field;
     use halo2curves::bn256::Fq as Fp;
     use halo2curves::group::Group;
 
-    use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective};
+    use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar};
 
     use expect_test::{expect, Expect};
     fn expect_eq(computed: usize, expected: &Expect) {
         expected.assert_eq(&computed.to_string());
+    }
+
+    #[test]
+    fn test_random_signature() {
+        use bls12_381::fp::Fp as BlsFp;
+        use bls12_381::fp2::Fp2 as BlsFp2;
+        fn blsfp_to_bigint(value: BlsFp) -> BigInt {
+            let bytes = value.to_bytes();
+            assert!(bytes.len() == 48);
+            BigInt::from_bytes_be(num_bigint::Sign::Plus, &bytes)
+        }
+        fn fp_to_lurk(v: BlsFp) -> String {
+            let mut x = blsfp_to_bigint(v);
+            let p = std::iter::repeat(BigInt::from(2))
+                .take(55)
+                .fold(BigInt::from(1), |acc, x| acc * x);
+            let mut res = vec![];
+            for _ in 0..7 {
+                let limb = &x % &p;
+                res.push(limb);
+                x = &x / &p;
+            }
+            assert!(x == BigInt::from(0));
+            res.into_iter()
+                .map(|b| format!("{}", b))
+                .collect::<Vec<_>>()
+                .join(" ")
+        }
+        fn fp2_to_lurk(v: BlsFp2) -> String {
+            let a0 = fp_to_lurk(v.c0);
+            let a1 = fp_to_lurk(v.c1);
+            a0 + " " + &a1
+        }
+        fn g1_to_lurk(p: G1Affine) -> String {
+            let x = fp_to_lurk(p.x);
+            let y = fp_to_lurk(p.y);
+            x + " " + &y
+        }
+        fn g2_to_lurk(p: G2Affine) -> String {
+            let x = fp2_to_lurk(p.x);
+            let y = fp2_to_lurk(p.y);
+            x + " " + &y
+        }
+        let mut rng = rand::thread_rng();
+        let sk = Scalar::random(&mut rng);
+        let gen = G1Projective::generator();
+        let pk = G1Affine::from(gen * sk);
+        let msg = G2Projective::random(&mut rng);
+        let sig = sk * msg;
+        let pk = G1Affine::from(pk);
+        let gen = G1Affine::from(gen);
+        let msg = G2Affine::from(msg);
+        let sig = G2Affine::from(sig);
+        let p1 = bls12_381::pairing(&pk, &msg);
+        let p2 = bls12_381::pairing(&gen, &sig);
+        assert_eq!(p1, p2);
+        eprintln!("-> {:?}", pk);
+        eprintln!("-> {:?}", msg);
+        eprintln!("-> {:?}", gen);
+        eprintln!("-> {:?}", sig);
+        eprintln!(
+            "{} {} {} {}",
+            g1_to_lurk(pk),
+            g2_to_lurk(msg),
+            g1_to_lurk(gen),
+            g2_to_lurk(sig)
+        );
+        assert!(false);
+
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let pk_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc pk"), &pk).unwrap();
+        let gen_alloc = G1Point::from(&gen);
+        let msg_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc msg"), &msg).unwrap();
+        let sig_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc sig"), &sig).unwrap();
+        let p1_alloc = EmulatedBls12381Pairing::pair(
+            &mut cs.namespace(|| "pair(pk, msg)"),
+            &[pk_alloc],
+            &[msg_alloc],
+        )
+        .unwrap();
+        let p2_alloc = EmulatedBls12381Pairing::pair(
+            &mut cs.namespace(|| "pair(gen, sig)"),
+            &[gen_alloc],
+            &[sig_alloc],
+        )
+        .unwrap();
+        Fp12Element::assert_is_equal(&mut cs.namespace(|| "p1 = p2"), &p1_alloc, &p2_alloc)
+            .unwrap();
+        if !cs.is_satisfied() {
+            eprintln!("{:?}", cs.which_is_unsatisfied())
+        }
+        assert!(cs.is_satisfied());
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["14281560"]);
+        expect_eq(cs.num_constraints(), &expect!["14291742"]);
     }
 
     // NOTE: this test currently takes ~22GB of ram and ~50s to run

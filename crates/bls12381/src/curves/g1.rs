@@ -1,4 +1,5 @@
 use bellpepper_core::boolean::{AllocatedBit, Boolean};
+use bellpepper_core::num::Num;
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use bls12_381::G1Affine;
 use bls12_381::{fp::Fp as BlsFp, G1Projective};
@@ -33,7 +34,7 @@ where
 {
     fn from(value: &G1Point<F>) -> Self {
         let x = BlsFp::from(&value.x);
-        let y = BlsFp::from(&value.x);
+        let y = BlsFp::from(&value.y);
         let z = if x.is_zero().into() && y.is_zero().into() {
             BlsFp::zero()
         } else {
@@ -51,6 +52,27 @@ impl<F: PrimeFieldBits> G1Point<F> {
             x: FpElement::zero(),
             y: FpElement::zero(),
         }
+    }
+
+    // TODO: read from the compressed representation
+    pub fn from_limbs<CS>(
+        cs: &mut CS,
+        x_limbs: &[Num<F>],
+        y_limbs: &[Num<F>],
+    ) -> Result<Self, SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        let x = FpElement::from_limbs(&mut cs.namespace(|| "from_limbs x"), x_limbs)?;
+        let y = FpElement::from_limbs(&mut cs.namespace(|| "from_limbs y"), y_limbs)?;
+        let a = BlsFp::from(&x);
+        let b = BlsFp::from(&y);
+
+        Ok(Self { x, y })
+    }
+
+    pub fn get_limbs(&self) -> Result<(Vec<Num<F>>, Vec<Num<F>>), SynthesisError> {
+        Ok((self.x.get_limbs()?, self.y.get_limbs()?))
     }
 
     pub fn alloc_element<CS>(cs: &mut CS, value: &G1Affine) -> Result<Self, SynthesisError>

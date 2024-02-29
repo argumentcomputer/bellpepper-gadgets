@@ -1,12 +1,14 @@
 use bellpepper_core::boolean::{AllocatedBit, Boolean};
+use bellpepper_core::num::Num;
 use bellpepper_core::{ConstraintSystem, SynthesisError};
+use bellpepper_emulated::field_element::EmulatedFieldParams;
 use bls12_381::fp::Fp as BlsFp;
 use bls12_381::fp2::Fp2 as BlsFp2;
 use ff::PrimeFieldBits;
 use num_bigint::BigInt;
 use num_traits::ToBytes;
 
-use super::fp::{fp_from_dec, FpElement};
+use super::fp::{fp_from_dec, Bls12381FpParams, FpElement};
 
 #[derive(Clone)]
 pub struct Fp2Element<F: PrimeFieldBits> {
@@ -92,6 +94,24 @@ impl<F: PrimeFieldBits> Fp2Element<F> {
             a0: FpElement::one(),
             a1: FpElement::one(),
         }
+    }
+
+    pub fn from_limbs<CS>(cs: &mut CS, limbs: &[Num<F>]) -> Result<Self, SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        let n = Bls12381FpParams::num_limbs();
+        assert_eq!(limbs.len(), 2 * n);
+        let a0 = FpElement::from_limbs(&mut cs.namespace(|| "from_limbs a0"), &limbs[..n])?;
+        let a1 = FpElement::from_limbs(&mut cs.namespace(|| "from_limbs a1"), &limbs[n..])?;
+        Ok(Self { a0, a1 })
+    }
+
+    pub fn get_limbs(&self) -> Result<Vec<Num<F>>, SynthesisError> {
+        let mut a0 = self.a0.get_limbs()?;
+        let a1 = self.a1.get_limbs()?;
+        a0.extend(a1.into_iter());
+        Ok(a0)
     }
 
     pub fn alloc_element<CS>(cs: &mut CS, value: &BlsFp2) -> Result<Self, SynthesisError>
@@ -405,7 +425,7 @@ impl<F: PrimeFieldBits> Fp2Element<F> {
     {
         let val = BlsFp2::from(self);
         if val.is_zero().into() {
-            eprintln!("Inverse of zero element cannot be calculated");
+            eprintln!("Inverse of zero element cannot be calculated HERE6");
             return Err(SynthesisError::DivisionByZero);
         }
         let inv = val.invert().unwrap();
@@ -429,12 +449,15 @@ impl<F: PrimeFieldBits> Fp2Element<F> {
         let x = BlsFp2::from(self);
 
         let y = BlsFp2::from(value);
-        if y.is_zero().into() {
-            eprintln!("Inverse of zero element cannot be calculated");
-            return Err(SynthesisError::DivisionByZero);
-        }
-        let y_inv = y.invert().unwrap();
-        let div = y_inv.mul(&x);
+        let div = if y.is_zero().into() {
+            // eprintln!("Inverse of zero element cannot be calculated HERE5");
+            // return Err(SynthesisError::DivisionByZero);
+            BlsFp2::zero()
+        } else {
+            let y_inv = y.invert().unwrap();
+            let div = y_inv.mul(&x);
+            div
+        };
 
         let div_alloc = Self::alloc_element(&mut cs.namespace(|| "alloc div"), &div)?;
 
