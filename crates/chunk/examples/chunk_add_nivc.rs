@@ -6,6 +6,7 @@ use arecibo::traits::snark::default_ck_hint;
 use arecibo::traits::{CurveCycleEquipped, Dual, Engine};
 use bellpepper_chunk::traits::ChunkStepCircuit;
 use bellpepper_chunk::IterationStep;
+use bellpepper_core::boolean::Boolean;
 use bellpepper_core::num::AllocatedNum;
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use ff::{Field, PrimeField};
@@ -46,12 +47,14 @@ impl<F: PrimeField> ChunkStepCircuit<F> for ChunkStep<F> {
         cs: &mut CS,
         _pc: Option<&AllocatedNum<F>>,
         z: &[AllocatedNum<F>],
-        chunk_in: &[AllocatedNum<F>],
+        chunk_in: &[(Boolean, F)],
     ) -> Result<Vec<AllocatedNum<F>>, SynthesisError> {
         let mut acc = z[0].clone();
 
-        for (i, elem) in chunk_in.iter().enumerate() {
-            acc = acc.add(&mut cs.namespace(|| format!("add{i}")), elem)?;
+        for (i, (_, elem)) in chunk_in.iter().enumerate() {
+            let allocated_elem =
+                AllocatedNum::alloc(cs.namespace(|| format!("input_{}", i)), || Ok(*elem))?;
+            acc = acc.add(&mut cs.namespace(|| format!("add{i}")), &allocated_elem)?;
         }
 
         Ok(vec![acc])
@@ -197,13 +200,9 @@ fn main() {
         <E1 as Engine>::Scalar::from(10),
     ];
 
-    let z0_primary = &[
-        &[<E1 as Engine>::Scalar::zero()],
-        &inputs[..NUM_ITERS_PER_STEP],
-    ]
-    .concat();
+    let z0_primary = &[<E1 as Engine>::Scalar::zero()];
 
-    let intermediate_inputs = &inputs[NUM_ITERS_PER_STEP..];
+    let intermediate_inputs = &inputs;
 
     // Different instantiations of circuit for each of the nova fold steps
     let chunk_circuit = C1::new(intermediate_inputs);

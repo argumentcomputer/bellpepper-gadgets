@@ -1,3 +1,4 @@
+use bellpepper_core::boolean::Boolean;
 use bellpepper_core::num::AllocatedNum;
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use ff::PrimeField;
@@ -19,12 +20,12 @@ pub trait ChunkStepCircuit<F: PrimeField>: Clone + Sync + Send + Debug + Partial
     /// * `cs` - The constraint system to which the circuit is being added.
     /// * `pc` - The program counter value for the current step.
     /// * `z` - The accumulator value for the current step.
-    /// * `chunk_in` - The input values for the current step (which are the output values from the previous step).
+    /// * `chunk_in` - A pair representing (input validity, input value) for each input.
     fn synthesize<CS: ConstraintSystem<F>>(
         &self,
         cs: &mut CS,
         pc: Option<&AllocatedNum<F>>,
         z: &[AllocatedNum<F>],
-        chunk_in: &[AllocatedNum<F>],
+        chunk_in: &[(Boolean, F)],
     ) -> Result<Vec<AllocatedNum<F>>, SynthesisError>;
 }

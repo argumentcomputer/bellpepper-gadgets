@@ -7,17 +7,21 @@ use arecibo::traits::{CurveCycleEquipped, Dual, Engine};
 use bellpepper::gadgets::boolean::Boolean;
 use bellpepper::gadgets::multipack::{bytes_to_bits_le, compute_multipacking, pack_bits};
 use bellpepper::gadgets::num::AllocatedNum;
+use bellpepper::gadgets::Assignment;
 use bellpepper_chunk::traits::ChunkStepCircuit;
 use bellpepper_chunk::IterationStep;
+use bellpepper_core::boolean::AllocatedBit;
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use bellpepper_keccak::sha3;
 use bellpepper_merkle_inclusion::traits::GadgetDigest;
 use bellpepper_merkle_inclusion::{conditional_hash, create_gadget_digest_impl, hash_equality};
 use ff::{Field, PrimeField, PrimeFieldBits};
 use halo2curves::bn256::Bn256;
+use itertools::Itertools;
 use sha3::digest::Output;
 use sha3::{Digest, Sha3_256};
 use std::marker::PhantomData;
+use std::ops::Sub;
 use std::time::Instant;
 
 pub type E1 = arecibo::provider::Bn256EngineKZG;
@@ -45,7 +49,7 @@ pub fn hash<D: Digest>(data: &[u8]) -> Output<D> {
 }
 
 // Reconstructs a hash from a list of field elements.
-fn reconstruct_hash<F: PrimeField + PrimeFieldBits, CS: ConstraintSystem<F>>(
+fn reconstruct_hash<F: PrimeFieldBits, CS: ConstraintSystem<F>>(
     cs: &mut CS,
     elements: &[AllocatedNum<F>],
     bit_size: usize,
@@ -81,17 +85,60 @@ fn reconstruct_hash<F: PrimeField + PrimeFieldBits, CS: ConstraintSystem<F>>(
     result
 }
 
+// TODO should live in bellpepper, close to the Boolean struct
+pub fn conditionally_select_bool<F: PrimeField, CS: ConstraintSystem<F>>(
+    mut cs: CS,
+    a: &Boolean,
+    b: &Boolean,
+    condition: &Boolean,
+) -> Result<Boolean, SynthesisError> {
+    let value = if condition.get_value().unwrap_or_default() {
+        a.get_value()
+    } else {
+        b.get_value()
+    };
+
+    let result = Boolean::Is(AllocatedBit::alloc(
+        &mut cs.namespace(|| "conditional select result"),
+        value,
+    )?);
+
+    cs.enforce(
+        || "conditional select constraint",
+        |_| condition.lc(CS::one(), F::ONE),
+        |_| a.lc(CS::one(), F::ONE).sub(&b.lc(CS::one(), F::ONE)),
+        |_| result.lc(CS::one(), F::ONE).sub(&b.lc(CS::one(), F::ONE)),
+    );
+
+    Ok(result)
+}
+
+// TODO should live in bellepper, close to the Boolean struct
+/// If condition return a otherwise b
+pub fn conditionally_select_vec<F: PrimeField, CS: ConstraintSystem<F>>(
+    mut cs: CS,
+    a: &[Boolean],
+    b: &[Boolean],
+    condition: &Boolean,
+) -> Result<Vec<Boolean>, SynthesisError> {
+    a.iter()
+        .zip_eq(b.iter())
+        .enumerate()
+        .map(|(i, (a, b))| {
+            conditionally_select_bool(cs.namespace(|| format!("select_{i}")), a, b, condition)
+        })
+        .collect::<Result<Vec<Boolean>, SynthesisError>>()
+}
+
 /*****************************************
  * Circuit
  *****************************************/
 
-struct MerkleChunkCircuit<F: PrimeField + PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize> {
+struct MerkleChunkCircuit<F: PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize> {
     pub(crate) iteration_steps: Vec<IterationStep<F, C, N>>,
 }
 
-impl<F: PrimeField + PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize>
-    MerkleChunkCircuit<F, C, N>
-{
+impl<F: PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize> MerkleChunkCircuit<F, C, N> {
     fn new(inputs: &[F]) -> Self {
         Self {
             // We expect EqualityCircuit to be called once the last `IterationStep` is done.
@@ -109,12 +156,12 @@ impl<F: PrimeField + PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize>
 }
 
 #[derive(Clone, Debug)]
-enum ChunkCircuitSet<F: PrimeField + PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize> {
+enum ChunkCircuitSet<F: PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize> {
     IterationStep(IterationStepWrapper<F, C, N>),
     CheckEquality(EqualityCircuit<F>),
 }
 
-impl<F: PrimeField + PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize> StepCircuit<F>
+impl<F: PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize> StepCircuit<F>
     for ChunkCircuitSet<F, C, N>
 {
     fn arity(&self) -> usize {
@@ -172,7 +219,7 @@ struct ChunkStep<F: PrimeField> {
     _p: PhantomData<F>,
 }
 
-impl<F: PrimeField + PrimeFieldBits> ChunkStepCircuit<F> for ChunkStep<F> {
+impl<F: PrimeFieldBits> ChunkStepCircuit<F> for ChunkStep<F> {
     fn new() -> Self {
         Self {
             _p: Default::default(),
@@ -195,27 +242,46 @@ impl<F: PrimeField + PrimeFieldBits> ChunkStepCircuit<F> for ChunkStep<F> {
         cs: &mut CS,
         _pc: Option<&AllocatedNum<F>>,
         z: &[AllocatedNum<F>],
-        chunk_in: &[AllocatedNum<F>],
+        chunk_in: &[(Boolean, F)],
     ) -> Result<Vec<AllocatedNum<F>>, SynthesisError> {
-        let boolean = &chunk_in[0]
-            .to_bits_le(&mut cs.namespace(|| "get positional bit"))
-            .unwrap()[0];
+        let positional_bit = Boolean::Is(AllocatedBit::alloc(
+            cs.namespace(|| "alloc boolean"),
+            Some(chunk_in[0].1.to_le_bits()[0]),
+        )?);
 
         let mut acc = reconstruct_hash(&mut cs.namespace(|| "reconstruct acc hash"), &z[0..2], 256);
 
         // The inputs we handle for one inner iterations are multiple of 3.
         for chunk in chunk_in.chunks(3) {
+            let allocated_siblings = chunk[1..3]
+                .iter()
+                .enumerate()
+                .map(|(i, (_, e))| {
+                    AllocatedNum::alloc(cs.namespace(|| format!("alloc chunk input {}", i)), || {
+                        Ok(*e)
+                    })
+                    .unwrap()
+                })
+                .collect::<Vec<AllocatedNum<F>>>();
+
             let sibling = reconstruct_hash(
                 &mut cs.namespace(|| "reconstruct_sibling_hash"),
-                &chunk[1..3],
+                &allocated_siblings,
                 256,
             );
 
-            acc = conditional_hash::<_, _, Sha3>(
+            let next_acc = conditional_hash::<_, _, Sha3>(
                 &mut cs.namespace(|| "conditional_hash"),
                 &acc,
                 &sibling,
-                boolean,
+                &positional_bit,
+            )?;
+
+            acc = conditionally_select_vec(
+                cs.namespace(|| "conditional_select"),
+                &next_acc,
+                &acc,
+                &chunk[0].0,
             )?;
         }
 
@@ -264,11 +330,11 @@ impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> StepCircuit<F>
 }
 
 #[derive(Clone, Debug)]
-struct EqualityCircuit<F: PrimeField + PrimeFieldBits> {
+struct EqualityCircuit<F: PrimeFieldBits> {
     _p: PhantomData<F>,
 }
 
-impl<F: PrimeField + PrimeFieldBits> EqualityCircuit<F> {
+impl<F: PrimeFieldBits> EqualityCircuit<F> {
     pub fn new() -> Self {
         Self {
             _p: Default::default(),
@@ -276,9 +342,9 @@ impl<F: PrimeField + PrimeFieldBits> EqualityCircuit<F> {
     }
 }
 
-impl<F: PrimeField + PrimeFieldBits> StepCircuit<F> for EqualityCircuit<F> {
+impl<F: PrimeFieldBits> StepCircuit<F> for EqualityCircuit<F> {
     fn arity(&self) -> usize {
-        7
+        4
     }
 
     fn circuit_index(&self) -> usize {
@@ -308,14 +374,11 @@ impl<F: PrimeField + PrimeFieldBits> StepCircuit<F> for EqualityCircuit<F> {
             confirmed_hash_f_2,
             z[2].clone(),
             z[3].clone(),
-            z[4].clone(),
-            z[5].clone(),
-            z[6].clone(),
         ];
 
         Ok((
             Some(AllocatedNum::alloc(
-                &mut cs.namespace(|| "no next circut"),
+                &mut cs.namespace(|| "no next circuit"),
                 || Ok(F::ZERO),
             )?),
             z_out,
@@ -349,34 +412,35 @@ fn main() {
     let abcd_leaf_hash = hash::<<Sha3 as GadgetDigest<<E1 as Engine>::Scalar>>::OutOfCircuitHasher>(
         &[ab_leaf_hash, cd_leaf_hash].concat(),
     );
+    let test = hash::<<Sha3 as GadgetDigest<<E1 as Engine>::Scalar>>::OutOfCircuitHasher>(
+        &[abcd_leaf_hash, abcd_leaf_hash].concat(),
+    );
 
     // Intermediate hashes
-    let intermediate_hashes: Vec<<E1 as Engine>::Scalar> = [a_leaf_hash, cd_leaf_hash]
-        .iter()
-        .flat_map(|h| compute_multipacking::<<E1 as Engine>::Scalar>(&bytes_to_bits_le(h)))
-        .collect();
+    let intermediate_hashes: Vec<<E1 as Engine>::Scalar> =
+        [a_leaf_hash, cd_leaf_hash, abcd_leaf_hash]
+            .iter()
+            .flat_map(|h| compute_multipacking::<<E1 as Engine>::Scalar>(&bytes_to_bits_le(h)))
+            .collect();
     let mut intermediate_key_hashes = vec![<E1 as Engine>::Scalar::ONE];
     intermediate_key_hashes.append(&mut intermediate_hashes[0..2].to_vec());
     intermediate_key_hashes.push(<E1 as Engine>::Scalar::ZERO);
     intermediate_key_hashes.append(&mut intermediate_hashes[2..4].to_vec());
+    intermediate_key_hashes.push(<E1 as Engine>::Scalar::ZERO);
+    intermediate_key_hashes.append(&mut intermediate_hashes[4..6].to_vec());
 
     //  Primary circuit
-    type C1 = MerkleChunkCircuit<
-        <E1 as Engine>::Scalar,
-        ChunkStep<<E1 as Engine>::Scalar>,
-        NBR_CHUNK_INPUT,
-    >;
-    let chunk_circuit = C1::new(&intermediate_key_hashes[NBR_CHUNK_INPUT..]);
+    type C1 = MerkleChunkCircuit<<E1 as Engine>::Scalar, ChunkStep<<E1 as Engine>::Scalar>, 6>;
+
+    let chunk_circuit = C1::new(&intermediate_key_hashes);
 
     // Multipacking the leaf and root hashes
     let mut z0_primary =
         compute_multipacking::<<E1 as Engine>::Scalar>(&bytes_to_bits_le(&b_leaf_hash));
-    let root_fields =
-        compute_multipacking::<<E1 as Engine>::Scalar>(&bytes_to_bits_le(&abcd_leaf_hash));
-
-    // The accumulator elements are initialized to 0
-    z0_primary.append(&mut root_fields.clone());
-    z0_primary.append(&mut intermediate_key_hashes[..NBR_CHUNK_INPUT].to_vec());
+    // Expected root hash.
+    z0_primary.append(&mut compute_multipacking::<<E1 as Engine>::Scalar>(
+        &bytes_to_bits_le(&test),
+    ));
 
     let circuit_primary = <C1 as NonUniformCircuit<E1>>::primary_circuit(&chunk_circuit, 0);
 
@@ -401,8 +465,8 @@ fn main() {
     .unwrap();
 
     // We expect nbr_inputs/chunk_value + 1 (post processning circuit) iterations.
-    for step in 0..intermediate_key_hashes.len() / NBR_CHUNK_INPUT + 1 {
-        let circuit_primary = if step == intermediate_key_hashes.len() / NBR_CHUNK_INPUT {
+    for step in 0..intermediate_key_hashes.len().div_ceil(6) + 1 {
+        let circuit_primary = if step == intermediate_key_hashes.len().div_ceil(6) {
             // Check equality
             <C1 as NonUniformCircuit<E1>>::primary_circuit(&chunk_circuit, 1)
         } else {
@@ -418,6 +482,10 @@ fn main() {
             res.is_ok(),
             start.elapsed()
         );
+
+        let res = recursive_snark.verify(&pp, &z0_primary, &z0_secondary);
+
+        assert!(res.is_ok());
     }
 
     println!("Generating a CompressedSNARK...");
