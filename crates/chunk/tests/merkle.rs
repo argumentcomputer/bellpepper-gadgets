@@ -461,16 +461,16 @@ fn test_merkle_implementation() {
 
     let (_, z1) = chunk_circuit
         .get_iteration_circuit(0)
-        .synthesize(&mut cs.namespace(|| format!("step 0")), None, &z0_primary)
+        .synthesize(&mut cs.namespace(|| "step 0"), None, &z0_primary)
         .unwrap();
     assert!(cs.is_satisfied());
     let (_, z2) = chunk_circuit
         .get_iteration_circuit(1)
-        .synthesize(&mut cs.namespace(|| format!("step 1")), None, &z1)
+        .synthesize(&mut cs.namespace(|| "step 1"), None, &z1)
         .unwrap();
     assert!(cs.is_satisfied());
     let (_, _) = <C1 as NonUniformCircuit<E1>>::primary_circuit(&chunk_circuit, 1)
-        .synthesize(&mut cs.namespace(|| format!("step 2")), None, &z2)
+        .synthesize(&mut cs.namespace(|| "step 2"), None, &z2)
         .unwrap();
     assert!(cs.is_satisfied());
 }

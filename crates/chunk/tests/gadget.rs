@@ -44,7 +44,7 @@ impl<F: PrimeField> ChunkStepCircuit<F> for ChunkStep<F> {
 fn verify_chunk_circuit<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize>() {
     let test_inputs = vec![F::ONE; 18];
 
-    let expected = (test_inputs.len() / N) + if test_inputs.len() % N != 0 { 2 } else { 1 };
+    let expected = test_inputs.len().div_ceil(N);
 
     let circuits = IterationStep::<F, C, N>::from_inputs(0, &test_inputs, F::ONE).unwrap();
 
@@ -64,9 +64,17 @@ fn verify_chunk_circuit<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize>()
         }
     }
 
+    let (next_pc, input_nbr) = if N > test_inputs.len() {
+        // if chunk size > input length then next pc is already ONE and number of valid input is the first (and only) iteration
+        // is the input length
+        (F::ONE, 18)
+    } else {
+        (F::ZERO, N)
+    };
+
     let actual_first = &circuits[0];
     let expected_first =
-        IterationStep::<F, C, N>::new(0, C::new(), expected_first_chunk, N, 0, F::ZERO);
+        IterationStep::<F, C, N>::new(0, C::new(), expected_first_chunk, input_nbr, 0, next_pc);
 
     assert_eq!(
         actual_first, &expected_first,
