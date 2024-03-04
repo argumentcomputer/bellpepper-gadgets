@@ -1,8 +1,4 @@
-use arecibo::supernova::snark::CompressedSNARK;
-use arecibo::supernova::{
-    NonUniformCircuit, PublicParams, RecursiveSNARK, StepCircuit, TrivialSecondaryCircuit,
-};
-use arecibo::traits::snark::default_ck_hint;
+use arecibo::supernova::{NonUniformCircuit, StepCircuit, TrivialSecondaryCircuit};
 use arecibo::traits::{CurveCycleEquipped, Dual, Engine};
 use bellpepper::gadgets::boolean::Boolean;
 use bellpepper::gadgets::multipack::{bytes_to_bits_le, compute_multipacking, pack_bits};
@@ -10,6 +6,7 @@ use bellpepper::gadgets::num::AllocatedNum;
 use bellpepper_chunk::traits::ChunkStepCircuit;
 use bellpepper_chunk::IterationStep;
 use bellpepper_core::boolean::AllocatedBit;
+use bellpepper_core::test_cs::TestConstraintSystem;
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use bellpepper_keccak::sha3;
 use bellpepper_merkle_inclusion::traits::GadgetDigest;
@@ -21,7 +18,6 @@ use sha3::digest::Output;
 use sha3::{Digest, Sha3_256};
 use std::marker::PhantomData;
 use std::ops::Sub;
-use std::time::Instant;
 
 pub type E1 = arecibo::provider::Bn256EngineKZG;
 pub type E2 = arecibo::provider::GrumpkinEngine;
@@ -389,12 +385,12 @@ impl<F: PrimeFieldBits> StepCircuit<F> for EqualityCircuit<F> {
     }
 }
 
-const NBR_CHUNK_INPUT: usize = 3;
+const NBR_CHUNK_INPUT: usize = 6;
 
-fn main() {
-    // produce public parameters
-    let start = Instant::now();
-
+/// This test is meant to test the implementation of the merkle inclusion proof using the chunk pattern. It also test
+/// out the correct behavior of the chunk pattern when a specified chunk size is not a multiple of the input size.
+#[test]
+fn test_merkle_implementation() {
     // Leaf and root hashes
     let a_leaf_hash =
         hash::<<Sha3 as GadgetDigest<<E1 as Engine>::Scalar>>::OutOfCircuitHasher>("a".as_bytes());
@@ -416,15 +412,25 @@ fn main() {
         &[ab_leaf_hash, cd_leaf_hash].concat(),
     );
 
+    let last_intermediate_hash = hash::<
+        <Sha3 as GadgetDigest<<E1 as Engine>::Scalar>>::OutOfCircuitHasher,
+    >("another".as_bytes());
+    let root_hash = hash::<<Sha3 as GadgetDigest<<E1 as Engine>::Scalar>>::OutOfCircuitHasher>(
+        &[abcd_leaf_hash, last_intermediate_hash].concat(),
+    );
+
     // Intermediate hashes
-    let intermediate_hashes: Vec<<E1 as Engine>::Scalar> = [a_leaf_hash, cd_leaf_hash]
-        .iter()
-        .flat_map(|h| compute_multipacking::<<E1 as Engine>::Scalar>(&bytes_to_bits_le(h)))
-        .collect();
+    let intermediate_hashes: Vec<<E1 as Engine>::Scalar> =
+        [a_leaf_hash, cd_leaf_hash, last_intermediate_hash]
+            .iter()
+            .flat_map(|h| compute_multipacking::<<E1 as Engine>::Scalar>(&bytes_to_bits_le(h)))
+            .collect();
     let mut intermediate_key_hashes = vec![<E1 as Engine>::Scalar::ONE];
     intermediate_key_hashes.append(&mut intermediate_hashes[0..2].to_vec());
     intermediate_key_hashes.push(<E1 as Engine>::Scalar::ZERO);
     intermediate_key_hashes.append(&mut intermediate_hashes[2..4].to_vec());
+    intermediate_key_hashes.push(<E1 as Engine>::Scalar::ZERO);
+    intermediate_key_hashes.append(&mut intermediate_hashes[4..6].to_vec());
 
     //  Primary circuit
     type C1 = MerkleChunkCircuit<
@@ -440,73 +446,31 @@ fn main() {
         compute_multipacking::<<E1 as Engine>::Scalar>(&bytes_to_bits_le(&b_leaf_hash));
     // Expected root hash.
     z0_primary.append(&mut compute_multipacking::<<E1 as Engine>::Scalar>(
-        &bytes_to_bits_le(&abcd_leaf_hash),
+        &bytes_to_bits_le(&root_hash),
     ));
 
-    let circuit_primary = <C1 as NonUniformCircuit<E1>>::primary_circuit(&chunk_circuit, 0);
+    let mut cs = TestConstraintSystem::<<E1 as Engine>::Scalar>::new();
 
-    // Secondary circuit
-    let circuit_secondary = <C1 as NonUniformCircuit<E1>>::secondary_circuit(&chunk_circuit);
-    let z0_secondary = vec![<Dual<E1> as Engine>::Scalar::ZERO];
+    let z0_primary = z0_primary
+        .iter()
+        .enumerate()
+        .map(|(i, e)| {
+            AllocatedNum::alloc(&mut cs.namespace(|| format!("alloc z0 {i}")), || Ok(*e)).unwrap()
+        })
+        .collect::<Vec<_>>();
 
-    println!("Producing public parameters...");
-    // produce public parameters
-    let pp = PublicParams::<E1>::setup(&chunk_circuit, &*default_ck_hint(), &*default_ck_hint());
-    println!("PublicParams::setup, took {:?} ", start.elapsed());
-
-    println!("Generating a RecursiveSNARK...");
-    let mut recursive_snark = RecursiveSNARK::<E1>::new(
-        &pp,
-        &chunk_circuit,
-        &circuit_primary,
-        &circuit_secondary,
-        &z0_primary,
-        &z0_secondary,
-    )
-    .unwrap();
-
-    // We expect nbr_inputs/chunk_value + 1 (post processning circuit) iterations.
-    for step in 0..intermediate_key_hashes.len().div_ceil(NBR_CHUNK_INPUT) + 1 {
-        let circuit_primary = if step == intermediate_key_hashes.len().div_ceil(NBR_CHUNK_INPUT) {
-            // Check equality
-            <C1 as NonUniformCircuit<E1>>::primary_circuit(&chunk_circuit, 1)
-        } else {
-            // Iteration step
-            chunk_circuit.get_iteration_circuit(step)
-        };
-
-        let res = recursive_snark.prove_step(&pp, &circuit_primary, &circuit_secondary);
-        assert!(res.is_ok());
-        println!(
-            "RecursiveSNARK::prove_step {}: {:?}, took {:?} ",
-            step,
-            res.is_ok(),
-            start.elapsed()
-        );
-    }
-
-    println!("Generating a CompressedSNARK...");
-    let (prover_key, verifier_key) = CompressedSNARK::<_, S1, S2>::setup(&pp).unwrap();
-
-    let start = Instant::now();
-    let res = CompressedSNARK::<_, S1, S2>::prove(&pp, &prover_key, &recursive_snark);
-    println!(
-        "CompressedSNARK::prove: {:?}, took {:?}",
-        res.is_ok(),
-        start.elapsed()
-    );
-    assert!(res.is_ok());
-    let compressed_snark = res.unwrap();
-
-    // verify the compressed SNARK
-    println!("Verifying a CompressedSNARK...");
-    let start = Instant::now();
-    let res = compressed_snark.verify(&pp, &verifier_key, &z0_primary, &z0_secondary);
-    println!(
-        "CompressedSNARK::verify: {:?}, took {:?}",
-        res.is_ok(),
-        start.elapsed()
-    );
-    assert!(res.is_ok());
-    println!("=========================================================");
+    let (_, z1) = chunk_circuit
+        .get_iteration_circuit(0)
+        .synthesize(&mut cs.namespace(|| format!("step 0")), None, &z0_primary)
+        .unwrap();
+    assert!(cs.is_satisfied());
+    let (_, z2) = chunk_circuit
+        .get_iteration_circuit(1)
+        .synthesize(&mut cs.namespace(|| format!("step 1")), None, &z1)
+        .unwrap();
+    assert!(cs.is_satisfied());
+    let (_, _) = <C1 as NonUniformCircuit<E1>>::primary_circuit(&chunk_circuit, 1)
+        .synthesize(&mut cs.namespace(|| format!("step 2")), None, &z2)
+        .unwrap();
+    assert!(cs.is_satisfied());
 }

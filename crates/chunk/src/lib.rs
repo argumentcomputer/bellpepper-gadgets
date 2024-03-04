@@ -67,7 +67,9 @@ impl<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> IterationSte
             .map(|(i, input)| {
                 let valid = Boolean::Is(
                     AllocatedBit::alloc(
-                        cs.namespace(|| format!("valid_input_{}", i)),
+                        cs.namespace(|| {
+                            format!("iteration step {} valid_input_{i}", self.step_nbr)
+                        }),
                         Some(i < self.input_nbr),
                     )
                     .unwrap(),
@@ -77,7 +79,7 @@ impl<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> IterationSte
             .collect::<Vec<_>>();
 
         let z_out = self.circuit.synthesize(
-            &mut cs.namespace(|| format!("chunk_folding_step_{}", self.step_nbr)),
+            &mut cs.namespace(|| format!("chunk_iterating_step_{}", self.step_nbr)),
             pc,
             z,
             // Only keep inputs that were part of the original input set
@@ -85,10 +87,10 @@ impl<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> IterationSte
         )?;
 
         // Next program
-        let next_pc =
-            AllocatedNum::alloc_infallible(cs.namespace(|| "next_program_counter"), || {
-                self.next_pc
-            });
+        let next_pc = AllocatedNum::alloc_infallible(
+            cs.namespace(|| format!("next_program_counter iteration step {}", self.input_nbr)),
+            || self.next_pc,
+        );
 
         Ok((Some(next_pc), z_out))
     }
