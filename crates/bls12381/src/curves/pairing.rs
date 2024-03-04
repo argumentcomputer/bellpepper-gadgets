@@ -7,7 +7,7 @@ use bellpepper_core::{
 use ff::PrimeFieldBits;
 use num_bigint::BigInt;
 
-use crate::fields::{fp12::Fp12Element, fp2::Fp2Element, fp6::Fp6Element, torus::Torus};
+use crate::fields::{fp::FpElement, fp12::Fp12Element, fp2::Fp2Element, fp6::Fp6Element, torus::Torus};
 
 use super::{g1::G1Point, g2::G2Point};
 
@@ -289,7 +289,21 @@ impl<F: PrimeFieldBits> EmulatedBls12381Pairing<F> {
         g1: impl AsRef<[G1Point<F>]>,
         g2_lines: impl AsRef<[LineEvals<F>]>,
     ) -> Result<Fp12Element<F>, SynthesisError> {
-        let cs = &mut cs.namespace(|| "miller_loop_lines(p, l)");
+        let (res, y_inv, x_neg_over_y) = Self::miller_loop_lines_pt1(cs, g1, &g2_lines)?;
+        let (mut res, mut idx) = Self::miller_loop_lines_pt2(cs, res, 61, 16, &g2_lines, &y_inv, &x_neg_over_y)?;
+        while idx > 0 {
+            (res, idx) = Self::miller_loop_lines_pt2(cs, res, idx-1, 16, &g2_lines, &y_inv, &x_neg_over_y)?;
+        }
+
+        Ok(res)
+    }
+
+    fn miller_loop_lines_pt1<CS: ConstraintSystem<F>>(
+        cs: &mut CS,
+        g1: impl AsRef<[G1Point<F>]>,
+        g2_lines: impl AsRef<[LineEvals<F>]>,
+    ) -> Result<(Fp12Element<F>, Vec<FpElement<F>>, Vec<FpElement<F>>), SynthesisError> {
+        let cs = &mut cs.namespace(|| "miller_loop pt1");
         let (p, lines) = (g1.as_ref(), g2_lines.as_ref());
         assert!(
             !p.is_empty() && p.len() == lines.len(),
@@ -387,7 +401,28 @@ impl<F: PrimeFieldBits> EmulatedBls12381Pairing<F> {
             )?;
         }
 
-        for i in (0..=61).rev() {
+        Ok((res, y_inv, x_neg_over_y))
+    }
+
+    fn miller_loop_lines_pt2<CS: ConstraintSystem<F>>(
+        cs: &mut CS,
+        acc: Fp12Element<F>,
+        next_idx: usize,
+        num_iters: usize,
+        g2_lines: impl AsRef<[LineEvals<F>]>,
+        y_inv: impl AsRef<[FpElement<F>]>,
+        x_neg_over_y: impl AsRef<[FpElement<F>]>,
+    ) -> Result<(Fp12Element<F>, usize), SynthesisError> {
+        let cs = &mut cs.namespace(|| format!("miller_loop pt2 {next_idx}"));
+        let (lines, y_inv, x_neg_over_y) = (g2_lines.as_ref(), y_inv.as_ref(), x_neg_over_y.as_ref());
+        let mut res = acc;
+        let n = y_inv.len();
+        assert_eq!(x_neg_over_y.len(), n);
+
+        let final_idx = next_idx.saturating_sub(num_iters);
+
+        // for i in (0..=61).rev() {
+        for i in (final_idx..=next_idx).rev() {
             // mutualize the square among n Miller loops
             // (∏ᵢfᵢ)²
             res = res.square(&mut cs.namespace(|| format!("res <- res.square() ({i})")))?;
@@ -425,10 +460,12 @@ impl<F: PrimeFieldBits> EmulatedBls12381Pairing<F> {
             }
         }
 
-        // negative x₀
-        res = res.conjugate(&mut cs.namespace(|| "res <- res.conjugate()"))?;
+        if final_idx == 0 {
+            // negative x₀
+            res = res.conjugate(&mut cs.namespace(|| "res <- res.conjugate()"))?;
+        }
 
-        Ok(res)
+        Ok((res, final_idx))
     }
 }
 
