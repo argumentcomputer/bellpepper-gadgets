@@ -4,8 +4,10 @@ use bellpepper_core::{ConstraintSystem, SynthesisError};
 use ff::PrimeField;
 use std::fmt::Debug;
 
-/// `ChunkStepCircuit` is the trait used to interface with one step in a loop of a `ChunkCircuit`.
-pub trait ChunkStepCircuit<F: PrimeField>: Clone + Sync + Send + Debug + PartialEq + Eq {
+/// `InnerIterationStepCircuit` is the trait used to interface with one step in a loop of `IterationStep`s.
+pub trait InnerIterationStepCircuit<F: PrimeField>:
+    Clone + Sync + Send + Debug + PartialEq + Eq
+{
     /// `new` should return a new instance of the step circuit.
     fn new() -> Self;
 

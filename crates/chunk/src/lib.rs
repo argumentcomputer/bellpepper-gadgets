@@ -1,18 +1,16 @@
-use crate::error::ChunkError;
-use crate::traits::ChunkStepCircuit;
+use crate::traits::InnerIterationStepCircuit;
 use bellpepper_core::boolean::{AllocatedBit, Boolean};
 use bellpepper_core::num::AllocatedNum;
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use ff::PrimeField;
 use getset::Getters;
 
-pub mod error;
 pub mod traits;
 
 /// `IterationStep` is the wrapper struct for a `ChunkStepCircuit` implemented by a user.
 #[derive(Eq, PartialEq, Debug, Getters)]
 #[getset(get = "pub")]
-pub struct IterationStep<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> {
+pub struct IterationStep<F: PrimeField, C: InnerIterationStepCircuit<F> + Clone, const N: usize> {
     /// The circuit index in the higher order `NonUniformCircuit`.
     circuit_index: usize,
     /// The `ChunkStepCircuit` instance to be used in the `IterationStep`.
@@ -27,7 +25,9 @@ pub struct IterationStep<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N:
     next_pc: F,
 }
 
-impl<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> IterationStep<F, C, N> {
+impl<F: PrimeField, C: InnerIterationStepCircuit<F> + Clone, const N: usize>
+    IterationStep<F, C, N>
+{
     pub fn arity(&self) -> usize {
         C::arity()
     }
@@ -51,8 +51,7 @@ impl<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> IterationSte
 
     /// This `synthesize` implementation consists of two parts:
     /// 1. Call the inner synthesize method of `ChunkStepCircuit` with correct inputs.
-    /// 2. Calculate the next program and allocate the next input values for the next `IterationStep` instance.
-    // Inherited from `StepCircuit`
+    /// 2. Calculate the next program and return it along with the inner result.
     #[allow(clippy::type_complexity)]
     pub fn synthesize<CS: ConstraintSystem<F>>(
         &self,
@@ -82,7 +81,6 @@ impl<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> IterationSte
             &mut cs.namespace(|| format!("chunk_iterating_step_{}", self.step_nbr)),
             pc,
             z,
-            // Only keep inputs that were part of the original input set
             &valid_inputs,
         )?;
 
@@ -99,7 +97,7 @@ impl<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> IterationSte
         circuit_index: usize,
         intermediate_steps_input: &[F],
         pc_post_iter: F,
-    ) -> anyhow::Result<Vec<Self>> {
+    ) -> Vec<Self> {
         // We generate the `IterationStep` instances that are part of the circuit.
         let circuits = intermediate_steps_input
             .chunks(N)
@@ -119,22 +117,24 @@ impl<F: PrimeField, C: ChunkStepCircuit<F> + Clone, const N: usize> IterationSte
                     F::from(circuit_index as u64)
                 };
 
-                Ok(Self::new(
+                Self::new(
                     circuit_index,
                     C::new(),
                     inputs,
                     chunk.len(),
                     i,
                     next_circuit,
-                ))
+                )
             })
-            .collect::<anyhow::Result<Vec<_>, ChunkError>>()?;
+            .collect::<Vec<_>>();
 
-        Ok(circuits)
+        circuits
     }
 }
 
-impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> Clone for IterationStep<F, C, N> {
+impl<F: PrimeField, C: InnerIterationStepCircuit<F>, const N: usize> Clone
+    for IterationStep<F, C, N>
+{
     fn clone(&self) -> Self {
         Self {
             circuit_index: self.circuit_index,

@@ -3,7 +3,7 @@ use arecibo::traits::{CurveCycleEquipped, Dual, Engine};
 use bellpepper::gadgets::boolean::Boolean;
 use bellpepper::gadgets::multipack::{bytes_to_bits_le, compute_multipacking, pack_bits};
 use bellpepper::gadgets::num::AllocatedNum;
-use bellpepper_chunk::traits::ChunkStepCircuit;
+use bellpepper_chunk::traits::InnerIterationStepCircuit;
 use bellpepper_chunk::IterationStep;
 use bellpepper_core::boolean::AllocatedBit;
 use bellpepper_core::test_cs::TestConstraintSystem;
@@ -129,15 +129,17 @@ pub fn conditionally_select_vec<F: PrimeField, CS: ConstraintSystem<F>>(
  * Circuit
  *****************************************/
 
-struct MerkleChunkCircuit<F: PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize> {
+struct MerkleChunkCircuit<F: PrimeFieldBits, C: InnerIterationStepCircuit<F>, const N: usize> {
     pub(crate) iteration_steps: Vec<IterationStep<F, C, N>>,
 }
 
-impl<F: PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize> MerkleChunkCircuit<F, C, N> {
+impl<F: PrimeFieldBits, C: InnerIterationStepCircuit<F>, const N: usize>
+    MerkleChunkCircuit<F, C, N>
+{
     fn new(inputs: &[F]) -> Self {
         Self {
             // We expect EqualityCircuit to be called once the last `IterationStep` is done.
-            iteration_steps: IterationStep::from_inputs(0, inputs, F::ONE).unwrap(),
+            iteration_steps: IterationStep::from_inputs(0, inputs, F::ONE),
         }
     }
 
@@ -151,12 +153,12 @@ impl<F: PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize> MerkleChunkCircu
 }
 
 #[derive(Clone, Debug)]
-enum ChunkCircuitSet<F: PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize> {
+enum ChunkCircuitSet<F: PrimeFieldBits, C: InnerIterationStepCircuit<F>, const N: usize> {
     IterationStep(IterationStepWrapper<F, C, N>),
     CheckEquality(EqualityCircuit<F>),
 }
 
-impl<F: PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize> StepCircuit<F>
+impl<F: PrimeFieldBits, C: InnerIterationStepCircuit<F>, const N: usize> StepCircuit<F>
     for ChunkCircuitSet<F, C, N>
 {
     fn arity(&self) -> usize {
@@ -186,8 +188,8 @@ impl<F: PrimeFieldBits, C: ChunkStepCircuit<F>, const N: usize> StepCircuit<F>
     }
 }
 
-impl<E1: CurveCycleEquipped, C: ChunkStepCircuit<E1::Scalar>, const N: usize> NonUniformCircuit<E1>
-    for MerkleChunkCircuit<E1::Scalar, C, N>
+impl<E1: CurveCycleEquipped, C: InnerIterationStepCircuit<E1::Scalar>, const N: usize>
+    NonUniformCircuit<E1> for MerkleChunkCircuit<E1::Scalar, C, N>
 {
     type C1 = ChunkCircuitSet<E1::Scalar, C, N>;
     type C2 = TrivialSecondaryCircuit<<Dual<E1> as Engine>::Scalar>;
@@ -214,7 +216,7 @@ struct ChunkStep<F: PrimeField> {
     _p: PhantomData<F>,
 }
 
-impl<F: PrimeFieldBits> ChunkStepCircuit<F> for ChunkStep<F> {
+impl<F: PrimeFieldBits> InnerIterationStepCircuit<F> for ChunkStep<F> {
     fn new() -> Self {
         Self {
             _p: Default::default(),
@@ -290,11 +292,11 @@ impl<F: PrimeFieldBits> ChunkStepCircuit<F> for ChunkStep<F> {
 }
 
 #[derive(Clone, Debug)]
-struct IterationStepWrapper<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
+struct IterationStepWrapper<F: PrimeField, C: InnerIterationStepCircuit<F>, const N: usize> {
     inner: IterationStep<F, C, N>,
 }
 
-impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> IterationStepWrapper<F, C, N> {
+impl<F: PrimeField, C: InnerIterationStepCircuit<F>, const N: usize> IterationStepWrapper<F, C, N> {
     pub fn new(iteration_step: IterationStep<F, C, N>) -> Self {
         Self {
             inner: iteration_step,
@@ -302,7 +304,7 @@ impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> IterationStepWrapper
     }
 }
 
-impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> StepCircuit<F>
+impl<F: PrimeField, C: InnerIterationStepCircuit<F>, const N: usize> StepCircuit<F>
     for IterationStepWrapper<F, C, N>
 {
     fn arity(&self) -> usize {

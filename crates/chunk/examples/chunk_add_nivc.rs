@@ -4,7 +4,7 @@ use arecibo::supernova::{
 };
 use arecibo::traits::snark::default_ck_hint;
 use arecibo::traits::{CurveCycleEquipped, Dual, Engine};
-use bellpepper_chunk::traits::ChunkStepCircuit;
+use bellpepper_chunk::traits::InnerIterationStepCircuit;
 use bellpepper_chunk::IterationStep;
 use bellpepper_core::boolean::Boolean;
 use bellpepper_core::num::AllocatedNum;
@@ -35,7 +35,7 @@ struct ChunkStep<F: PrimeField> {
     _p: PhantomData<F>,
 }
 
-impl<F: PrimeField> ChunkStepCircuit<F> for ChunkStep<F> {
+impl<F: PrimeField> InnerIterationStepCircuit<F> for ChunkStep<F> {
     fn new() -> Self {
         Self {
             _p: Default::default(),
@@ -63,11 +63,11 @@ impl<F: PrimeField> ChunkStepCircuit<F> for ChunkStep<F> {
 
 // NIVC `StepCircuit`` implementation
 #[derive(Clone, Debug)]
-struct IterationStepWrapper<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
+struct IterationStepWrapper<F: PrimeField, C: InnerIterationStepCircuit<F>, const N: usize> {
     inner: IterationStep<F, C, N>,
 }
 
-impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> IterationStepWrapper<F, C, N> {
+impl<F: PrimeField, C: InnerIterationStepCircuit<F>, const N: usize> IterationStepWrapper<F, C, N> {
     pub fn new(iteration_step: IterationStep<F, C, N>) -> Self {
         Self {
             inner: iteration_step,
@@ -75,7 +75,7 @@ impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> IterationStepWrapper
     }
 }
 
-impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> StepCircuit<F>
+impl<F: PrimeField, C: InnerIterationStepCircuit<F>, const N: usize> StepCircuit<F>
     for IterationStepWrapper<F, C, N>
 {
     fn arity(&self) -> usize {
@@ -101,14 +101,14 @@ impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> StepCircuit<F>
 }
 
 // NIVC `NonUniformCircuit` implementation
-struct ChunkCircuit<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
+struct ChunkCircuit<F: PrimeField, C: InnerIterationStepCircuit<F>, const N: usize> {
     iteration_steps: Vec<IterationStep<F, C, N>>,
 }
 
-impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> ChunkCircuit<F, C, N> {
+impl<F: PrimeField, C: InnerIterationStepCircuit<F>, const N: usize> ChunkCircuit<F, C, N> {
     pub fn new(inputs: &[F]) -> Self {
         Self {
-            iteration_steps: IterationStep::from_inputs(0, inputs, F::ZERO).unwrap(),
+            iteration_steps: IterationStep::from_inputs(0, inputs, F::ZERO),
         }
     }
 
@@ -122,11 +122,11 @@ impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> ChunkCircuit<F, C, N
 }
 
 #[derive(Clone, Debug)]
-enum ChunkCircuitSet<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
+enum ChunkCircuitSet<F: PrimeField, C: InnerIterationStepCircuit<F>, const N: usize> {
     IterationStep(IterationStepWrapper<F, C, N>),
 }
 
-impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> StepCircuit<F>
+impl<F: PrimeField, C: InnerIterationStepCircuit<F>, const N: usize> StepCircuit<F>
     for ChunkCircuitSet<F, C, N>
 {
     fn arity(&self) -> usize {
@@ -153,8 +153,8 @@ impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> StepCircuit<F>
     }
 }
 
-impl<E1: CurveCycleEquipped, C: ChunkStepCircuit<E1::Scalar>, const N: usize> NonUniformCircuit<E1>
-    for ChunkCircuit<E1::Scalar, C, N>
+impl<E1: CurveCycleEquipped, C: InnerIterationStepCircuit<E1::Scalar>, const N: usize>
+    NonUniformCircuit<E1> for ChunkCircuit<E1::Scalar, C, N>
 {
     type C1 = ChunkCircuitSet<E1::Scalar, C, N>;
     type C2 = TrivialSecondaryCircuit<<Dual<E1> as Engine>::Scalar>;

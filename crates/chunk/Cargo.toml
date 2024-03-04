@@ -12,11 +12,9 @@ repository.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.40"
 bellpepper = { workspace = true }
 bellpepper-core = { workspace = true, default-features = false}
 ff = { workspace = true }
-thiserror = "1.0.57"
 getset = "0.1.2"
 
 [dev-dependencies]

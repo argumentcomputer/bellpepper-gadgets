@@ -1,6 +1,6 @@
 use arecibo::provider::Bn256EngineKZG;
 use arecibo::traits::Engine;
-use bellpepper_chunk::traits::ChunkStepCircuit;
+use bellpepper_chunk::traits::InnerIterationStepCircuit;
 use bellpepper_chunk::IterationStep;
 use bellpepper_core::boolean::Boolean;
 use bellpepper_core::num::AllocatedNum;
@@ -15,7 +15,7 @@ struct ChunkStep<F: PrimeField> {
     _p: PhantomData<F>,
 }
 
-impl<F: PrimeField> ChunkStepCircuit<F> for ChunkStep<F> {
+impl<F: PrimeField> InnerIterationStepCircuit<F> for ChunkStep<F> {
     fn new() -> Self {
         Self {
             _p: Default::default(),
@@ -41,12 +41,12 @@ impl<F: PrimeField> ChunkStepCircuit<F> for ChunkStep<F> {
     }
 }
 
-fn verify_chunk_circuit<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize>() {
+fn verify_chunk_circuit<F: PrimeField, C: InnerIterationStepCircuit<F>, const N: usize>() {
     let test_inputs = vec![F::ONE; 18];
 
     let expected = test_inputs.len().div_ceil(N);
 
-    let circuits = IterationStep::<F, C, N>::from_inputs(0, &test_inputs, F::ONE).unwrap();
+    let circuits = IterationStep::<F, C, N>::from_inputs(0, &test_inputs, F::ONE);
 
     let actual = circuits.len();
 
