@@ -44,42 +44,7 @@ where
         padded.push(Boolean::constant(b));
     }
     assert!(padded.len() % 512 == 0);   
-    let mut cur_md = get_ripemd160_md("md");
-    let mut cur_md_prime = get_ripemd160_md("md_prime");
-    for (i, block) in padded.chunks(512).enumerate() {
-        let prev_md = cur_md.clone();
-        cur_md = ripemd160_func_block(cs.namespace(|| format!("block {}", i)), block, &mut cur_md)?;
-        cur_md_prime = ripemd160_func_block_prime(
-            cs.namespace(|| format!("block_prime {}", i)),
-            block,
-            &mut cur_md_prime,
-        )?;
-        let mut update_md = cur_md.clone();
-        for i in 0..5 {
-            update_md[(i+4)%5] = prev_md[i].xor(
-                cs.namespace(|| format!("first xor {}", i)),
-                &cur_md[(i+1)%5],
-            )?;
-            update_md[(i+4)%5] = update_md[(i+4)%5].xor(
-                cs.namespace(|| format!("second xor {}", i)),
-                &cur_md_prime[(i+2)%5],
-            )?;
-        }
-        cur_md = update_md;
-        cur_md_prime = cur_md.clone();
-    }
-    Ok(cur_md.into_iter().flat_map(|e| e.into_bits_be()).collect())
-}
-
-fn get_ripemd160_md(input: &str) -> Vec<UInt32> {
-    match input {
-        "md" => MD_BUFFERS.iter().map(|&v| UInt32::constant(v)).collect(),
-        "md_prime" => MD_BUFFERS_PRIME
-            .iter()
-            .map(|&v| UInt32::constant(v))
-            .collect(),
-        _ => panic!("Invalid input"),
-    }
+    
 }
 
 pub fn ripemd160_func_block<Scalar, CS>(
@@ -158,12 +123,31 @@ where
     )?;
     s_val=[11,13,6,7,14,9,13,15,14,8,13,6,5,12,7,5];
     i_val=[3,10,14,4,9,15,8,1,2,7,0,6,13,11,5,12];
-    for i in 0..16 {
-        let mut tmp1 = current_md_value[0]
-            .xor(cs.namespace(|| format!("first xor {}", i)), &f)?
-            .xor(cs.namespace(|| format!("second xor {}", i)), &w[i_val[i]])?
-            .xor(
-                cs.namespace(|| format!("third xor {}", i)),
+    for i in 0..16 {let mut cur_md = get_ripemd160_md("md");
+    let mut cur_md_prime = get_ripemd160_md("md_prime");
+    for (i, block) in padded.chunks(512).enumerate() {
+        let prev_md = cur_md.clone();
+        cur_md = ripemd160_func_block(cs.namespace(|| format!("block {}", i)), block, &mut cur_md)?;
+        cur_md_prime = ripemd160_func_block_prime(
+            cs.namespace(|| format!("block_prime {}", i)),
+            block,
+            &mut cur_md_prime,
+        )?;
+        let mut update_md = cur_md.clone();
+        for i in 0..5 {
+            update_md[(i+4)%5] = prev_md[i].xor(
+                cs.namespace(|| format!("first xor {}", i)),
+                &cur_md[(i+1)%5],
+            )?;
+            update_md[(i+4)%5] = update_md[(i+4)%5].xor(
+                cs.namespace(|| format!("second xor {}", i)),
+                &cur_md_prime[(i+2)%5],
+            )?;
+        }
+        cur_md = update_md;
+        cur_md_prime = cur_md.clone();
+    }
+    Ok(cur_md.into_iter().flat_map(|e| e.into_bits_be()).collect())|| format!("third xor {}", i)),
                 &UInt32::constant(K_BUFFER[2]),
             )?;
         tmp1 = current_md_value[0].shl(s_val[i]);
