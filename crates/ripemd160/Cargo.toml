@@ -1,0 +1,18 @@
+[package]
+name = "ripemd160"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+block = "0.1.6"
+block-buffer = "0.10.4"
+digest = "0.10.7"
+hex-literal = "0.4.1"
+bellpepper-core = { workspace = true }
+bellpepper = { workspace = true }
+ff = { workspace = true }
