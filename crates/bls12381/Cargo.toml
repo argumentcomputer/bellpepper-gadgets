@@ -19,7 +19,7 @@ num-bigint = { workspace = true, features = ["rand"] }
 num-integer = { workspace = true }
 num-traits = { workspace = true}
 rand = { workspace = true}
-bls12_381 = { git = "https://github.com/wrinqle/bls12_381", features = ["experimental"] }
+bls12_381 = { git = "https://github.com/lurk-lab/bls12_381", features = ["experimental"] }
 
 [dev-dependencies]
 expect-test = "1.4.1"
