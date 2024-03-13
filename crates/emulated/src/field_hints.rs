@@ -19,13 +19,13 @@ where
     where
         CS: ConstraintSystem<F>,
     {
-        let a_int: BigInt = self.into();
-        let p = P::modulus();
-        let r_int = a_int.rem(p);
-        let r_value = Self::from(&r_int);
+        let a_int: Option<BigInt> = self.try_into().ok();
+        let r_int = a_int.map(|v| v.rem(P::modulus()));
 
-        let res_limbs =
-            r_value.allocate_limbs(&mut cs.namespace(|| "allocate from remainder value"))?;
+        let res_limbs = Self::allocate_optional_limbs(
+            &mut cs.namespace(|| "allocate from remainder value"),
+            r_int,
+        )?;
 
         let res = Self::pack_limbs(
             &mut cs.namespace(|| "enforce bitwidths on remainder"),
@@ -46,20 +46,26 @@ where
             + P::bits_per_limb() - 1) /         // This term is to round up to next integer
             P::bits_per_limb();
 
-        let a_int: BigInt = self.into();
+        let a_int: Option<BigInt> = self.try_into().ok();
         let p = P::modulus();
-        let k_int = a_int.div(p);
-        let k_int_limbs = decompose(&k_int, P::bits_per_limb(), num_res_limbs)?;
+        let k_int = a_int.map(|v| v.div(p));
 
-        let res_limb_values: Vec<F> = k_int_limbs
-            .into_iter()
-            .map(|i| bigint_to_scalar(&i))
-            .collect::<Vec<F>>();
-
-        let res_limbs = EmulatedLimbs::<F>::allocate_limbs(
-            &mut cs.namespace(|| "allocate from quotient value"),
-            &res_limb_values,
-        );
+        let res_limbs = if let Some(k_int) = k_int {
+            let k_int_limbs = decompose(&k_int, P::bits_per_limb(), num_res_limbs)?;
+            let res_limb_values: Vec<F> = k_int_limbs
+                .into_iter()
+                .map(|i| bigint_to_scalar(&i))
+                .collect::<Vec<F>>();
+            EmulatedLimbs::<F>::allocate_limbs(
+                &mut cs.namespace(|| "allocate from quotient value"),
+                &res_limb_values,
+            )
+        } else {
+            EmulatedLimbs::<F>::allocate_empty_limbs(
+                &mut cs.namespace(|| "allocate from quotient value"),
+                num_res_limbs,
+            )?
+        };
 
         let res = Self::pack_limbs(
             &mut cs.namespace(|| "enforce bitwidths on quotient"),
@@ -74,20 +80,22 @@ where
     where
         CS: ConstraintSystem<F>,
     {
-        let mut a_int: BigInt = self.into();
         let p = P::modulus();
-        a_int = a_int.rem(&p);
-        if a_int.is_zero() {
-            eprintln!("Inverse of zero element cannot be calculated");
-            return Err(SynthesisError::DivisionByZero);
-        }
-        let p_minus_2 = &p - BigInt::from(2);
-        // a^(p-1) = 1 mod p for non-zero a. So a^(-1) = a^(p-2)
-        let a_inv_int = a_int.modpow(&p_minus_2, &p);
-        let a_inv_value = Self::from(&a_inv_int);
+        let a_int: Option<BigInt> = self.try_into().ok().map(|v: BigInt| v.rem(&p));
+        let a_inv_int = a_int.and_then(|a| {
+            if a.is_zero() {
+                eprintln!("Inverse of zero element cannot be calculated");
+                return None;
+            }
+            let p_minus_2 = &p - BigInt::from(2);
+            // a^(p-1) = 1 mod p for non-zero a. So a^(-1) = a^(p-2)
+            Some(a.modpow(&p_minus_2, &p))
+        });
 
-        let a_inv_limbs =
-            a_inv_value.allocate_limbs(&mut cs.namespace(|| "allocate from inverse value"))?;
+        let a_inv_limbs = Self::allocate_optional_limbs(
+            &mut cs.namespace(|| "allocate from inverse value"),
+            a_inv_int,
+        )?;
 
         let a_inv = Self::pack_limbs(
             &mut cs.namespace(|| "enforce bitwidths on inverse"),
@@ -107,23 +115,26 @@ where
     where
         CS: ConstraintSystem<F>,
     {
-        let numer_int: BigInt = self.into();
-        let mut denom_int: BigInt = other.into();
         let p = P::modulus();
-        denom_int = denom_int.rem(&p);
-        if denom_int.is_zero() {
-            eprintln!("Inverse of zero element cannot be calculated");
-            return Err(SynthesisError::DivisionByZero);
-        }
-        let p_minus_2 = &p - BigInt::from(2);
-        // a^(p-1) = 1 mod p for non-zero a. So a^(-1) = a^(p-2)
-        let denom_inv_int = denom_int.modpow(&p_minus_2, &p);
-        let ratio_int = (numer_int * denom_inv_int).rem(&p);
+        let numer_int: Option<BigInt> = self.try_into().ok();
+        let denom_int: Option<BigInt> = other.try_into().ok().map(|v: BigInt| v.rem(&p));
+        let ratio_int = denom_int.and_then(|denom_int| {
+            numer_int.and_then(|numer_int| {
+                if denom_int.is_zero() {
+                    eprintln!("Inverse of zero element cannot be calculated");
+                    return None;
+                }
+                let p_minus_2 = &p - BigInt::from(2);
+                // a^(p-1) = 1 mod p for non-zero a. So a^(-1) = a^(p-2)
+                let denom_inv_int = denom_int.modpow(&p_minus_2, &p);
+                Some((numer_int * denom_inv_int).rem(&p))
+            })
+        });
 
-        let ratio_value = Self::from(&ratio_int);
-
-        let ratio_limbs =
-            ratio_value.allocate_limbs(&mut cs.namespace(|| "allocate from ratio value"))?;
+        let ratio_limbs = Self::allocate_optional_limbs(
+            &mut cs.namespace(|| "allocate from ratio value"),
+            ratio_int,
+        )?;
 
         let ratio = Self::pack_limbs(
             &mut cs.namespace(|| "enforce bitwidths on ratio"),

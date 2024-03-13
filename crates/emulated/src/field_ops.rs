@@ -128,19 +128,24 @@ where
     where
         CS: ConstraintSystem<F>,
     {
-        let v_value = v.get_value().unwrap();
-        let v_booleans = v_value
-            .to_le_bits()
-            .into_iter()
-            .skip(start_digit)
-            .take(end_digit - start_digit)
-            .enumerate()
-            .map(|(i, b)| {
-                Ok::<Boolean, SynthesisError>(Boolean::from(AllocatedBit::alloc(
-                    cs.namespace(|| format!("allocate bit {i}")),
-                    Some(b),
-                )?))
-            });
+        let v_bits = if let Some(v_value) = v.get_value() {
+            v_value
+                .to_le_bits()
+                .into_iter()
+                .skip(start_digit)
+                .take(end_digit - start_digit)
+                .map(Some)
+                .collect()
+        } else {
+            vec![None; end_digit - start_digit]
+        };
+
+        let v_booleans = v_bits.into_iter().enumerate().map(|(i, b)| {
+            Ok::<Boolean, SynthesisError>(Boolean::from(AllocatedBit::alloc(
+                cs.namespace(|| format!("allocate bit {i}")),
+                b,
+            )?))
+        });
 
         let mut sum_higher_order_bits = Num::<F>::zero();
         let mut sum_shifted_bits = Num::<F>::zero();
@@ -176,8 +181,8 @@ where
         b.enforce_width_conditional(&mut cs.namespace(|| "ensure bitwidths in b"))?;
 
         if a.is_constant() && b.is_constant() {
-            let a_i = BigInt::from(a);
-            let b_i = BigInt::from(b);
+            let a_i = BigInt::try_from(a)?;
+            let b_i = BigInt::try_from(b)?;
             let a_r = a_i.rem(P::modulus());
             let b_r = b_i.rem(P::modulus());
             if a_r != b_r {
@@ -214,8 +219,8 @@ where
         CS: ConstraintSystem<F>,
     {
         if a.is_constant() && b.is_constant() {
-            let a_i = BigInt::from(a);
-            let b_i = BigInt::from(b);
+            let a_i = BigInt::try_from(a)?;
+            let b_i = BigInt::try_from(b)?;
             let a_r = a_i.rem(P::modulus());
             let b_r = b_i.rem(P::modulus());
             if a_r != b_r {
@@ -328,15 +333,15 @@ where
         }
     }
 
-    fn add_op<CS>(a: &Self, b: &Self, next_overflow: usize) -> Self
+    fn add_op<CS>(a: &Self, b: &Self, next_overflow: usize) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
         if a.is_constant() && b.is_constant() {
-            let a_int = BigInt::from(a);
-            let b_int = BigInt::from(b);
+            let a_int = BigInt::try_from(a)?;
+            let b_int = BigInt::try_from(b)?;
             let res_int = (a_int + b_int).rem(P::modulus());
-            return Self::from(&res_int);
+            return Ok(Self::from(&res_int));
         }
 
         let num_res_limbs = a.len().max(b.len());
@@ -373,7 +378,10 @@ where
             }
         }
 
-        Self::new_internal_element(EmulatedLimbs::Allocated(res), next_overflow)
+        Ok(Self::new_internal_element(
+            EmulatedLimbs::Allocated(res),
+            next_overflow,
+        ))
     }
 
     pub fn add<CS>(&self, cs: &mut CS, other: &Self) -> Result<Self, SynthesisError>
@@ -433,8 +441,8 @@ where
         CS: ConstraintSystem<F>,
     {
         if a.is_constant() && b.is_constant() {
-            let a_int = BigInt::from(a);
-            let b_int = BigInt::from(b);
+            let a_int = BigInt::try_from(a)?;
+            let b_int = BigInt::try_from(b)?;
             let res_int = if a_int >= b_int {
                 (a_int - b_int).rem(P::modulus())
             } else {
@@ -560,15 +568,14 @@ where
         CS: ConstraintSystem<F>,
     {
         if a.is_constant() && b.is_constant() {
-            let a_int = BigInt::from(a);
-            let b_int = BigInt::from(b);
+            let a_int = BigInt::try_from(a)?;
+            let b_int = BigInt::try_from(b)?;
             let res_int = (a_int * b_int).rem(P::modulus());
             return Ok(Self::from(&res_int));
         }
 
         let num_prod_limbs = a.len() + b.len() - 1;
         let mut prod: Vec<Num<F>> = vec![Num::<F>::zero(); num_prod_limbs];
-        let mut prod_values: Vec<F> = vec![F::ZERO; num_prod_limbs];
 
         match (a.limbs.clone(), b.limbs.clone()) {
             (EmulatedLimbs::Constant(const_limbs), EmulatedLimbs::Allocated(var_limbs))
@@ -582,24 +589,35 @@ where
                 }
             }
             (EmulatedLimbs::Allocated(a_var), EmulatedLimbs::Allocated(b_var)) => {
-                let a_var_limb_values: Vec<F> = a_var
+                let a_var_limb_values: Option<Vec<F>> = a_var
                     .iter()
-                    .map(|v| v.get_value().unwrap_or_default())
-                    .collect();
-                let b_var_limb_values: Vec<F> = b_var
+                    .map(|v| v.get_value().ok_or(SynthesisError::AssignmentMissing))
+                    .collect::<Result<_, _>>()
+                    .ok();
+                let b_var_limb_values: Option<Vec<F>> = b_var
                     .iter()
-                    .map(|v| v.get_value().unwrap_or_default())
-                    .collect();
-                for i in 0..a.len() {
-                    for j in 0..b.len() {
-                        prod_values[i + j] += a_var_limb_values[i] * b_var_limb_values[j];
-                    }
-                }
+                    .map(|v| v.get_value().ok_or(SynthesisError::AssignmentMissing))
+                    .collect::<Result<_, _>>()
+                    .ok();
+                let prod_values: Option<Vec<F>> = a_var_limb_values.and_then(|a_var_limb_values| {
+                    b_var_limb_values.map(|b_var_limb_values| {
+                        let mut prod_values = vec![F::ZERO; num_prod_limbs];
+                        for i in 0..a.len() {
+                            for j in 0..b.len() {
+                                prod_values[i + j] += a_var_limb_values[i] * b_var_limb_values[j];
+                            }
+                        }
+                        prod_values
+                    })
+                });
 
                 let prod_allocated_nums: Vec<AllocatedNum<F>> = (0..num_prod_limbs)
                     .map(|i| {
                         AllocatedNum::alloc(cs.namespace(|| format!("product limb {i}")), || {
-                            Ok(prod_values[i])
+                            prod_values
+                                .as_ref()
+                                .map(|prod_values| prod_values[i])
+                                .ok_or(SynthesisError::AssignmentMissing)
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()?;
@@ -857,7 +875,7 @@ where
         };
 
         let res = match op_type {
-            Optype::Add => Ok(Self::add_op::<CS>(&a_r, &b_r, next_overflow)),
+            Optype::Add => Self::add_op::<CS>(&a_r, &b_r, next_overflow),
             Optype::Sub => Self::sub_op::<CS>(&a_r, &b_r, next_overflow),
             Optype::Mul => Self::mul_op(&mut cs.namespace(|| "mul_op"), &a_r, &b_r, next_overflow),
         };
