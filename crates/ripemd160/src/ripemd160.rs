@@ -3,14 +3,11 @@
 //!
 //! [RIPEMD-160]: https://www.esat.kuleuven.be/cosic/publications/article-317.pdf
 
-#![allow(clippy::many_single_char_names)]
-
+use bellpepper::gadgets::{multieq::MultiEq, uint32::UInt32};
+use bellpepper_core::{boolean::Boolean, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
 
-use super::uint32::UInt32;
-use bellpepper::gadgets::boolean::Boolean;
-use bellpepper::gadgets::multieq::MultiEq;
-use bellpepper_core::{ConstraintSystem, SynthesisError};
+use crate::util::{ripemd_d1, ripemd_d2,shl_uint32};
 
 #[allow(clippy::unreadable_literal)]
 const MD_BUFFERS: [u32; 5] = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
