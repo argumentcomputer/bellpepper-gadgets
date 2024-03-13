@@ -110,14 +110,14 @@ pub(crate) fn bigint_to_fpelem(val: &BigInt) -> Option<BlsFp> {
     Some(BlsFp::from_bytes(&bytes).unwrap())
 }
 
-pub(crate) fn emulated_to_native<F>(value: &Bls12381Fp<F>) -> BlsFp
+pub(crate) fn emulated_to_native<F>(value: &Bls12381Fp<F>) -> Option<BlsFp>
 where
     F: PrimeFieldBits,
 {
     use std::ops::Rem;
     let p = &Bls12381FpParams::modulus();
-    let val = BigInt::from(value).rem(p);
-    bigint_to_fpelem(&val).unwrap()
+    let val = BigInt::try_from(value).ok().map(|v| v.rem(p));
+    val.and_then(|v| bigint_to_fpelem(&v))
 }
 
 pub(crate) fn big_from_dec(v: &str) -> Option<BigInt> {
@@ -128,20 +128,24 @@ pub(crate) fn fp_from_dec(v: &str) -> Option<BlsFp> {
     big_from_dec(v).as_ref().and_then(bigint_to_fpelem)
 }
 
-impl<F> From<&FpElement<F>> for BlsFp
+impl<F> TryFrom<&FpElement<F>> for BlsFp
 where
     F: PrimeFieldBits,
 {
-    fn from(value: &FpElement<F>) -> Self {
-        emulated_to_native(&value.0)
+    type Error = SynthesisError;
+
+    fn try_from(value: &FpElement<F>) -> Result<Self, Self::Error> {
+        emulated_to_native(&value.0).ok_or(SynthesisError::AssignmentMissing)
     }
 }
 
-impl<F: PrimeFieldBits> From<&FpElement<F>> for BigInt {
-    fn from(value: &FpElement<F>) -> Self {
+impl<F: PrimeFieldBits> TryFrom<&FpElement<F>> for BigInt {
+    type Error = SynthesisError;
+
+    fn try_from(value: &FpElement<F>) -> Result<Self, Self::Error> {
         use std::ops::Rem;
         let p = &Bls12381FpParams::modulus();
-        Self::from(&value.0).rem(p)
+        Self::try_from(&value.0).map(|v| v.rem(p))
     }
 }
 
@@ -158,14 +162,15 @@ impl<F: PrimeFieldBits> FpElement<F> {
         Self(Bls12381Fp::one())
     }
 
-    pub fn alloc_element<CS>(cs: &mut CS, value: &BlsFp) -> Result<Self, SynthesisError>
+    pub fn alloc_element<CS>(cs: &mut CS, value: &Option<BlsFp>) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
-        let val_alloc = Self::from(value);
-        let alloc = val_alloc
-            .0
-            .allocate_field_element_unchecked(&mut cs.namespace(|| "alloc fp elm"))?;
+        let val: Option<BigInt> = value.and_then(|v| BigInt::try_from(&Self::from(&v)).ok());
+        let alloc = Bls12381Fp::<F>::allocate_optional_field_element_unchecked(
+            &mut cs.namespace(|| "alloc fp elm"),
+            &val,
+        )?;
 
         Ok(Self(alloc))
     }
@@ -324,9 +329,9 @@ mod tests {
         let c = a + b;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
+        let c_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.add(&mut cs.namespace(|| "a+b"), &b_alloc).unwrap();
         FpElement::assert_is_equal(&mut cs.namespace(|| "a+b = c"), &res_alloc, &c_alloc).unwrap();
         if !cs.is_satisfied() {
@@ -346,9 +351,9 @@ mod tests {
         let c = a - b;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
+        let c_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.sub(&mut cs.namespace(|| "a-b"), &b_alloc).unwrap();
         FpElement::assert_is_equal(&mut cs.namespace(|| "a-b = c"), &res_alloc, &c_alloc).unwrap();
         if !cs.is_satisfied() {
@@ -368,9 +373,9 @@ mod tests {
         let c = a * b;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
+        let c_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.mul(&mut cs.namespace(|| "a*b"), &b_alloc).unwrap();
         FpElement::assert_is_equal(&mut cs.namespace(|| "a*b = c"), &res_alloc, &c_alloc).unwrap();
         assert!(cs.is_satisfied());
@@ -395,10 +400,10 @@ mod tests {
         let c = a * b;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
         let b_elem: FpElement<Fp> = (&b).into();
-        let b_val: BigInt = (&b_elem.0).into();
-        let c_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let b_val: BigInt = (&b_elem.0).try_into().unwrap();
+        let c_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc
             .mul_const(&mut cs.namespace(|| "a*b (const)"), &b_val)
             .unwrap();
@@ -419,8 +424,8 @@ mod tests {
         let c = -&a;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.neg(&mut cs.namespace(|| "-a")).unwrap();
         FpElement::assert_is_equal(&mut cs.namespace(|| "-a = c"), &res_alloc, &c_alloc).unwrap();
         if !cs.is_satisfied() {
@@ -439,7 +444,7 @@ mod tests {
         let c: bool = a.sgn0().into();
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
         let c_alloc = AllocatedBit::alloc(&mut cs.namespace(|| "alloc c"), Some(c)).unwrap();
         let res_alloc = a_alloc.sgn0(&mut cs.namespace(|| "a.sgn0()")).unwrap();
         Boolean::enforce_equal(
@@ -464,8 +469,8 @@ mod tests {
         let b = BlsFp::random(&mut rng);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
         let res_alloc = a_alloc.sub(&mut cs.namespace(|| "a-a"), &a_alloc).unwrap();
         let zero = FpElement::zero();
         FpElement::assert_is_equal(&mut cs.namespace(|| "a-a = 0"), &res_alloc, &zero).unwrap();

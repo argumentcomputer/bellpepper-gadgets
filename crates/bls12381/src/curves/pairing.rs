@@ -603,6 +603,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bellpepper::util_cs::metric_cs::MetricCS;
     use bellpepper_core::test_cs::TestConstraintSystem;
     use halo2curves::bn256::Fq as Fp;
     use halo2curves::group::Group;
@@ -612,6 +613,24 @@ mod tests {
     use expect_test::{expect, Expect};
     fn expect_eq(computed: usize, expected: &Expect) {
         expected.assert_eq(&computed.to_string());
+    }
+
+    #[test]
+    fn test_pairing_metric_cs() {
+        let mut cs = MetricCS::<Fp>::new();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &None).unwrap();
+        let b_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc b"), &None).unwrap();
+        let c_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &None).unwrap();
+        let res_alloc = EmulatedBls12381Pairing::pair(
+            &mut cs.namespace(|| "pair(a, b)"),
+            &[a_alloc],
+            &[b_alloc],
+        )
+        .unwrap();
+        Fp12Element::assert_is_equal(&mut cs.namespace(|| "pair(a, b) = c"), &res_alloc, &c_alloc)
+            .unwrap();
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.num_constraints(), &expect!["7147240"]);
     }
 
     // NOTE: this test currently takes ~22GB of ram and ~50s to run
@@ -626,9 +645,10 @@ mod tests {
         let c = c.0;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
+        let c_alloc =
+            Fp12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = EmulatedBls12381Pairing::pair(
             &mut cs.namespace(|| "pair(a, b)"),
             &[a_alloc],
@@ -671,17 +691,20 @@ mod tests {
             .iter()
             .enumerate()
             .map(|(idx, a)| {
-                G1Point::alloc_element(&mut cs.namespace(|| format!("alloc a {idx}")), a).unwrap()
+                G1Point::alloc_element(&mut cs.namespace(|| format!("alloc a {idx}")), &Some(*a))
+                    .unwrap()
             })
             .collect();
         let b_allocs: Vec<G2Point<Fp>> = b
             .iter()
             .enumerate()
             .map(|(idx, b)| {
-                G2Point::alloc_element(&mut cs.namespace(|| format!("alloc b {idx}")), b).unwrap()
+                G2Point::alloc_element(&mut cs.namespace(|| format!("alloc b {idx}")), &Some(*b))
+                    .unwrap()
             })
             .collect();
-        let c_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let c_alloc =
+            Fp12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc =
             EmulatedBls12381Pairing::pair(&mut cs.namespace(|| "pair(a, b)"), &a_allocs, &b_allocs)
                 .unwrap();
