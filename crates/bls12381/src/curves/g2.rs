@@ -43,7 +43,7 @@ where
 
     fn try_from(value: &G2Point<F>) -> Result<Self, Self::Error> {
         let x = BlsFp2::try_from(&value.x)?;
-        let y = BlsFp2::try_from(&value.x)?;
+        let y = BlsFp2::try_from(&value.y)?;
         let z = if x.is_zero().into() && y.is_zero().into() {
             BlsFp2::zero()
         } else {
