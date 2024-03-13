@@ -7,7 +7,7 @@ use bellpepper::gadgets::{multieq::MultiEq, uint32::UInt32};
 use bellpepper_core::{boolean::Boolean, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
 
-use crate::util::{ripemd_d1, ripemd_d2,shl_uint32};
+use crate::util::{ripemd_d1, ripemd_d2, shl_uint32};
 
 #[allow(clippy::unreadable_literal)]
 const MD_BUFFERS: [u32; 5] = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
@@ -40,7 +40,7 @@ where
     for b in (0..64).rev().map(|i| (plen >> i) & 1 == 1) {
         padded.push(Boolean::constant(b));
     }
-    assert!(padded.len() % 512 == 0);   
+    assert!(padded.len() % 512 == 0);
     let mut cur_md = get_ripemd160_md("md");
     let mut cur_md_prime = get_ripemd160_md("md_prime");
     for (i, block) in padded.chunks(512).enumerate() {
@@ -53,13 +53,13 @@ where
         )?;
         let mut update_md = cur_md.clone();
         for i in 0..5 {
-            update_md[(i+4)%5] = prev_md[i].xor(
+            update_md[(i + 4) % 5] = prev_md[i].xor(
                 cs.namespace(|| format!("first xor {}", i)),
-                &cur_md[(i+1)%5],
+                &cur_md[(i + 1) % 5],
             )?;
-            update_md[(i+4)%5] = update_md[(i+4)%5].xor(
+            update_md[(i + 4) % 5] = update_md[(i + 4) % 5].xor(
                 cs.namespace(|| format!("second xor {}", i)),
-                &cur_md_prime[(i+2)%5],
+                &cur_md_prime[(i + 2) % 5],
             )?;
         }
         cur_md = update_md;
@@ -153,8 +153,8 @@ where
         &current_md_value[1],
         &current_md_value[2],
     )?;
-    s_val=[11,13,6,7,14,9,13,15,14,8,13,6,5,12,7,5];
-    i_val=[3,10,14,4,9,15,8,1,2,7,0,6,13,11,5,12];
+    s_val = [11, 13, 6, 7, 14, 9, 13, 15, 14, 8, 13, 6, 5, 12, 7, 5];
+    i_val = [3, 10, 14, 4, 9, 15, 8, 1, 2, 7, 0, 6, 13, 11, 5, 12];
     for i in 0..16 {
         let mut tmp1 = current_md_value[0]
             .xor(cs.namespace(|| format!("first xor {}", i)), &f)?

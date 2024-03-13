@@ -1,5 +1,5 @@
 use bellpepper::gadgets::uint32::UInt32;
-use bellpepper_core::{boolean::Boolean, ConstraintSystem, SynthesisError, boolean::AllocatedBit};
+use bellpepper_core::{boolean::AllocatedBit, boolean::Boolean, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
 
 fn ripemd160_d1<'a, Scalar, CS>(
@@ -99,9 +99,10 @@ where
         |lc| lc + d1 - &c.lc(CS::one(), Scalar::ONE),
     );
 
-    Ok(AllocatedBit::alloc(cs.namespace(|| "d1"), d1_value).unwrap().into())
+    Ok(AllocatedBit::alloc(cs.namespace(|| "d1"), d1_value)
+        .unwrap()
+        .into())
 }
-
 
 fn ripemd160_d2<'a, Scalar, CS>(
     mut cs: CS,
@@ -206,7 +207,9 @@ where
         |lc| lc + d2 - &notbc.lc(CS::one(), Scalar::ONE),
     );
 
-    Ok(AllocatedBit::alloc(cs.namespace(|| "d2"), d2_value).unwrap().into())
+    Ok(AllocatedBit::alloc(cs.namespace(|| "d2"), d2_value)
+        .unwrap()
+        .into())
 }
 
 pub fn shl_uint32(a: &UInt32, by: usize) -> Result<UInt32, SynthesisError> {
@@ -235,14 +238,14 @@ where
     U: Fn(&mut CS, usize, &Boolean, &Boolean, &Boolean) -> Result<Boolean, SynthesisError>,
 {
     let bits: Vec<_> = a
-    .clone()
-    .into_bits()
-    .iter()
-    .zip(b.clone().into_bits().iter())
-    .zip(c.clone().into_bits().iter())
-    .enumerate()
-    .map(|(i, ((a, b), c))| circuit_fn(&mut cs, i, a, b, c))
-    .collect::<Result<_, _>>()?;
+        .clone()
+        .into_bits()
+        .iter()
+        .zip(b.clone().into_bits().iter())
+        .zip(c.clone().into_bits().iter())
+        .enumerate()
+        .map(|(i, ((a, b), c))| circuit_fn(&mut cs, i, a, b, c))
+        .collect::<Result<_, _>>()?;
 
     Ok(UInt32::from_bits(&bits))
 }
@@ -257,13 +260,9 @@ where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
 {
-    triop(
-        cs,
-        a,
-        b,
-        c,
-        |cs, i, a, b, c| ripemd160_d1(cs.namespace(|| format!("d1 {}", i)), a, b, c),
-    )
+    triop(cs, a, b, c, |cs, i, a, b, c| {
+        ripemd160_d1(cs.namespace(|| format!("d1 {}", i)), a, b, c)
+    })
 }
 
 pub fn ripemd_d2<Scalar, CS>(
@@ -276,13 +275,9 @@ where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
 {
-    triop(
-        cs,
-        a,
-        b,
-        c,
-        |cs, i, a, b, c| ripemd160_d2(cs.namespace(|| format!("d2 {}", i)), a, b, c),
-    )
+    triop(cs, a, b, c, |cs, i, a, b, c| {
+        ripemd160_d2(cs.namespace(|| format!("d2 {}", i)), a, b, c)
+    })
 }
 
 #[cfg(test)]
@@ -307,7 +302,7 @@ mod test {
                 let num = rng.next_u32();
                 let mut expected = num.wrapping_shl(i as u32);
                 let num_bit = UInt32::alloc(cs.namespace(|| "num_bit"), Some(num)).unwrap();
-                let res = shl_uint32(&num_bit,i).unwrap();
+                let res = shl_uint32(&num_bit, i).unwrap();
                 for b in res.into_bits() {
                     match b {
                         Boolean::Is(ref b) => {
@@ -320,7 +315,7 @@ mod test {
                             assert_eq!(b, expected & 1 == 1);
                         }
                     }
-    
+
                     expected >>= 1;
                 }
             }
@@ -333,24 +328,24 @@ mod test {
             0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
             0xbc, 0xe5,
         ]);
-    
+
         for _ in 0..1000 {
             let mut cs = TestConstraintSystem::<Fp>::new();
-    
+
             let a = rng.next_u32();
             let b = rng.next_u32();
             let c = rng.next_u32();
-    
+
             let mut expected = (a & b) | ((!b) & c);
-    
+
             let a_bit = UInt32::alloc(cs.namespace(|| "a_bit"), Some(a)).unwrap();
             let b_bit = UInt32::constant(b);
             let c_bit = UInt32::alloc(cs.namespace(|| "c_bit"), Some(c)).unwrap();
-    
+
             let r = ripemd_d1(&mut cs, &a_bit, &b_bit, &c_bit).unwrap();
-    
+
             assert!(cs.is_satisfied());
-    
+
             for b in r.into_bits().iter() {
                 match *b {
                     Boolean::Is(ref b) => {
@@ -363,7 +358,7 @@ mod test {
                         assert_eq!(b, expected & 1 == 1);
                     }
                 }
-    
+
                 expected >>= 1;
             }
         }
@@ -374,24 +369,24 @@ mod test {
             0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
             0xbc, 0xe5,
         ]);
-    
+
         for _ in 0..1000 {
             let mut cs = TestConstraintSystem::<Fp>::new();
-    
+
             let a = rng.next_u32();
             let b = rng.next_u32();
             let c = rng.next_u32();
-    
+
             let mut expected = (a) ^ ((b) | !c);
-    
+
             let a_bit = UInt32::alloc(cs.namespace(|| "a_bit"), Some(a)).unwrap();
             let b_bit = UInt32::constant(b);
             let c_bit = UInt32::alloc(cs.namespace(|| "c_bit"), Some(c)).unwrap();
-    
+
             let r = ripemd_d2(&mut cs, &a_bit, &b_bit, &c_bit).unwrap();
-    
+
             assert!(cs.is_satisfied());
-    
+
             for b in r.into_bits().iter() {
                 match *b {
                     Boolean::Is(ref b) => {
@@ -404,7 +399,7 @@ mod test {
                         assert_eq!(b, expected & 1 == 1);
                     }
                 }
-    
+
                 expected >>= 1;
             }
         }
