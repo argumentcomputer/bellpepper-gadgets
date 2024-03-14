@@ -220,15 +220,15 @@ where
     for i in 0..16 {
         let mut tmp1 = md_val[0]
             .xor(
-                cs.namespace(|| format!("first xor block {} left {} index {}", index, left,i)),
+                cs.namespace(|| format!("first xor block {} left {} index {}", index, left, i)),
                 &f,
             )?
             .xor(
-                cs.namespace(|| format!("second xor block {} left {} index {}", index, left,i)),
+                cs.namespace(|| format!("second xor block {} left {} index {}", index, left, i)),
                 &w[i_val[i]],
             )?
             .xor(
-                cs.namespace(|| format!("third xor block {} left {} index {}", index, left,i)),
+                cs.namespace(|| format!("third xor block {} left {} index {}", index, left, i)),
                 &UInt32::constant(k_val[index]),
             )?;
         tmp1 = shl_uint32(&tmp1, s_val[i]).unwrap();
