@@ -6,6 +6,7 @@
 use bellpepper::gadgets::{multieq::MultiEq, uint32::UInt32};
 use bellpepper_core::{boolean::Boolean, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
+use std::convert::TryInto;
 
 use crate::util::{ripemd_d1, ripemd_d2, shl_uint32};
 
@@ -22,9 +23,9 @@ const K_BUFFER: [u32; 5] = [0x00000000, 0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xa9
 const K_BUFFER_PRIME: [u32; 5] = [0x50a28be6, 0x5c4dd124, 0x6d703ef3, 0x7a6d76e9, 0x00000000];
 
 pub fn ripemd160<Scalar, CS>(
-    mut cs: CS,
+    cs: CS,
     input: &[Boolean],
-) -> Result<Vec<Boolean>, bellpepper_core::SynthesisError>
+) -> Result<[UInt32; 5], bellpepper_core::SynthesisError>
 where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
@@ -43,47 +44,219 @@ where
     assert!(padded.len() % 512 == 0);
     let mut cur_md = get_ripemd160_md("md");
     let mut cur_md_prime = get_ripemd160_md("md_prime");
+    let mut cs = MultiEq::new(cs);
     for (i, block) in padded.chunks(512).enumerate() {
         let prev_md = cur_md.clone();
-        cur_md = ripemd160_func_block(cs.namespace(|| format!("block {}", i)), block, &mut cur_md)?;
-        cur_md_prime = ripemd160_func_block_prime(
-            cs.namespace(|| format!("block_prime {}", i)),
+        println!("block {}", i);
+        cur_md = left_step(
+            cs.namespace(|| format!("left_step {}", i)),
+            block,
+            &mut cur_md,
+        )?;
+        cur_md_prime = right_step(
+            cs.namespace(|| format!("right_step {}", i)),
             block,
             &mut cur_md_prime,
         )?;
-        let mut update_md = cur_md.clone();
-        for i in 0..5 {
-            update_md[(i + 4) % 5] = prev_md[i].xor(
-                cs.namespace(|| format!("first xor {}", i)),
-                &cur_md[(i + 1) % 5],
-            )?;
-            update_md[(i + 4) % 5] = update_md[(i + 4) % 5].xor(
-                cs.namespace(|| format!("second xor {}", i)),
-                &cur_md_prime[(i + 2) % 5],
-            )?;
-        }
-        cur_md = update_md;
+        cur_md = combine_left_and_right(
+            cs.namespace(|| format!("combine_left_and_right_step {}", i)),
+            cur_md,
+            cur_md_prime,
+            prev_md,
+        )
+        .unwrap();
         cur_md_prime = cur_md.clone();
     }
-    Ok(cur_md.into_iter().flat_map(|e| e.into_bits_be()).collect())
+    let array_data: Result<[UInt32; 5], _> = cur_md.try_into();
+    Ok(array_data.unwrap())
 }
 
-fn get_ripemd160_md(input: &str) -> Vec<UInt32> {
+fn combine_left_and_right<Scalar, CS>(
+    cs: CS,
+    cur_md: [UInt32; 5],
+    cur_md_prime: [UInt32; 5],
+    prev_md: [UInt32; 5],
+) -> Result<[UInt32; 5], bellpepper_core::SynthesisError>
+where
+    Scalar: PrimeField,
+    CS: ConstraintSystem<Scalar>,
+{
+    let mut cs = MultiEq::new(cs);
+    let mut update_md = cur_md.clone();
+    for i in 0..5 {
+        update_md[(i + 4) % 5] = prev_md[i].xor(
+            cs.namespace(|| format!("first xor {}", i)),
+            &cur_md[(i + 1) % 5],
+        )?;
+        update_md[(i + 4) % 5] = update_md[(i + 4) % 5].xor(
+            cs.namespace(|| format!("second xor {}", i)),
+            &cur_md_prime[(i + 2) % 5],
+        )?;
+    }
+    Ok(update_md)
+}
+
+fn get_ripemd160_md(input: &str) -> [UInt32; 5] {
     match input {
-        "md" => MD_BUFFERS.iter().map(|&v| UInt32::constant(v)).collect(),
-        "md_prime" => MD_BUFFERS_PRIME
-            .iter()
-            .map(|&v| UInt32::constant(v))
-            .collect(),
+        "md" => MD_BUFFERS.map(UInt32::constant),
+        "md_prime" => MD_BUFFERS_PRIME.map(UInt32::constant),
         _ => panic!("Invalid input"),
     }
 }
 
-pub fn ripemd160_func_block<Scalar, CS>(
+fn block<Scalar, CS>(
+    cs: CS,
+    md_val: &mut [UInt32; 5],
+    s_val: [usize; 16],
+    i_val: [usize; 16],
+    w: Vec<UInt32>,
+    index: usize,
+    left: bool,
+) -> Result<[UInt32; 5], SynthesisError>
+where
+    Scalar: PrimeField,
+    CS: ConstraintSystem<Scalar>,
+{
+    let mut cs = MultiEq::new(cs);
+    let f: UInt32;
+    match left {
+        true => match index {
+            0 => {
+                f = md_val[1]
+                    .xor(
+                        cs.namespace(|| format!("first xor block {} left {} ", index, left)),
+                        &md_val[2],
+                    )?
+                    .xor(
+                        cs.namespace(|| format!("second xor block {} left {}", index, left)),
+                        &md_val[3],
+                    )?;
+            }
+            1 => {
+                f = ripemd_d1(
+                    cs.namespace(|| format!("d1 block {} left {}", index, left)),
+                    &md_val[3],
+                    &md_val[1],
+                    &md_val[2],
+                )?;
+            }
+            2 => {
+                f = ripemd_d2(
+                    cs.namespace(|| format!("d2 block {} left {}", index, left)),
+                    &md_val[3],
+                    &md_val[1],
+                    &md_val[2],
+                )?;
+            }
+            3 => {
+                f = ripemd_d1(
+                    cs.namespace(|| format!("d1 block {} left {}", index, left)),
+                    &md_val[1],
+                    &md_val[3],
+                    &md_val[2],
+                )?;
+            }
+            4 => {
+                f = ripemd_d2(
+                    cs.namespace(|| format!("d2 block {} left {}", index, left)),
+                    &md_val[1],
+                    &md_val[2],
+                    &md_val[3],
+                )?;
+            }
+            _ => panic!("Invalid index"),
+        },
+        false => match index {
+            0 => {
+                f = ripemd_d2(
+                    cs.namespace(|| format!("d2 block {} left {}", index, left)),
+                    &md_val[1],
+                    &md_val[2],
+                    &md_val[3],
+                )?;
+            }
+            1 => {
+                f = ripemd_d1(
+                    cs.namespace(|| format!("d1 block {} left {}", index, left)),
+                    &md_val[1],
+                    &md_val[3],
+                    &md_val[2],
+                )?;
+            }
+            2 => {
+                f = ripemd_d2(
+                    cs.namespace(|| format!("d2 block {} left {}", index, left)),
+                    &md_val[3],
+                    &md_val[1],
+                    &md_val[2],
+                )?;
+            }
+            3 => {
+                f = ripemd_d1(
+                    cs.namespace(|| format!("d1 block {} left {}", index, left)),
+                    &md_val[2],
+                    &md_val[1],
+                    &md_val[3],
+                )?;
+            }
+            4 => {
+                f = md_val[1]
+                    .xor(
+                        cs.namespace(|| format!("first xor block {} left {}", index, left)),
+                        &md_val[2],
+                    )?
+                    .xor(
+                        cs.namespace(|| format!("second xor block {} left {}", index, left)),
+                        &md_val[3],
+                    )?;
+            }
+            _ => panic!("Invalid index"),
+        },
+    }
+    let k_val = match left {
+        true => K_BUFFER,
+        false => K_BUFFER_PRIME,
+    };
+    for i in 0..16 {
+        let mut tmp1 = md_val[0]
+            .xor(
+                cs.namespace(|| format!("first xor block {} left {} index {}", index, left,i)),
+                &f,
+            )?
+            .xor(
+                cs.namespace(|| format!("second xor block {} left {} index {}", index, left,i)),
+                &w[i_val[i]],
+            )?
+            .xor(
+                cs.namespace(|| format!("third xor block {} left {} index {}", index, left,i)),
+                &UInt32::constant(k_val[index]),
+            )?;
+        tmp1 = shl_uint32(&tmp1, s_val[i]).unwrap();
+        tmp1 = tmp1.xor(
+            cs.namespace(|| format!("fourth xor block {} left {} index {}", index, left, i)),
+            &md_val[4],
+        )?;
+        let tmp2 = shl_uint32(&md_val[2], 10);
+        md_val[0] = md_val[4].clone();
+        md_val[2] = md_val[1].clone();
+        md_val[4] = md_val[3].clone();
+        md_val[1] = tmp1.clone();
+        md_val[3] = tmp2.unwrap().clone();
+    }
+    Ok([
+        md_val[0].clone(),
+        md_val[1].clone(),
+        md_val[2].clone(),
+        md_val[3].clone(),
+        md_val[4].clone(),
+    ])
+}
+
+pub fn left_step<Scalar, CS>(
     cs: CS,
     input: &[Boolean],
-    current_md_value: &mut [UInt32],
-) -> Result<Vec<UInt32>, SynthesisError>
+    current_md_value: &mut [UInt32; 5],
+) -> Result<[UInt32; 5], SynthesisError>
 where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
@@ -95,143 +268,62 @@ where
         .map(UInt32::from_bits_be)
         .collect::<Vec<_>>();
     let mut cs = MultiEq::new(cs);
-    let mut f = current_md_value[1]
-        .xor(cs.namespace(|| "first xor"), &current_md_value[2])?
-        .xor(cs.namespace(|| "second xor"), &current_md_value[3])?;
     let mut s_val = [11, 14, 15, 12, 5, 8, 7, 9, 11, 13, 14, 15, 6, 7, 9, 8];
-    for i in 0..16 {
-        let mut tmp1 = current_md_value[0]
-            .xor(cs.namespace(|| format!("first xor {}", i)), &f)?
-            .xor(cs.namespace(|| format!("second xor {}", i)), &w[i])?
-            .xor(
-                cs.namespace(|| format!("third xor {}", i)),
-                &UInt32::constant(K_BUFFER[0]),
-            )?;
-        tmp1 = shl_uint32(&tmp1, s_val[i]).unwrap();
-        tmp1 = tmp1.xor(
-            cs.namespace(|| format!("fourth xor {}", i)),
-            &current_md_value[4],
-        )?;
-        let tmp2 = shl_uint32(&current_md_value[2], 10);
-        current_md_value[0] = current_md_value[4].clone();
-        current_md_value[2] = current_md_value[1].clone();
-        current_md_value[4] = current_md_value[3].clone();
-        current_md_value[1] = tmp1.clone();
-        current_md_value[3] = tmp2.unwrap().clone();
-    }
-    f = ripemd_d1(
-        cs.namespace(|| "d1"),
-        &current_md_value[3],
-        &current_md_value[1],
-        &current_md_value[2],
+    let mut i_val = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+    let mut current_md_value = block(
+        cs.namespace(|| "block 0"),
+        current_md_value,
+        s_val,
+        i_val,
+        w.clone(),
+        0,
+        true,
     )?;
     s_val = [7, 6, 8, 13, 11, 9, 7, 15, 7, 12, 15, 9, 11, 7, 13, 12];
-    let mut i_val = [7, 14, 13, 1, 10, 6, 15, 3, 12, 0, 9, 5, 2, 14, 11, 8];
-    for i in 0..16 {
-        let mut tmp1 = current_md_value[0]
-            .xor(cs.namespace(|| format!("first xor {}", i)), &f)?
-            .xor(cs.namespace(|| format!("second xor {}", i)), &w[i_val[i]])?
-            .xor(
-                cs.namespace(|| format!("third xor {}", i)),
-                &UInt32::constant(K_BUFFER[1]),
-            )?;
-            tmp1 = shl_uint32(&tmp1, s_val[i]).unwrap();
-        tmp1 = tmp1.xor(
-            cs.namespace(|| format!("fourth xor {}", i)),
-            &current_md_value[4],
-        )?;
-        let tmp2 = shl_uint32(&current_md_value[2],10);
-        current_md_value[0] = current_md_value[4].clone();
-        current_md_value[2] = current_md_value[1].clone();
-        current_md_value[4] = current_md_value[3].clone();
-        current_md_value[1] = tmp1.clone();
-        current_md_value[3] = tmp2.unwrap().clone();
-    }
-    f = ripemd_d2(
-        cs.namespace(|| "d2"),
-        &current_md_value[3],
-        &current_md_value[1],
-        &current_md_value[2],
+    i_val = [7, 14, 13, 1, 10, 6, 15, 3, 12, 0, 9, 5, 2, 14, 11, 8];
+    current_md_value = block(
+        cs.namespace(|| "block 1"),
+        &mut current_md_value,
+        s_val,
+        i_val,
+        w.clone(),
+        1,
+        true,
     )?;
     s_val = [11, 13, 6, 7, 14, 9, 13, 15, 14, 8, 13, 6, 5, 12, 7, 5];
     i_val = [3, 10, 14, 4, 9, 15, 8, 1, 2, 7, 0, 6, 13, 11, 5, 12];
-    for i in 0..16 {
-        let mut tmp1 = current_md_value[0]
-            .xor(cs.namespace(|| format!("first xor {}", i)), &f)?
-            .xor(cs.namespace(|| format!("second xor {}", i)), &w[i_val[i]])?
-            .xor(
-                cs.namespace(|| format!("third xor {}", i)),
-                &UInt32::constant(K_BUFFER[2]),
-            )?;
-        tmp1 = shl_uint32(&tmp1, s_val[i]).unwrap();
-        tmp1 = tmp1.xor(
-            cs.namespace(|| format!("fourth xor {}", i)),
-            &current_md_value[4],
-        )?;
-        let tmp2 = shl_uint32(&current_md_value[2], 10);
-        current_md_value[0] = current_md_value[4].clone();
-        current_md_value[2] = current_md_value[1].clone();
-        current_md_value[4] = current_md_value[3].clone();
-        current_md_value[1] = tmp1.clone();
-        current_md_value[3] = tmp2.unwrap().clone();
-    }
-    f = ripemd_d1(
-        cs.namespace(|| "d1"),
-        &current_md_value[1],
-        &current_md_value[3],
-        &current_md_value[2],
+    current_md_value = block(
+        cs.namespace(|| "block 2"),
+        &mut current_md_value,
+        s_val,
+        i_val,
+        w.clone(),
+        2,
+        true,
     )?;
     s_val = [11, 12, 14, 15, 14, 15, 9, 8, 9, 14, 5, 6, 8, 6, 5, 12];
     i_val = [1, 9, 11, 10, 0, 8, 12, 4, 13, 3, 7, 15, 14, 5, 6, 2];
-    for i in 0..16 {
-        let mut tmp1 = current_md_value[0]
-            .xor(cs.namespace(|| format!("first xor {}", i)), &f)?
-            .xor(cs.namespace(|| format!("second xor {}", i)), &w[i_val[i]])?
-            .xor(
-                cs.namespace(|| format!("third xor {}", i)),
-                &UInt32::constant(K_BUFFER[3]),
-            )?;
-        tmp1 = shl_uint32(&tmp1, s_val[i]).unwrap();
-        tmp1 = tmp1.xor(
-            cs.namespace(|| format!("fourth xor {}", i)),
-            &current_md_value[4],
-        )?;
-        let tmp2 = shl_uint32(&current_md_value[2], 10);
-        current_md_value[0] = current_md_value[4].clone();
-        current_md_value[2] = current_md_value[1].clone();
-        current_md_value[4] = current_md_value[3].clone();
-        current_md_value[1] = tmp1.clone();
-        current_md_value[3] = tmp2.unwrap().clone();
-    }
-    f = ripemd_d2(
-        cs.namespace(|| "d2"),
-        &current_md_value[1],
-        &current_md_value[2],
-        &current_md_value[3],
+    current_md_value = block(
+        cs.namespace(|| "block 3"),
+        &mut current_md_value,
+        s_val,
+        i_val,
+        w.clone(),
+        3,
+        true,
     )?;
     s_val = [9, 15, 5, 11, 6, 8, 13, 12, 5, 12, 13, 14, 11, 8, 5, 6];
     i_val = [4, 0, 5, 9, 7, 12, 2, 10, 14, 1, 3, 8, 11, 6, 15, 13];
-    for i in 0..16 {
-        let mut tmp1 = current_md_value[0]
-            .xor(cs.namespace(|| format!("first xor {}", i)), &f)?
-            .xor(cs.namespace(|| format!("second xor {}", i)), &w[i_val[i]])?
-            .xor(
-                cs.namespace(|| format!("third xor {}", i)),
-                &UInt32::constant(K_BUFFER[4]),
-            )?;
-        tmp1 = shl_uint32(&tmp1, s_val[i]).unwrap();
-        tmp1 = tmp1.xor(
-            cs.namespace(|| format!("fourth xor {}", i)),
-            &current_md_value[4],
-        )?;
-        let tmp2 = shl_uint32(&current_md_value[2], 10);
-        current_md_value[0] = current_md_value[4].clone();
-        current_md_value[2] = current_md_value[1].clone();
-        current_md_value[4] = current_md_value[3].clone();
-        current_md_value[1] = tmp1.clone();
-        current_md_value[3] = tmp2.unwrap().clone();
-    }
-    Ok(vec![
+    current_md_value = block(
+        cs.namespace(|| "block 4"),
+        &mut current_md_value,
+        s_val,
+        i_val,
+        w.clone(),
+        4,
+        true,
+    )?;
+    Ok([
         current_md_value[0].clone(),
         current_md_value[1].clone(),
         current_md_value[2].clone(),
@@ -240,11 +332,11 @@ where
     ])
 }
 
-pub fn ripemd160_func_block_prime<Scalar, CS>(
+pub fn right_step<Scalar, CS>(
     cs: CS,
     input: &[Boolean],
-    current_md_value: &mut [UInt32],
-) -> Result<Vec<UInt32>, SynthesisError>
+    current_md_value: &mut [UInt32; 5],
+) -> Result<[UInt32; 5], SynthesisError>
 where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
@@ -256,144 +348,62 @@ where
         .map(UInt32::from_bits_be)
         .collect::<Vec<_>>();
     let mut cs = MultiEq::new(cs);
-    let mut f = ripemd_d2(
-        cs.namespace(|| "d2"),
-        &current_md_value[1],
-        &current_md_value[2],
-        &current_md_value[3],
-    )?;
     let mut s_val = [8, 9, 9, 11, 13, 15, 15, 5, 7, 7, 8, 11, 14, 14, 12, 6];
     let mut i_val = [5, 14, 7, 0, 9, 2, 11, 4, 13, 6, 15, 8, 1, 10, 3, 12];
-    for i in 0..16 {
-        let mut tmp1 = current_md_value[0]
-            .xor(cs.namespace(|| format!("first xor {}", i)), &f)?
-            .xor(cs.namespace(|| format!("second xor {}", i)), &w[i_val[i]])?
-            .xor(
-                cs.namespace(|| format!("third xor {}", i)),
-                &UInt32::constant(K_BUFFER_PRIME[0]),
-            )?;
-        tmp1 = shl_uint32(&tmp1, s_val[i]).unwrap();
-        tmp1 = tmp1.xor(
-            cs.namespace(|| format!("fourth xor {}", i)),
-            &current_md_value[4],
-        )?;
-        let tmp2 = shl_uint32(&current_md_value[2], 10);
-        current_md_value[0] = current_md_value[4].clone();
-        current_md_value[2] = current_md_value[1].clone();
-        current_md_value[4] = current_md_value[3].clone();
-        current_md_value[1] = tmp1.clone();
-        current_md_value[3] = tmp2.unwrap().clone()
-    }
-    f = ripemd_d1(
-        cs.namespace(|| "d1"),
-        &current_md_value[1],
-        &current_md_value[3],
-        &current_md_value[2],
+    let mut current_md_value = block(
+        cs.namespace(|| "block 0"),
+        current_md_value,
+        s_val,
+        i_val,
+        w.clone(),
+        0,
+        false,
     )?;
     s_val = [9, 13, 15, 7, 12, 8, 9, 11, 7, 7, 12, 7, 6, 15, 13, 11];
     i_val = [6, 11, 3, 7, 0, 13, 5, 10, 14, 15, 8, 12, 4, 9, 1, 2];
-    for i in 0..16 {
-        let mut tmp1 = current_md_value[0]
-            .xor(cs.namespace(|| format!("first xor {}", i)), &f)?
-            .xor(cs.namespace(|| format!("second xor {}", i)), &w[i_val[i]])?
-            .xor(
-                cs.namespace(|| format!("third xor {}", i)),
-                &UInt32::constant(K_BUFFER_PRIME[1]),
-            )?;
-        tmp1 = shl_uint32(&tmp1, s_val[i]).unwrap();
-        tmp1 = tmp1.xor(
-            cs.namespace(|| format!("fourth xor {}", i)),
-            &current_md_value[4],
-        )?;
-        let tmp2 = shl_uint32(&current_md_value[2], 10);
-        current_md_value[0] = current_md_value[4].clone();
-        current_md_value[2] = current_md_value[1].clone();
-        current_md_value[4] = current_md_value[3].clone();
-        current_md_value[1] = tmp1.clone();
-        current_md_value[3] = tmp2.unwrap().clone()
-    }
-    f = ripemd_d2(
-        cs.namespace(|| "d2"),
-        &current_md_value[3],
-        &current_md_value[1],
-        &current_md_value[2],
+    current_md_value = block(
+        cs.namespace(|| "block 1"),
+        &mut current_md_value,
+        s_val,
+        i_val,
+        w.clone(),
+        1,
+        false,
     )?;
     s_val = [9, 7, 15, 11, 8, 6, 6, 14, 12, 13, 5, 14, 13, 13, 7, 5];
     i_val = [15, 5, 1, 3, 7, 14, 6, 9, 11, 8, 12, 2, 10, 0, 4, 13];
-    for i in 0..16 {
-        let mut tmp1 = current_md_value[0]
-            .xor(cs.namespace(|| format!("first xor {}", i)), &f)?
-            .xor(cs.namespace(|| format!("second xor {}", i)), &w[i_val[i]])?
-            .xor(
-                cs.namespace(|| format!("third xor {}", i)),
-                &UInt32::constant(K_BUFFER_PRIME[2]),
-            )?;
-        tmp1 = shl_uint32(&tmp1, s_val[i]).unwrap();
-        tmp1 = tmp1.xor(
-            cs.namespace(|| format!("fourth xor {}", i)),
-            &current_md_value[4],
-        )?;
-        let tmp2 = shl_uint32(&current_md_value[2], 10);
-        current_md_value[0] = current_md_value[4].clone();
-        current_md_value[2] = current_md_value[1].clone();
-        current_md_value[4] = current_md_value[3].clone();
-        current_md_value[1] = tmp1.clone();
-        current_md_value[3] = tmp2.unwrap().clone()
-    }
-    f = ripemd_d1(
-        cs.namespace(|| "d1"),
-        &current_md_value[2],
-        &current_md_value[1],
-        &current_md_value[3],
+    current_md_value = block(
+        cs.namespace(|| "block 2"),
+        &mut current_md_value,
+        s_val,
+        i_val,
+        w.clone(),
+        2,
+        false,
     )?;
     s_val = [15, 5, 8, 11, 14, 14, 6, 14, 6, 9, 12, 9, 12, 5, 15, 8];
     i_val = [8, 6, 4, 1, 3, 11, 15, 0, 5, 12, 2, 13, 9, 7, 10, 14];
-    for i in 0..16 {
-        let mut tmp1 = current_md_value[0]
-            .xor(cs.namespace(|| format!("first xor {}", i)), &f)?
-            .xor(cs.namespace(|| format!("second xor {}", i)), &w[i_val[i]])?
-            .xor(
-                cs.namespace(|| format!("third xor {}", i)),
-                &UInt32::constant(K_BUFFER_PRIME[3]),
-            )?;
-        tmp1 = shl_uint32(&tmp1, s_val[i]).unwrap();
-        tmp1 = tmp1.xor(
-            cs.namespace(|| format!("fourth xor {}", i)),
-            &current_md_value[4],
-        )?;
-        let tmp2 = shl_uint32(&current_md_value[2], 10);
-        current_md_value[0] = current_md_value[4].clone();
-        current_md_value[2] = current_md_value[1].clone();
-        current_md_value[4] = current_md_value[3].clone();
-        current_md_value[1] = tmp1.clone();
-        current_md_value[3] = tmp2.unwrap().clone()
-    }
-    f = current_md_value[1]
-        .xor(cs.namespace(|| "first xor"), &current_md_value[2])?
-        .xor(cs.namespace(|| "second xor"), &current_md_value[3])?;
+    current_md_value = block(
+        cs.namespace(|| "block 3"),
+        &mut current_md_value,
+        s_val,
+        i_val,
+        w.clone(),
+        3,
+        false,
+    )?;
     s_val = [8, 5, 12, 9, 12, 5, 14, 6, 8, 13, 6, 5, 15, 13, 11, 11];
     i_val = [12, 15, 10, 4, 1, 5, 8, 7, 6, 2, 13, 14, 0, 3, 9, 11];
-    for i in 0..16 {
-        let mut tmp1 = current_md_value[0]
-            .xor(cs.namespace(|| format!("first xor {}", i)), &f)?
-            .xor(cs.namespace(|| format!("second xor {}", i)), &w[i_val[i]])?
-            .xor(
-                cs.namespace(|| format!("third xor {}", i)),
-                &UInt32::constant(K_BUFFER_PRIME[4]),
-            )?;
-        tmp1 = shl_uint32(&tmp1, s_val[i]).unwrap();
-        tmp1 = tmp1.xor(
-            cs.namespace(|| format!("fourth xor {}", i)),
-            &current_md_value[4],
-        )?;
-        let tmp2 = shl_uint32(&current_md_value[2], 10);
-        current_md_value[0] = current_md_value[4].clone();
-        current_md_value[2] = current_md_value[1].clone();
-        current_md_value[4] = current_md_value[3].clone();
-        current_md_value[1] = tmp1.clone();
-        current_md_value[3] = tmp2.unwrap().clone()
-    }
-    Ok(vec![
+    current_md_value = block(
+        cs.namespace(|| "block 4"),
+        &mut current_md_value,
+        s_val,
+        i_val,
+        w.clone(),
+        4,
+        false,
+    )?;
+    Ok([
         current_md_value[0].clone(),
         current_md_value[1].clone(),
         current_md_value[2].clone(),
@@ -402,3 +412,37 @@ where
     ])
 }
 
+#[cfg(test)]
+mod test {
+    use super::*;
+    use bellpepper::gadgets::multipack::bytes_to_bits;
+    use bellpepper_core::{boolean::AllocatedBit, test_cs::TestConstraintSystem};
+    use hex_literal::hex;
+    use pasta_curves::Fp;
+    use rand_core::{RngCore, SeedableRng};
+    use rand_xorshift::XorShiftRng;
+
+    #[test]
+    fn test_blank_hash() {
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let mut input_bits: Vec<_> = (0..512).map(|_| Boolean::Constant(false)).collect();
+        input_bits[0] = Boolean::Constant(true);
+        let out = ripemd160(&mut cs, &input_bits).unwrap();
+        println!("{:?}", out);
+        let out_bits = out.into_iter().flat_map(|e| e.into_bits_be());
+
+        assert!(cs.is_satisfied());
+        assert_eq!(cs.num_constraints(), 0);
+
+        // let expected = hex!("9c1185a5c5e9fc54612808977ee8f548b2258d31");
+
+        // let mut out = out_bits;
+        // for b in expected.iter() {
+        //     for i in (0..8).rev() {
+        //         let c = out.next().unwrap().get_value().unwrap();
+
+        //         assert_eq!(c, (b >> i) & 1u8 == 1u8);
+        //     }
+        // }
+    }
+}
