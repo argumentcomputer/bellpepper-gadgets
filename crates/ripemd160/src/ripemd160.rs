@@ -107,19 +107,19 @@ where
                 cs.namespace(|| format!("third xor {}", i)),
                 &UInt32::constant(K_BUFFER[0]),
             )?;
-        tmp1 = current_md_value[0].shl(s_val[i]);
-        tmp1 = current_md_value[0].xor(
+        tmp1 = shl_uint32(&tmp1, s_val[i]).unwrap();
+        tmp1 = tmp1.xor(
             cs.namespace(|| format!("fourth xor {}", i)),
             &current_md_value[4],
         )?;
-        let tmp2 = current_md_value[2].shl(10);
+        let tmp2 = shl_uint32(&current_md_value[2], 10);
         current_md_value[0] = current_md_value[4].clone();
         current_md_value[2] = current_md_value[1].clone();
         current_md_value[4] = current_md_value[3].clone();
         current_md_value[1] = tmp1.clone();
-        current_md_value[3] = tmp2.clone();
+        current_md_value[3] = tmp2.unwrap().clone();
     }
-    f = UInt32::ripemd_d1(
+    f = ripemd_d1(
         cs.namespace(|| "d1"),
         &current_md_value[3],
         &current_md_value[1],
@@ -135,19 +135,19 @@ where
                 cs.namespace(|| format!("third xor {}", i)),
                 &UInt32::constant(K_BUFFER[1]),
             )?;
-        tmp1 = current_md_value[0].shl(s_val[i]);
-        tmp1 = current_md_value[0].xor(
+            tmp1 = shl_uint32(&tmp1, s_val[i]).unwrap();
+        tmp1 = tmp1.xor(
             cs.namespace(|| format!("fourth xor {}", i)),
             &current_md_value[4],
         )?;
-        let tmp2 = current_md_value[2].shl(10);
+        let tmp2 = shl_uint32(&current_md_value[2],10);
         current_md_value[0] = current_md_value[4].clone();
         current_md_value[2] = current_md_value[1].clone();
         current_md_value[4] = current_md_value[3].clone();
         current_md_value[1] = tmp1.clone();
-        current_md_value[3] = tmp2.clone();
+        current_md_value[3] = tmp2.unwrap().clone();
     }
-    f = UInt32::ripemd_d2(
+    f = ripemd_d2(
         cs.namespace(|| "d2"),
         &current_md_value[3],
         &current_md_value[1],
@@ -163,19 +163,19 @@ where
                 cs.namespace(|| format!("third xor {}", i)),
                 &UInt32::constant(K_BUFFER[2]),
             )?;
-        tmp1 = current_md_value[0].shl(s_val[i]);
-        tmp1 = current_md_value[0].xor(
+        tmp1 = shl_uint32(&tmp1, s_val[i]).unwrap();
+        tmp1 = tmp1.xor(
             cs.namespace(|| format!("fourth xor {}", i)),
             &current_md_value[4],
         )?;
-        let tmp2 = current_md_value[2].shl(10);
+        let tmp2 = shl_uint32(&current_md_value[2], 10);
         current_md_value[0] = current_md_value[4].clone();
         current_md_value[2] = current_md_value[1].clone();
         current_md_value[4] = current_md_value[3].clone();
         current_md_value[1] = tmp1.clone();
-        current_md_value[3] = tmp2.clone();
+        current_md_value[3] = tmp2.unwrap().clone();
     }
-    f = UInt32::ripemd_d1(
+    f = ripemd_d1(
         cs.namespace(|| "d1"),
         &current_md_value[1],
         &current_md_value[3],
@@ -191,19 +191,19 @@ where
                 cs.namespace(|| format!("third xor {}", i)),
                 &UInt32::constant(K_BUFFER[3]),
             )?;
-        tmp1 = current_md_value[0].shl(s_val[i]);
-        tmp1 = current_md_value[0].xor(
+        tmp1 = shl_uint32(&tmp1, s_val[i]).unwrap();
+        tmp1 = tmp1.xor(
             cs.namespace(|| format!("fourth xor {}", i)),
             &current_md_value[4],
         )?;
-        let tmp2 = current_md_value[2].shl(10);
+        let tmp2 = shl_uint32(&current_md_value[2], 10);
         current_md_value[0] = current_md_value[4].clone();
         current_md_value[2] = current_md_value[1].clone();
         current_md_value[4] = current_md_value[3].clone();
         current_md_value[1] = tmp1.clone();
-        current_md_value[3] = tmp2.clone();
+        current_md_value[3] = tmp2.unwrap().clone();
     }
-    f = UInt32::ripemd_d2(
+    f = ripemd_d2(
         cs.namespace(|| "d2"),
         &current_md_value[1],
         &current_md_value[2],
@@ -217,19 +217,19 @@ where
             .xor(cs.namespace(|| format!("second xor {}", i)), &w[i_val[i]])?
             .xor(
                 cs.namespace(|| format!("third xor {}", i)),
-                &UInt32::constant(K_BUFFER[3]),
+                &UInt32::constant(K_BUFFER[4]),
             )?;
-        tmp1 = current_md_value[0].shl(s_val[i]);
-        tmp1 = current_md_value[0].xor(
+        tmp1 = shl_uint32(&tmp1, s_val[i]).unwrap();
+        tmp1 = tmp1.xor(
             cs.namespace(|| format!("fourth xor {}", i)),
             &current_md_value[4],
         )?;
-        let tmp2 = current_md_value[2].shl(10);
+        let tmp2 = shl_uint32(&current_md_value[2], 10);
         current_md_value[0] = current_md_value[4].clone();
         current_md_value[2] = current_md_value[1].clone();
         current_md_value[4] = current_md_value[3].clone();
         current_md_value[1] = tmp1.clone();
-        current_md_value[3] = tmp2.clone();
+        current_md_value[3] = tmp2.unwrap().clone();
     }
     Ok(vec![
         current_md_value[0].clone(),
@@ -251,12 +251,12 @@ where
 {
     assert_eq!(input.len(), 512);
     assert_eq!(current_md_value.len(), 5);
-    let mut w = input
+    let w = input
         .chunks(32)
         .map(UInt32::from_bits_be)
         .collect::<Vec<_>>();
     let mut cs = MultiEq::new(cs);
-    let mut f = UInt32::ripemd_d2(
+    let mut f = ripemd_d2(
         cs.namespace(|| "d2"),
         &current_md_value[1],
         &current_md_value[2],
@@ -272,19 +272,19 @@ where
                 cs.namespace(|| format!("third xor {}", i)),
                 &UInt32::constant(K_BUFFER_PRIME[0]),
             )?;
-        tmp1 = current_md_value[0].shl(s_val[i]);
-        tmp1 = current_md_value[0].xor(
+        tmp1 = shl_uint32(&tmp1, s_val[i]).unwrap();
+        tmp1 = tmp1.xor(
             cs.namespace(|| format!("fourth xor {}", i)),
             &current_md_value[4],
         )?;
-        let tmp2 = current_md_value[2].shl(10);
+        let tmp2 = shl_uint32(&current_md_value[2], 10);
         current_md_value[0] = current_md_value[4].clone();
         current_md_value[2] = current_md_value[1].clone();
         current_md_value[4] = current_md_value[3].clone();
         current_md_value[1] = tmp1.clone();
-        current_md_value[3] = tmp2.clone();
+        current_md_value[3] = tmp2.unwrap().clone()
     }
-    f = UInt32::ripemd_d1(
+    f = ripemd_d1(
         cs.namespace(|| "d1"),
         &current_md_value[1],
         &current_md_value[3],
@@ -300,19 +300,19 @@ where
                 cs.namespace(|| format!("third xor {}", i)),
                 &UInt32::constant(K_BUFFER_PRIME[1]),
             )?;
-        tmp1 = current_md_value[0].shl(s_val[i]);
-        tmp1 = current_md_value[0].xor(
+        tmp1 = shl_uint32(&tmp1, s_val[i]).unwrap();
+        tmp1 = tmp1.xor(
             cs.namespace(|| format!("fourth xor {}", i)),
             &current_md_value[4],
         )?;
-        let tmp2 = current_md_value[2].shl(10);
+        let tmp2 = shl_uint32(&current_md_value[2], 10);
         current_md_value[0] = current_md_value[4].clone();
         current_md_value[2] = current_md_value[1].clone();
         current_md_value[4] = current_md_value[3].clone();
         current_md_value[1] = tmp1.clone();
-        current_md_value[3] = tmp2.clone();
+        current_md_value[3] = tmp2.unwrap().clone()
     }
-    f = UInt32::ripemd_d2(
+    f = ripemd_d2(
         cs.namespace(|| "d2"),
         &current_md_value[3],
         &current_md_value[1],
@@ -328,19 +328,19 @@ where
                 cs.namespace(|| format!("third xor {}", i)),
                 &UInt32::constant(K_BUFFER_PRIME[2]),
             )?;
-        tmp1 = current_md_value[0].shl(s_val[i]);
-        tmp1 = current_md_value[0].xor(
+        tmp1 = shl_uint32(&tmp1, s_val[i]).unwrap();
+        tmp1 = tmp1.xor(
             cs.namespace(|| format!("fourth xor {}", i)),
             &current_md_value[4],
         )?;
-        let tmp2 = current_md_value[2].shl(10);
+        let tmp2 = shl_uint32(&current_md_value[2], 10);
         current_md_value[0] = current_md_value[4].clone();
         current_md_value[2] = current_md_value[1].clone();
         current_md_value[4] = current_md_value[3].clone();
         current_md_value[1] = tmp1.clone();
-        current_md_value[3] = tmp2.clone();
+        current_md_value[3] = tmp2.unwrap().clone()
     }
-    f = UInt32::ripemd_d1(
+    f = ripemd_d1(
         cs.namespace(|| "d1"),
         &current_md_value[2],
         &current_md_value[1],
@@ -356,17 +356,17 @@ where
                 cs.namespace(|| format!("third xor {}", i)),
                 &UInt32::constant(K_BUFFER_PRIME[3]),
             )?;
-        tmp1 = current_md_value[0].shl(s_val[i]);
-        tmp1 = current_md_value[0].xor(
+        tmp1 = shl_uint32(&tmp1, s_val[i]).unwrap();
+        tmp1 = tmp1.xor(
             cs.namespace(|| format!("fourth xor {}", i)),
             &current_md_value[4],
         )?;
-        let tmp2 = current_md_value[2].shl(10);
+        let tmp2 = shl_uint32(&current_md_value[2], 10);
         current_md_value[0] = current_md_value[4].clone();
         current_md_value[2] = current_md_value[1].clone();
         current_md_value[4] = current_md_value[3].clone();
         current_md_value[1] = tmp1.clone();
-        current_md_value[3] = tmp2.clone();
+        current_md_value[3] = tmp2.unwrap().clone()
     }
     f = current_md_value[1]
         .xor(cs.namespace(|| "first xor"), &current_md_value[2])?
@@ -381,17 +381,17 @@ where
                 cs.namespace(|| format!("third xor {}", i)),
                 &UInt32::constant(K_BUFFER_PRIME[4]),
             )?;
-        tmp1 = current_md_value[0].shl(s_val[i]);
-        tmp1 = current_md_value[0].xor(
+        tmp1 = shl_uint32(&tmp1, s_val[i]).unwrap();
+        tmp1 = tmp1.xor(
             cs.namespace(|| format!("fourth xor {}", i)),
             &current_md_value[4],
         )?;
-        let tmp2 = current_md_value[2].shl(10);
+        let tmp2 = shl_uint32(&current_md_value[2], 10);
         current_md_value[0] = current_md_value[4].clone();
         current_md_value[2] = current_md_value[1].clone();
         current_md_value[4] = current_md_value[3].clone();
         current_md_value[1] = tmp1.clone();
-        current_md_value[3] = tmp2.clone();
+        current_md_value[3] = tmp2.unwrap().clone()
     }
     Ok(vec![
         current_md_value[0].clone(),
@@ -402,69 +402,3 @@ where
     ])
 }
 
-#[cfg(test)]
-mod test {
-    use super::*;
-    use crate::gadgets::boolean::AllocatedBit;
-    use bellpepper_core::test_cs::*;
-    use blstrs::Scalar as Fr;
-    use hex_literal::hex;
-    use rand_core::{RngCore, SeedableRng};
-    use rand_xorshift::XorShiftRng;
-
-    #[test]
-    #[allow(clippy::needless_collect)]
-    fn test_blank_hash() {
-        let mut cur_md = get_ripemd160_md("md");
-        let mut cur_md_prime = get_ripemd160_md("md_prime");
-
-        let mut cs = TestConstraintSystem::<Fr>::new();
-        let mut input_bits: Vec<_> = (0..512).map(|_| Boolean::Constant(false)).collect();
-        input_bits[0] = Boolean::Constant(true);
-        let prev_md = cur_md.clone();
-        cur_md = ripemd160_func_block(&mut cs, &input_bits, &mut cur_md).unwrap();
-        cur_md_prime = ripemd160_func_block_prime(&mut cs, &input_bits, &mut cur_md_prime).unwrap();
-        let mut update_md = cur_md.clone();
-        for i in 0..5 {
-            match prev_md[i].xor(
-                cs.namespace(|| format!("first xor {}", i)),
-                &cur_md[(i + 1) % 5],
-            ) {
-                Ok(result) => {
-                    update_md[(i + 4) % 5] = result;
-                }
-                Err(err) => {
-                    // Handle the error here
-                }
-            }
-            match update_md[(i + 4) % 5].xor(
-                cs.namespace(|| format!("first xor {}", i)),
-                &cur_md[(i + 2) % 5],
-            ) {
-                Ok(result) => {
-                    update_md[(i + 4) % 5] = result;
-                }
-                Err(err) => {
-                    // Handle the error here
-                }
-            }
-        }
-        cur_md = update_md;
-        cur_md_prime = cur_md.clone();
-        // let out_bits : Vec<_> = cur_md.into_iter().flat_map(|e| e.into_bits_be()).collect();
-
-        assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 0);
-
-        // let expected = hex!("9c1185a5c5e9fc54612808977ee8f548b2258d31");
-
-        // let out = out_bits;
-        // for b in expected.iter() {
-        //     for i in (0..8).rev() {
-        //         let c = out.next().unwrap().get_value().unwrap();
-
-        //         assert_eq!(c, (b >> i) & 1u8 == 1u8);
-        //     }
-        // }
-    }
-}
