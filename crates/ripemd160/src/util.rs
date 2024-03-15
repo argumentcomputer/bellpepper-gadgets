@@ -14,7 +14,7 @@ where
 {
     let d1_value = match (a.get_value(), b.get_value(), c.get_value()) {
         (Some(a), Some(b), Some(c)) => {
-            // (a and b) xor (a and c) xor (b and c)
+            // (a and b) or (c and not(b))
             Some((a & b) | (c & !b))
         }
         _ => None,
@@ -28,49 +28,47 @@ where
         }
         (&Boolean::Constant(false), b, c) => {
             // If a is false,
-            // (a and b) xor (a and c) xor (b and c)
+            // (a and b) or (c and not(b))
             // equals
-            // (b and c)
+            // (c and not(b))
             return Boolean::and(cs, &b.not(), c);
         }
         (_a, &Boolean::Constant(false), c) => {
             // If b is false,
-            // (a and b) xor (a and c) xor (b and c)
+            // (a and b) or (c and not(b))
             // equals
             // (a and c)
             return Ok(c.clone());
         }
         (a, b, &Boolean::Constant(false)) => {
             // If c is false,
-            // (a and b) xor (a and c) xor (b and c)
+            // (a and b) or (c and not(b))
             // equals
             // (a and b)
             return Boolean::and(cs, a, b);
         }
         (a, b, &Boolean::Constant(true)) => {
             // If c is true,
-            // (a and b) xor (a and c) xor (b and c)
+            // (a and b) or (c and not(b))
             // equals
-            // (a and b) xor (a) xor (b)
-            // equals
-            // not ((not a) and (not b))
-
-            return Ok(Boolean::and(cs, &a.not(), b)?.not());
+            // (a or not(b))
+            return Boolean::or(cs, a, &b.not());
         }
         (a, &Boolean::Constant(true), _c) => {
             // If b is true,
-            // (a and b) xor (a and c) xor (b and c)
+            // (a and b) or (c and not(b))
             // equals
-            // (a) xor (a and c) xor (c)
+            // (a and true) or (false)
+            // equals
+            // a
             return Ok(a.clone());
         }
         (&Boolean::Constant(true), b, c) => {
             // If a is true,
-            // (a and b) xor (a and c) xor (b and c)
+            // (a and b) or (c and not(b))
             // equals
             // (b) xor (c) xor (b and c)
-
-            return Ok(Boolean::and(cs, &b.not(), &c.not())?.not());
+            return Boolean::or(cs, b, c);
         }
         (
             &Boolean::Is(_) | &Boolean::Not(_),
@@ -92,11 +90,16 @@ where
         },
     )?;
 
+    // (a and b) or (c and not(b)) = d1
+    // ab + c(1-b) = d1
+    // b(a - c) = d1 - c
+    // (c - a)b = c - d1
+
     cs.enforce(
         || "d1 computation",
-        |_| a.lc(CS::one(), Scalar::ONE) - &c.lc(CS::one(), Scalar::ONE),
+        |_| c.lc(CS::one(), Scalar::ONE) - &a.lc(CS::one(), Scalar::ONE),
         |_| b.lc(CS::one(), Scalar::ONE),
-        |lc| lc + d1 - &c.lc(CS::one(), Scalar::ONE),
+        |_| c.lc(CS::one(), Scalar::ONE) - d1,
     );
 
     Ok(AllocatedBit::alloc(cs.namespace(|| "d1"), d1_value)
@@ -116,7 +119,7 @@ where
 {
     let d2_value = match (a.get_value(), b.get_value(), c.get_value()) {
         (Some(a), Some(b), Some(c)) => {
-            // (a)xor(b or not(c))
+            // (a) xor (b or not(c))
             Some((a) ^ (b | !c))
         }
         _ => None,
@@ -130,48 +133,48 @@ where
         }
         (&Boolean::Constant(false), b, c) => {
             // If a is false,
-            // (a and b) xor (a and c) xor (b and c)
+            // (a) xor (b or not(c))
             // equals
-            // (b and c)
-            return Ok(Boolean::and(cs, c, &b.not())?.not());
+            // (b or not(c))
+            return Boolean::or(cs, b, &c.not());
         }
         (a, &Boolean::Constant(false), c) => {
             // If b is false,
-            // (a and b) xor (a and c) xor (b and c)
+            // (a) xor (b or not(c))
             // equals
-            // (a and c)
-
+            // (a xor not(c))
             return Boolean::xor(cs, a, &c.not());
         }
         (a, _b, &Boolean::Constant(false)) => {
             // If c is false,
-            // (a and b) xor (a and c) xor (b and c)
+            // (a) xor (b or not(c))
             // equals
-            // (a and b)
-            return Ok(Boolean::and(cs, a, a)?.not());
+            // (a) xor (true)
+            // equals
+            // not a
+            return Ok(a.not());
         }
         (a, b, &Boolean::Constant(true)) => {
             // If c is true,
-            // (a and b) xor (a and c) xor (b and c)
+            // (a) xor (b or not(c))
             // equals
-            // (a and b) xor (a) xor (b)
-            // equals
-            // not ((not a) and (not b))
-
+            // (a) xor (b)
             return Boolean::xor(cs, a, b);
         }
         (a, &Boolean::Constant(true), _c) => {
             // If b is true,
-            // (a and b) xor (a and c) xor (b and c)
+            // (a) xor (b or not(c))
             // equals
-            // (a) xor (a and c) xor (c)
-            return Ok(Boolean::and(cs, a, a)?.not());
+            // (a) xor (true)
+            // equals
+            // not a
+            return Ok(a.not());
         }
         (&Boolean::Constant(true), b, c) => {
             // If a is true,
-            // (a and b) xor (a and c) xor (b and c)
+            // (a) xor (b or not(c))
             // equals
-            // (b) xor (c) xor (b and c)
+            // (not(b) and c)
             return Boolean::and(cs, c, &b.not());
         }
         (
@@ -194,20 +197,28 @@ where
         },
     )?;
 
-    let notbc = Boolean::and(cs.namespace(|| "not b and c"), &b.not(), c)?;
+    // (a) xor (b or not(c)) = d2
+    // (not a) * (b + (1 - c)) + (a) * (1 - b) * (c)
+    // 2ac - abc - ab - a - c + 1 + b = d2
+    // b * (a + ac) = 2ac - a - c + 1 + b - d2
+
+    let ac = Boolean::and(cs.namespace(|| "(a and c)"), a, c)?;
 
     cs.enforce(
         || "d2 computation",
-        |lc| lc + CS::one() - &a.lc(CS::one(), Scalar::ONE),
+        |_| a.lc(CS::one(), Scalar::ONE) + &ac.lc(CS::one(), Scalar::ONE),
+        |_| b.lc(CS::one(), Scalar::ONE),
         |lc| {
             lc + CS::one() + &b.lc(CS::one(), Scalar::ONE)
                 - &c.lc(CS::one(), Scalar::ONE)
-                - &notbc.lc(CS::one(), Scalar::ONE)
+                - &a.lc(CS::one(), Scalar::ONE)
+                + &ac.lc(CS::one(), Scalar::ONE)
+                + &ac.lc(CS::one(), Scalar::ONE)
+                - d2
         },
-        |lc| lc + d2 - &notbc.lc(CS::one(), Scalar::ONE),
     );
 
-    Ok(AllocatedBit::alloc(cs.namespace(|| "d2"), d2_value)
+    Ok(AllocatedBit::alloc(cs.namespace(|| "d2_alloc"), d2_value)
         .unwrap()
         .into())
 }

@@ -25,7 +25,7 @@ const K_BUFFER_PRIME: [u32; 5] = [0x50a28be6, 0x5c4dd124, 0x6d703ef3, 0x7a6d76e9
 pub fn ripemd160<Scalar, CS>(
     cs: CS,
     input: &[Boolean],
-) -> Result<[UInt32; 5], bellpepper_core::SynthesisError>
+) -> Result<[Boolean; 160], bellpepper_core::SynthesisError>
 where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
@@ -68,7 +68,13 @@ where
         cur_md_prime = cur_md.clone();
     }
     let array_data: Result<[UInt32; 5], _> = cur_md.try_into();
-    Ok(array_data.unwrap())
+    Ok(array_data
+        .unwrap()
+        .into_iter()
+        .flat_map(|e| e.into_bits_be())
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap())
 }
 
 fn combine_left_and_right<Scalar, CS>(
@@ -423,20 +429,27 @@ mod test {
     use rand_xorshift::XorShiftRng;
 
     #[test]
-    fn test_blank_hash() {
+    fn test_hash_abcde_string() {
+        let msg = "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq".as_bytes();
+        let msg_bits = bytes_to_bits(msg);
+
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let mut input_bits: Vec<_> = (0..512).map(|_| Boolean::Constant(false)).collect();
-        input_bits[0] = Boolean::Constant(true);
-        let out = ripemd160(&mut cs, &input_bits).unwrap();
-        println!("{:?}", out);
-        let out_bits = out.into_iter().flat_map(|e| e.into_bits_be());
+        let input_bits: Vec<Boolean> = msg_bits
+            .into_iter()
+            .enumerate()
+            .map(|(i, b)| {
+                Boolean::from(
+                    AllocatedBit::alloc(cs.namespace(|| format!("input bit {}", i)), Some(b))
+                        .unwrap(),
+                )
+            })
+            .collect();
 
+        let out_bits = ripemd160(cs.namespace(|| "ripemd160"), &input_bits).unwrap();
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 0);
 
-        // let expected = hex!("9c1185a5c5e9fc54612808977ee8f548b2258d31");
-
-        // let mut out = out_bits;
+        // let expected = hex!("84983e441c3bd26ebaae4aa1f95129e5e54670f1");
+        // let mut out = out_bits.iter();
         // for b in expected.iter() {
         //     for i in (0..8).rev() {
         //         let c = out.next().unwrap().get_value().unwrap();
