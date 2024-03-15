@@ -429,8 +429,8 @@ mod test {
     use rand_xorshift::XorShiftRng;
 
     #[test]
-    fn test_hash_abcde_string() {
-        let msg = "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq".as_bytes();
+    fn test_single_char_hash() {
+        let msg = "a".as_bytes();
         let msg_bits = bytes_to_bits(msg);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
@@ -448,14 +448,14 @@ mod test {
         let out_bits = ripemd160(cs.namespace(|| "ripemd160"), &input_bits).unwrap();
         assert!(cs.is_satisfied());
 
-        // let expected = hex!("84983e441c3bd26ebaae4aa1f95129e5e54670f1");
-        // let mut out = out_bits.iter();
-        // for b in expected.iter() {
-        //     for i in (0..8).rev() {
-        //         let c = out.next().unwrap().get_value().unwrap();
+        let expected = hex!("0bdc9d2d256b3ee9daae347be6f4dc835a467ffe");
+        let mut out = out_bits.iter();
+        for b in expected.iter() {
+            for i in (0..8).rev() {
+                let c = out.next().unwrap().get_value().unwrap();
 
-        //         assert_eq!(c, (b >> i) & 1u8 == 1u8);
-        //     }
-        // }
+                assert_eq!(c, (b >> i) & 1u8 == 1u8);
+            }
+        }
     }
 }

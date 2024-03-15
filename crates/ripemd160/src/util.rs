@@ -102,7 +102,7 @@ where
         |_| c.lc(CS::one(), Scalar::ONE) - d1,
     );
 
-    Ok(AllocatedBit::alloc(cs.namespace(|| "d1"), d1_value)
+    Ok(AllocatedBit::alloc(cs.namespace(|| "d1_alloc"), d1_value)
         .unwrap()
         .into())
 }
@@ -206,8 +206,8 @@ where
 
     cs.enforce(
         || "d2 computation",
-        |_| a.lc(CS::one(), Scalar::ONE) + &ac.lc(CS::one(), Scalar::ONE),
         |_| b.lc(CS::one(), Scalar::ONE),
+        |_| a.lc(CS::one(), Scalar::ONE) + &ac.lc(CS::one(), Scalar::ONE),
         |lc| {
             lc + CS::one() + &b.lc(CS::one(), Scalar::ONE)
                 - &c.lc(CS::one(), Scalar::ONE)
