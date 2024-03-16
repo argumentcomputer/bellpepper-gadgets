@@ -48,16 +48,16 @@ where
     let mut cs = MultiEq::new(cs);
     for (i, block) in padded.chunks(512).enumerate() {
         let prev_md = cur_md.clone();
-        cur_md = left_step(
+        left_step(
             cs.namespace(|| format!("left_step {}", i)),
             block,
             &mut cur_md,
-        )?;
-        cur_md_prime = right_step(
+        );
+        right_step(
             cs.namespace(|| format!("right_step {}", i)),
             block,
             &mut cur_md_prime,
-        )?;
+        );
         cur_md = combine_left_and_right(
             cs.namespace(|| format!("combine_left_and_right_step {}", i)),
             cur_md,
@@ -272,7 +272,7 @@ pub fn left_step<Scalar, CS>(
     cs: CS,
     input: &[Boolean],
     current_md_value: &mut [UInt32; 5],
-) -> Result<[UInt32; 5], SynthesisError>
+)
 where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
@@ -338,20 +338,13 @@ where
         4,
         true,
     );
-    Ok([
-        current_md_value[0].clone(),
-        current_md_value[1].clone(),
-        current_md_value[2].clone(),
-        current_md_value[3].clone(),
-        current_md_value[4].clone(),
-    ])
 }
 
 pub fn right_step<Scalar, CS>(
     cs: CS,
     input: &[Boolean],
     current_md_value: &mut [UInt32; 5],
-) -> Result<[UInt32; 5], SynthesisError>
+)
 where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
@@ -417,13 +410,6 @@ where
         4,
         false,
     );
-    Ok([
-        current_md_value[0].clone(),
-        current_md_value[1].clone(),
-        current_md_value[2].clone(),
-        current_md_value[3].clone(),
-        current_md_value[4].clone(),
-    ])
 }
 
 #[cfg(test)]
