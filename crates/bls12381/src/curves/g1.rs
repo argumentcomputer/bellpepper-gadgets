@@ -27,20 +27,22 @@ where
     }
 }
 
-impl<F> From<&G1Point<F>> for G1Affine
+impl<F> TryFrom<&G1Point<F>> for G1Affine
 where
     F: PrimeFieldBits,
 {
-    fn from(value: &G1Point<F>) -> Self {
-        let x = BlsFp::from(&value.x);
-        let y = BlsFp::from(&value.x);
+    type Error = SynthesisError;
+
+    fn try_from(value: &G1Point<F>) -> Result<Self, Self::Error> {
+        let x = BlsFp::try_from(&value.x)?;
+        let y = BlsFp::try_from(&value.y)?;
         let z = if x.is_zero().into() && y.is_zero().into() {
             BlsFp::zero()
         } else {
             BlsFp::one()
         };
         let proj = G1Projective { x, y, z };
-        Self::from(proj)
+        Ok(Self::from(proj))
     }
 }
 
@@ -53,14 +55,18 @@ impl<F: PrimeFieldBits> G1Point<F> {
         }
     }
 
-    pub fn alloc_element<CS>(cs: &mut CS, value: &G1Affine) -> Result<Self, SynthesisError>
+    pub fn alloc_element<CS>(cs: &mut CS, value: &Option<G1Affine>) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
-        let (x, y) = if value.is_identity().into() {
-            (BlsFp::zero(), BlsFp::zero())
+        let (x, y) = if let Some(value) = value {
+            if value.is_identity().into() {
+                (Some(BlsFp::zero()), Some(BlsFp::zero()))
+            } else {
+                (Some(value.x), Some(value.y))
+            }
         } else {
-            (value.x, value.y)
+            (None, None)
         };
         let x = FpElement::<F>::alloc_element(&mut cs.namespace(|| "allocate x (g1)"), &x)?;
         let y = FpElement::<F>::alloc_element(&mut cs.namespace(|| "allocate y (g1)"), &y)?;
@@ -573,9 +579,9 @@ mod tests {
         let c = G1Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
+        let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.add(&mut cs.namespace(|| "a+b"), &b_alloc).unwrap();
         G1Point::assert_is_equal(&mut cs.namespace(|| "a+b = c"), &res_alloc, &c_alloc).unwrap();
         if !cs.is_satisfied() {
@@ -600,12 +606,13 @@ mod tests {
         let d = G1Affine::from(d);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
-        let d_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc d"), &d).unwrap();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
+        let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
+        let d_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc d"), &Some(d)).unwrap();
         let z_alloc =
-            G1Point::alloc_element(&mut cs.namespace(|| "alloc z"), &G1Affine::identity()).unwrap();
+            G1Point::alloc_element(&mut cs.namespace(|| "alloc z"), &Some(G1Affine::identity()))
+                .unwrap();
         let res1_alloc = a_alloc
             .add_unified(&mut cs.namespace(|| "a+b"), &b_alloc)
             .unwrap();
@@ -642,12 +649,13 @@ mod tests {
         let c = G1Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
+        let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         // alloc it so it's not a constant
         let z_alloc =
-            G1Point::alloc_element(&mut cs.namespace(|| "alloc 0"), &G1Affine::identity()).unwrap();
+            G1Point::alloc_element(&mut cs.namespace(|| "alloc 0"), &Some(G1Affine::identity()))
+                .unwrap();
         G1Point::assert_addition(
             &mut cs.namespace(|| "assert_addition(a, b, c)"),
             &a_alloc,
@@ -697,8 +705,8 @@ mod tests {
         let c = G1Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.neg(&mut cs.namespace(|| "a.neg()")).unwrap();
         G1Point::assert_is_equal(&mut cs.namespace(|| "a.neg() = c"), &res_alloc, &c_alloc)
             .unwrap();
@@ -720,8 +728,8 @@ mod tests {
         let c = G1Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.triple(&mut cs.namespace(|| "a.triple()")).unwrap();
         G1Point::assert_is_equal(&mut cs.namespace(|| "a.triple() = c"), &res_alloc, &c_alloc)
             .unwrap();
@@ -743,8 +751,8 @@ mod tests {
         let c = G1Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.double(&mut cs.namespace(|| "a.double()")).unwrap();
         G1Point::assert_is_equal(&mut cs.namespace(|| "a.double() = c"), &res_alloc, &c_alloc)
             .unwrap();
@@ -768,9 +776,9 @@ mod tests {
         let c = G1Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
+        let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.sub(&mut cs.namespace(|| "a-b"), &b_alloc).unwrap();
         G1Point::assert_is_equal(&mut cs.namespace(|| "a-b = c"), &res_alloc, &c_alloc).unwrap();
         if !cs.is_satisfied() {
@@ -793,9 +801,9 @@ mod tests {
         let c = G1Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
+        let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc
             .double_and_add(&mut cs.namespace(|| "a.double_and_add(b)"), &b_alloc)
             .unwrap();
@@ -821,8 +829,8 @@ mod tests {
         let b = G1Affine::from(G1Projective::random(&mut rng));
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
         let neg_a = a_alloc.neg(&mut cs.namespace(|| "-a")).unwrap();
         let res_alloc = a_alloc
             .add_unified(&mut cs.namespace(|| "a-a"), &neg_a)
@@ -868,8 +876,8 @@ mod tests {
         let c = G1Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc
             .scalar_mul_by_seed_square(&mut cs.namespace(|| "a.mul_by_seed_square()"))
             .unwrap();
@@ -895,7 +903,7 @@ mod tests {
         let a = G1Affine::from(G1Projective::generator() * n);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
         a_alloc
             .assert_subgroup_check(&mut cs.namespace(|| "a.subgroup_check()"))
             .unwrap();
@@ -911,7 +919,7 @@ mod tests {
     #[test]
     fn test_random_subgroup_check_negative() {
         use crate::curves::params::EmulatedCurveParams;
-        let b = BlsFp::from(&Bls12381G1Params::<Fp>::b());
+        let b = BlsFp::try_from(&Bls12381G1Params::<Fp>::b()).unwrap();
         use rand::RngCore;
         let mut rng = rand::thread_rng();
         let mut random_point = || loop {
@@ -932,7 +940,7 @@ mod tests {
         }
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
         a_alloc
             .assert_subgroup_check(&mut cs.namespace(|| "a.subgroup_check()"))
             .unwrap();
@@ -949,8 +957,8 @@ mod tests {
         let c = bls12_381::g1::endomorphism(&a);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc = G1Point::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.phi(&mut cs.namespace(|| "a.phi()")).unwrap();
         G1Point::assert_is_equal(&mut cs.namespace(|| "a.phi() = c"), &res_alloc, &c_alloc)
             .unwrap();

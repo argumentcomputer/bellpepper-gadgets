@@ -35,31 +35,35 @@ where
     }
 }
 
-impl<F> From<&G2Point<F>> for G2Affine
+impl<F> TryFrom<&G2Point<F>> for G2Affine
 where
     F: PrimeFieldBits,
 {
-    fn from(value: &G2Point<F>) -> Self {
-        let x = BlsFp2::from(&value.x);
-        let y = BlsFp2::from(&value.x);
+    type Error = SynthesisError;
+
+    fn try_from(value: &G2Point<F>) -> Result<Self, Self::Error> {
+        let x = BlsFp2::try_from(&value.x)?;
+        let y = BlsFp2::try_from(&value.y)?;
         let z = if x.is_zero().into() && y.is_zero().into() {
             BlsFp2::zero()
         } else {
             BlsFp2::one()
         };
         let proj = G2Projective { x, y, z };
-        Self::from(proj)
+        Ok(Self::from(proj))
     }
 }
 
 impl<F: PrimeFieldBits> G2Point<F> {
-    pub fn alloc_element<CS>(cs: &mut CS, value: &G2Affine) -> Result<Self, SynthesisError>
+    pub fn alloc_element<CS>(cs: &mut CS, value: &Option<G2Affine>) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
+        let vx = value.map(|v| v.x);
+        let vy = value.map(|v| v.y);
         // (0,0) is the point at infinity
-        let x = Fp2Element::<F>::alloc_element(&mut cs.namespace(|| "allocate x (g2)"), &value.x)?;
-        let y = Fp2Element::<F>::alloc_element(&mut cs.namespace(|| "allocate y (g2)"), &value.y)?;
+        let x = Fp2Element::<F>::alloc_element(&mut cs.namespace(|| "allocate x (g2)"), &vx)?;
+        let y = Fp2Element::<F>::alloc_element(&mut cs.namespace(|| "allocate y (g2)"), &vy)?;
 
         Ok(Self { x, y })
     }
@@ -519,8 +523,8 @@ impl<F: PrimeFieldBits> G2Point<F> {
 
         assert_eq!(&c1 % 16, BigInt::zero(), "p^2 + 7 divisible by 16");
 
-        let gx0_n = BlsFp2::from(&gx0);
-        let gx1_n = BlsFp2::from(&gx1);
+        let gx0_n = BlsFp2::try_from(&gx0)?;
+        let gx1_n = BlsFp2::try_from(&gx1)?;
         let sqrt_candidate0 = fp2_pow_vartime(&gx0_n, &c2);
 
         // -1 is a square in Fp2 (because p^2 - 1 is even) so we only need to check half of the 8th roots of unity
@@ -550,7 +554,7 @@ impl<F: PrimeFieldBits> G2Point<F> {
         // square root of gX1 must be = sqrt_candidate * t^3 * eta
         // for one of four precomputed values of eta
         // eta determined by eta^2 = xi^3 * (-1)^{-1/4}
-        let t_native = BlsFp2::from(t);
+        let t_native = BlsFp2::try_from(t)?;
         let t3 = t_native * t_native * t_native;
         let sqrt_candidate1 = sqrt_candidate0 * t3;
 
@@ -598,8 +602,10 @@ impl<F: PrimeFieldBits> G2Point<F> {
         if y_sgn0 != t_sgn0 {
             outy_val = outy_val.neg();
         }
-        let outy =
-            Fp2Element::alloc_element(&mut cs.namespace(|| "alloc outy <- outy_val"), &outy_val)?;
+        let outy = Fp2Element::alloc_element(
+            &mut cs.namespace(|| "alloc outy <- outy_val"),
+            &Some(outy_val),
+        )?;
 
         // enforce that Y^2 = g(X)
         let y_sq = outy.square(&mut cs.namespace(|| "y_sq <- outy.square()"))?;
@@ -837,9 +843,9 @@ mod tests {
         let c = G2Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
+        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.add(&mut cs.namespace(|| "a+b"), &b_alloc).unwrap();
         G2Point::assert_is_equal(&mut cs.namespace(|| "a+b = c"), &res_alloc, &c_alloc).unwrap();
         if !cs.is_satisfied() {
@@ -860,8 +866,8 @@ mod tests {
         let c = G2Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.neg(&mut cs.namespace(|| "a.neg()")).unwrap();
         G2Point::assert_is_equal(&mut cs.namespace(|| "a.neg() = c"), &res_alloc, &c_alloc)
             .unwrap();
@@ -883,8 +889,8 @@ mod tests {
         let c = G2Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.triple(&mut cs.namespace(|| "a.triple()")).unwrap();
         G2Point::assert_is_equal(&mut cs.namespace(|| "a.triple() = c"), &res_alloc, &c_alloc)
             .unwrap();
@@ -906,8 +912,8 @@ mod tests {
         let c = G2Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.double(&mut cs.namespace(|| "a.double()")).unwrap();
         G2Point::assert_is_equal(&mut cs.namespace(|| "a.double() = c"), &res_alloc, &c_alloc)
             .unwrap();
@@ -931,9 +937,9 @@ mod tests {
         let c = G2Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
+        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.sub(&mut cs.namespace(|| "a-b"), &b_alloc).unwrap();
         G2Point::assert_is_equal(&mut cs.namespace(|| "a-b = c"), &res_alloc, &c_alloc).unwrap();
         if !cs.is_satisfied() {
@@ -956,9 +962,9 @@ mod tests {
         let c = G2Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
+        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc
             .double_and_add(&mut cs.namespace(|| "a.double_and_add(b)"), &b_alloc)
             .unwrap();
@@ -988,8 +994,8 @@ mod tests {
         let c = G2Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc
             .scalar_mul_by_seed(&mut cs.namespace(|| "a.mul_by_seed()"))
             .unwrap();
@@ -1015,7 +1021,7 @@ mod tests {
         let a = G2Affine::from(G2Projective::generator() * n);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
         a_alloc
             .assert_subgroup_check(&mut cs.namespace(|| "a.subgroup_check()"))
             .unwrap();
@@ -1037,8 +1043,8 @@ mod tests {
         let c = G2Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.psi2(&mut cs.namespace(|| "a.psi2()")).unwrap();
         G2Point::assert_is_equal(&mut cs.namespace(|| "a.psi2() = c"), &res_alloc, &c_alloc)
             .unwrap();
@@ -1060,8 +1066,8 @@ mod tests {
         let c = G2Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.psi(&mut cs.namespace(|| "a.psi()")).unwrap();
         G2Point::assert_is_equal(&mut cs.namespace(|| "a.psi() = c"), &res_alloc, &c_alloc)
             .unwrap();
@@ -1083,8 +1089,8 @@ mod tests {
         let c = G2Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc
             .clear_cofactor(&mut cs.namespace(|| "a.clear_cofactor()"))
             .unwrap();
@@ -1106,7 +1112,7 @@ mod tests {
     #[test]
     fn test_random_clear_cofactor_torsion_point() {
         use crate::curves::params::EmulatedCurveParams;
-        let b = BlsFp2::from(&Bls12381G2Params::<Fp>::b());
+        let b = BlsFp2::try_from(&Bls12381G2Params::<Fp>::b()).unwrap();
         use rand::RngCore;
         let mut rng = rand::thread_rng();
         let mut random_point = || loop {
@@ -1129,8 +1135,8 @@ mod tests {
         let c = G2Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc
             .clear_cofactor(&mut cs.namespace(|| "a.clear_cofactor()"))
             .unwrap();
@@ -1152,7 +1158,7 @@ mod tests {
     #[test]
     fn test_random_subgroup_check_negative() {
         use crate::curves::params::EmulatedCurveParams;
-        let b = BlsFp2::from(&Bls12381G2Params::<Fp>::b());
+        let b = BlsFp2::try_from(&Bls12381G2Params::<Fp>::b()).unwrap();
         use rand::RngCore;
         let mut rng = rand::thread_rng();
         let mut random_point = || loop {
@@ -1173,7 +1179,7 @@ mod tests {
         }
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let a_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
         a_alloc
             .assert_subgroup_check(&mut cs.namespace(|| "a.subgroup_check()"))
             .unwrap();
@@ -1191,8 +1197,8 @@ mod tests {
         let c = G2Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc =
             G2Point::opt_simple_swu2(&mut cs.namespace(|| "opt_simple_swu2(a)"), &a_alloc).unwrap();
         G2Point::assert_is_equal(
@@ -1221,8 +1227,8 @@ mod tests {
 
         let mut cs = TestConstraintSystem::<Fp>::new();
         let a_alloc =
-            G2IsoPoint(G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap());
-        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+            G2IsoPoint(G2Point::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap());
+        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = G2Point::iso3_map(&mut cs.namespace(|| "iso3_map(a)"), &a_alloc).unwrap();
         G2Point::assert_is_equal(
             &mut cs.namespace(|| "iso3_map(a) = c"),
@@ -1250,9 +1256,9 @@ mod tests {
         let c = G2Affine::from(c);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let x_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc x"), &x).unwrap();
-        let y_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc y"), &y).unwrap();
-        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let x_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc x"), &Some(x)).unwrap();
+        let y_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc y"), &Some(y)).unwrap();
+        let c_alloc = G2Point::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc =
             G2Point::map_to_g2(&mut cs.namespace(|| "map_to_g2(x, y)"), &x_alloc, &y_alloc)
                 .unwrap();

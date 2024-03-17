@@ -22,5 +22,6 @@ rand = { workspace = true}
 bls12_381 = { git = "https://github.com/lurk-lab/bls12_381", features = ["experimental"] }
 
 [dev-dependencies]
+bellpepper = { workspace = true }
 expect-test = "1.4.1"
 halo2curves = "0.6.1"

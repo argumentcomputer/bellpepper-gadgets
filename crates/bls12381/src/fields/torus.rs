@@ -128,12 +128,13 @@ impl<F: PrimeFieldBits> Torus<F> {
         CS: ConstraintSystem<F>,
     {
         let y = &self.0;
-        let val = BlsFp6::from(y);
-        let val = Self::decompress_native(&val)?;
 
-        let val = val.square(); // NOTE: could be cyclotomic_square, but I think that only makes it faster?
-
-        let val = Self::compress_native(&val)?;
+        let val = BlsFp6::try_from(y).ok().and_then(|val| {
+            Self::decompress_native(&val)
+                .ok()
+                .map(|val| val.square()) // NOTE: could be cyclotomic_square, but I think that only makes it faster? Which doesn't matter in the evaluation
+                .and_then(|val| Self::compress_native(&val).ok())
+        });
 
         let sq_alloc =
             Fp6Element::<F>::alloc_element(&mut cs.namespace(|| "alloc torus square"), &val)?; // x
@@ -314,8 +315,9 @@ mod tests {
         let c = Torus::<Fp>::compress_native(&a).unwrap();
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc =
+            Fp12Element::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = Torus::compress(&mut cs.namespace(|| "a.torus()"), &a_alloc).unwrap();
         Fp6Element::assert_is_equal(
             &mut cs.namespace(|| "a.torus() = c"),
@@ -339,8 +341,9 @@ mod tests {
         let c = Torus::<Fp>::decompress_native(&a).unwrap();
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc =
+            Fp12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res = Torus(a_alloc);
         let res_alloc = res
             .decompress(&mut cs.namespace(|| "a.decompress()"))
@@ -380,9 +383,11 @@ mod tests {
         };
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc =
+            Fp12Element::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc =
+            Fp12Element::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
+        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let a_alloc = Torus::compress(&mut cs.namespace(|| "a <- a.torus()"), &a_alloc).unwrap();
         let b_alloc = Torus::compress(&mut cs.namespace(|| "b <- b.torus()"), &b_alloc).unwrap();
         let res_alloc = a_alloc.mul(&mut cs.namespace(|| "a*b"), &b_alloc).unwrap();
