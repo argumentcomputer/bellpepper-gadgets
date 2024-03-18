@@ -562,3 +562,81 @@ where
         false,
     );
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use bellpepper::gadgets::multipack::bytes_to_bits;
+    use bellpepper_core::test_cs::TestConstraintSystem;
+    use hex_literal::hex;
+    use pasta_curves::Fp;
+
+    #[test]
+    fn test_blank_hash() {
+        let msg = "".as_bytes();
+        let msg_bits = bytes_to_bits(msg);
+
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let input_bits: Vec<Boolean> = msg_bits
+            .into_iter()
+            .map(Boolean::Constant)
+            .collect::<Vec<_>>();
+
+        let out_bits = ripemd160(cs.namespace(|| "ripemd160"), &input_bits).unwrap();
+        assert!(cs.is_satisfied());
+        let expected = hex!("9c1185a5c5e9fc54612808977ee8f548b2258d31");
+        let mut out = out_bits.iter();
+        for b in expected.iter() {
+            for i in 0..8 {
+                let c = out.next().unwrap().get_value().unwrap();
+                assert_eq!(c, (b >> (7 - i)) & 1u8 == 1u8);
+            }
+        }
+    }
+
+    #[test]
+    fn test_hash_abc() {
+        let msg = "abc".as_bytes();
+        let msg_bits = bytes_to_bits(msg);
+
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let input_bits: Vec<Boolean> = msg_bits
+            .into_iter()
+            .map(Boolean::Constant)
+            .collect::<Vec<_>>();
+
+        let out_bits = ripemd160(cs.namespace(|| "ripemd160"), &input_bits).unwrap();
+        assert!(cs.is_satisfied());
+        let expected = hex!("8eb208f7e05d987a9b044a8e98c6b087f15a0bfc");
+        let mut out = out_bits.iter();
+        for b in expected.iter() {
+            for i in 0..8 {
+                let c = out.next().unwrap().get_value().unwrap();
+                assert_eq!(c, (b >> (7 - i)) & 1u8 == 1u8);
+            }
+        }
+    }
+
+    #[test]
+    fn test_hash_abcde_string() {
+        let msg = "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq".as_bytes();
+        let msg_bits = bytes_to_bits(msg);
+
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let input_bits: Vec<Boolean> = msg_bits
+            .into_iter()
+            .map(Boolean::Constant)
+            .collect::<Vec<_>>();
+
+        let out_bits = ripemd160(cs.namespace(|| "ripemd160"), &input_bits).unwrap();
+        assert!(cs.is_satisfied());
+        let expected = hex!("12a053384a9c0c88e405a06c27dcf49ada62eb2b");
+        let mut out = out_bits.iter();
+        for b in expected.iter() {
+            for i in 0..8 {
+                let c = out.next().unwrap().get_value().unwrap();
+                assert_eq!(c, (b >> (7 - i)) & 1u8 == 1u8);
+            }
+        }
+    }
+}
