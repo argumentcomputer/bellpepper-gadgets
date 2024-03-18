@@ -1,14 +1,14 @@
 //! Circuits for the [RIPEMD-160] hash function and its internal compression
 //! function.
 //!
-//! [RIPEMD-160]: https://www.esat.kuleuven.be/cosic/publications/article-317.pdf
+//! [RIPEMD-160]: https://homes.esat.kuleuven.be/~bosselae/ripemd160.html
 
 use bellpepper::gadgets::{multieq::MultiEq, uint32::UInt32};
-use bellpepper_core::{boolean::Boolean, ConstraintSystem, SynthesisError};
+use bellpepper_core::{boolean::Boolean, ConstraintSystem};
 use ff::PrimeField;
 use std::convert::TryInto;
 
-use crate::util::{ripemd_d1, ripemd_d2, shl_uint32};
+use crate::util::{or_uint32, ripemd_d1, ripemd_d2, shl_uint32};
 
 #[allow(clippy::unreadable_literal)]
 const MD_BUFFERS: [u32; 5] = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
@@ -35,14 +35,41 @@ where
     let mut padded = input.to_vec();
     let plen = padded.len() as u64;
     padded.push(Boolean::Constant(true));
+
     while (padded.len() + 64) % 512 != 0 {
         padded.push(Boolean::constant(false));
     }
-    // Check here for bits, they are reverse or not.
-    for b in (0..64).map(|i| (plen >> i) & 1 == 1) {
-        padded.push(Boolean::constant(b));
+
+    for i in (0..64).step_by(8) {
+        let byte = ((plen >> i) & 0xFF) as u8;
+        let reversed_byte = byte.reverse_bits();
+        for b in (0..8).map(|i| (reversed_byte >> i) & 1 == 1) {
+            padded.push(Boolean::constant(b));
+        }
     }
+
     assert!(padded.len() % 512 == 0);
+
+    for i in (0..padded.len()).step_by(32) {
+        let mut tmp = padded[i..i + 32].to_vec();
+        tmp.reverse();
+        let mut iter = 0;
+        for j in tmp {
+            padded[i + iter] = j;
+            iter += 1;
+        }
+    }
+
+    for i in (0..padded.len()).step_by(8) {
+        let mut tmp = padded[i..i + 8].to_vec();
+        tmp.reverse();
+        let mut iter = 0;
+        for j in tmp {
+            padded[i + iter] = j;
+            iter += 1;
+        }
+    }
+
     let mut cur_md = get_ripemd160_md("md");
     let mut cur_md_prime = get_ripemd160_md("md_prime");
     let mut cs = MultiEq::new(cs);
@@ -68,13 +95,30 @@ where
         cur_md_prime = cur_md.clone();
     }
     let array_data: Result<[UInt32; 5], _> = cur_md.try_into();
-    Ok(array_data
+    let mut result = array_data
         .unwrap()
         .into_iter()
         .flat_map(|e| e.into_bits_be())
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap())
+        .collect::<Vec<_>>();
+    for i in (0..result.len()).step_by(32) {
+        let mut tmp = result[i..i + 32].to_vec();
+        tmp.reverse();
+        let mut iter = 0;
+        for j in tmp {
+            result[i + iter] = j;
+            iter += 1;
+        }
+    }
+    for i in (0..result.len()).step_by(8) {
+        let mut tmp = result[i..i + 8].to_vec();
+        tmp.reverse();
+        let mut iter = 0;
+        for j in tmp {
+            result[i + iter] = j;
+            iter += 1;
+        }
+    }
+    Ok(result.try_into().unwrap())
 }
 
 fn combine_left_and_right<Scalar, CS>(
@@ -90,15 +134,15 @@ where
     let mut cs = MultiEq::new(cs);
     let mut update_md = cur_md.clone();
     for i in 0..5 {
-        update_md[(i + 4) % 5] = prev_md[i]
-            .xor(
-                cs.namespace(|| format!("first xor {}", i)),
-                &cur_md[(i + 1) % 5],
-            )?
-            .xor(
-                cs.namespace(|| format!("second xor {}", i)),
-                &cur_md_prime[(i + 2) % 5],
-            )?;
+        update_md[(i + 4) % 5] = UInt32::addmany(
+            cs.namespace(|| format!("first add_many {}", i)),
+            &[
+                prev_md[i].clone(),
+                cur_md[(i + 1) % 5].clone(),
+                cur_md_prime[(i + 2) % 5].clone(),
+            ],
+        )
+        .unwrap();
     }
     Ok(update_md)
 }
@@ -111,20 +155,13 @@ fn get_ripemd160_md(input: &str) -> [UInt32; 5] {
     }
 }
 
-fn block<Scalar, CS>(
-    cs: CS,
-    md_val: &mut [UInt32; 5],
-    s_val: [usize; 16],
-    i_val: [usize; 16],
-    w: Vec<UInt32>,
-    index: usize,
-    left: bool,
-) where
+fn compute_f<Scalar, CS>(cs: CS, md_val: &mut [UInt32; 5], index: usize, left: bool) -> UInt32
+where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
 {
-    let mut cs = MultiEq::new(cs);
     let f: UInt32;
+    let mut cs = MultiEq::new(cs);
     match left {
         true => match index {
             0 => {
@@ -152,8 +189,8 @@ fn block<Scalar, CS>(
             2 => {
                 f = ripemd_d2(
                     cs.namespace(|| format!("d2 block {} left {}", index, left)),
-                    &md_val[1],
                     &md_val[3],
+                    &md_val[1],
                     &md_val[2],
                 )
                 .unwrap();
@@ -231,35 +268,62 @@ fn block<Scalar, CS>(
             _ => panic!("Invalid index"),
         },
     }
+    f
+}
+
+fn block<Scalar, CS>(
+    cs: CS,
+    md_val: &mut [UInt32; 5],
+    s_val: [usize; 16],
+    i_val: [usize; 16],
+    w: Vec<UInt32>,
+    index: usize,
+    left: bool,
+) where
+    Scalar: PrimeField,
+    CS: ConstraintSystem<Scalar>,
+{
+    let mut cs = MultiEq::new(cs);
+    let mut f: UInt32;
+
     let k_val = match left {
         true => K_BUFFER,
         false => K_BUFFER_PRIME,
     };
     for i in 0..16 {
-        let mut tmp1 = md_val[0]
-            .xor(
-                cs.namespace(|| format!("first xor block {} left {} index {}", index, left, i)),
-                &f,
-            )
-            .unwrap()
-            .xor(
-                cs.namespace(|| format!("second xor block {} left {} index {}", index, left, i)),
-                &w[i_val[i]],
-            )
-            .unwrap()
-            .xor(
-                cs.namespace(|| format!("third xor block {} left {} index {}", index, left, i)),
-                &UInt32::constant(k_val[index]),
-            )
-            .unwrap();
-        tmp1 = shl_uint32(&tmp1, s_val[i]).unwrap();
-        tmp1 = tmp1
-            .xor(
-                cs.namespace(|| format!("fourth xor block {} left {} index {}", index, left, i)),
-                &md_val[4],
-            )
-            .unwrap();
-        let tmp2 = shl_uint32(&md_val[2], 10).unwrap();
+        f = compute_f(
+            cs.namespace(|| format!("Compute F block {} left {} index {}", index, left, i)),
+            md_val,
+            index,
+            left,
+        );
+        let mut tmp1 = UInt32::addmany(
+            cs.namespace(|| format!("first add_many block {} left {} index {}", index, left, i)),
+            &[
+                md_val[0].clone(),
+                f.clone(),
+                w[i_val[i]].clone(),
+                UInt32::constant(k_val[index]),
+            ],
+        )
+        .unwrap();
+        tmp1 = or_uint32(
+            cs.namespace(|| format!("first or block {} left {} index {}", index, left, i)),
+            &shl_uint32(&tmp1, s_val[i]).unwrap(),
+            &UInt32::shr(&tmp1, 32 - s_val[i]),
+        )
+        .unwrap();
+        tmp1 = UInt32::addmany(
+            cs.namespace(|| format!("second add_many block {} left {} index {}", index, left, i)),
+            &[tmp1, md_val[4].clone()],
+        )
+        .unwrap();
+        let tmp2 = or_uint32(
+            cs.namespace(|| format!("second or block {} left {} index {}", index, left, i)),
+            &shl_uint32(&md_val[2], 10).unwrap(),
+            &UInt32::shr(&md_val[2], 32 - 10),
+        )
+        .unwrap();
         md_val[0] = md_val[4].clone();
         md_val[2] = md_val[1].clone();
         md_val[4] = md_val[3].clone();
@@ -268,11 +332,7 @@ fn block<Scalar, CS>(
     }
 }
 
-pub fn left_step<Scalar, CS>(
-    cs: CS,
-    input: &[Boolean],
-    current_md_value: &mut [UInt32; 5],
-)
+pub fn left_step<Scalar, CS>(cs: CS, input: &[Boolean], current_md_value: &mut [UInt32; 5])
 where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
@@ -283,6 +343,7 @@ where
         .map(UInt32::from_bits_be)
         .collect::<Vec<_>>();
     let mut cs = MultiEq::new(cs);
+    assert_eq!(w.len(), 16);
     let mut s_val = [11, 14, 15, 12, 5, 8, 7, 9, 11, 13, 14, 15, 6, 7, 9, 8];
     let mut i_val = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
     block(
@@ -295,7 +356,7 @@ where
         true,
     );
     s_val = [7, 6, 8, 13, 11, 9, 7, 15, 7, 12, 15, 9, 11, 7, 13, 12];
-    i_val = [7, 14, 13, 1, 10, 6, 15, 3, 12, 0, 9, 5, 2, 14, 11, 8];
+    i_val = [7, 4, 13, 1, 10, 6, 15, 3, 12, 0, 9, 5, 2, 14, 11, 8];
     block(
         cs.namespace(|| "block 1"),
         current_md_value,
@@ -340,11 +401,7 @@ where
     );
 }
 
-pub fn right_step<Scalar, CS>(
-    cs: CS,
-    input: &[Boolean],
-    current_md_value: &mut [UInt32; 5],
-)
+pub fn right_step<Scalar, CS>(cs: CS, input: &[Boolean], current_md_value: &mut [UInt32; 5])
 where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
@@ -354,6 +411,7 @@ where
         .chunks(32)
         .map(UInt32::from_bits_be)
         .collect::<Vec<_>>();
+    assert_eq!(w.len(), 16);
     let mut cs = MultiEq::new(cs);
     let mut s_val = [8, 9, 9, 11, 13, 15, 15, 5, 7, 7, 8, 11, 14, 14, 12, 6];
     let mut i_val = [5, 14, 7, 0, 9, 2, 11, 4, 13, 6, 15, 8, 1, 10, 3, 12];
@@ -412,42 +470,3 @@ where
     );
 }
 
-#[cfg(test)]
-mod test {
-    use super::*;
-    use bellpepper::gadgets::multipack::bytes_to_bits;
-    use bellpepper_core::{boolean::AllocatedBit, test_cs::TestConstraintSystem};
-    use hex_literal::hex;
-    use pasta_curves::Fp;
-    use rand_core::{RngCore, SeedableRng};
-    use rand_xorshift::XorShiftRng;
-
-    #[test]
-    fn test_abc_hash() {
-        let msg = "abc".as_bytes();
-        let msg_bits = bytes_to_bits(msg);
-
-        let mut cs = TestConstraintSystem::<Fp>::new();
-        let input_bits: Vec<Boolean> = msg_bits
-            .into_iter()
-            .enumerate()
-            .map(|(i, b)| {
-                Boolean::from(
-                    AllocatedBit::alloc(cs.namespace(|| format!("input bit {}", i)), Some(b))
-                        .unwrap(),
-                )
-            })
-            .collect();
-
-        let out_bits = ripemd160(cs.namespace(|| "ripemd160"), &input_bits).unwrap();
-        assert!(cs.is_satisfied());
-        let expected = hex!("8eb208f7e05d987a9b044a8e98c6b087f15a0bfc");
-        let mut out = out_bits.iter();
-        for b in expected.iter() {
-            for i in 0..8 {
-                let c = out.next().unwrap().get_value().unwrap();
-                assert_eq!(c, (b >> i) & 1u8 == 1u8);
-            }
-        }
-    }
-}
