@@ -2,12 +2,15 @@
 //! function.
 //!
 //! [RIPEMD-160]: https://homes.esat.kuleuven.be/~bosselae/ripemd160.html
+//! [RIPEMD-160]: https://homes.esat.kuleuven.be/~bosselae/ripemd160.html
 
 use bellpepper::gadgets::{multieq::MultiEq, uint32::UInt32};
+use bellpepper_core::{boolean::Boolean, ConstraintSystem};
 use bellpepper_core::{boolean::Boolean, ConstraintSystem};
 use ff::PrimeField;
 use std::convert::TryInto;
 
+use crate::util::{or_uint32, ripemd_d1, ripemd_d2, shl_uint32};
 use crate::util::{or_uint32, ripemd_d1, ripemd_d2, shl_uint32};
 
 #[allow(clippy::unreadable_literal)]
@@ -96,9 +99,30 @@ where
     }
     let array_data: Result<[UInt32; 5], _> = cur_md.try_into();
     let mut result = array_data
+    let mut result = array_data
         .unwrap()
         .into_iter()
         .flat_map(|e| e.into_bits_be())
+        .collect::<Vec<_>>();
+    for i in (0..result.len()).step_by(32) {
+        let mut tmp = result[i..i + 32].to_vec();
+        tmp.reverse();
+        let mut iter = 0;
+        for j in tmp {
+            result[i + iter] = j;
+            iter += 1;
+        }
+    }
+    for i in (0..result.len()).step_by(8) {
+        let mut tmp = result[i..i + 8].to_vec();
+        tmp.reverse();
+        let mut iter = 0;
+        for j in tmp {
+            result[i + iter] = j;
+            iter += 1;
+        }
+    }
+    Ok(result.try_into().unwrap())
         .collect::<Vec<_>>();
     for i in (0..result.len()).step_by(32) {
         let mut tmp = result[i..i + 32].to_vec();
@@ -143,6 +167,15 @@ where
             ],
         )
         .unwrap();
+        update_md[(i + 4) % 5] = UInt32::addmany(
+            cs.namespace(|| format!("first add_many {}", i)),
+            &[
+                prev_md[i].clone(),
+                cur_md[(i + 1) % 5].clone(),
+                cur_md_prime[(i + 2) % 5].clone(),
+            ],
+        )
+        .unwrap();
     }
     Ok(update_md)
 }
@@ -157,9 +190,12 @@ fn get_ripemd160_md(input: &str) -> [UInt32; 5] {
 
 fn compute_f<Scalar, CS>(cs: CS, md_val: &mut [UInt32; 5], index: usize, left: bool) -> UInt32
 where
+fn compute_f<Scalar, CS>(cs: CS, md_val: &mut [UInt32; 5], index: usize, left: bool) -> UInt32
+where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
 {
+    let f: UInt32;
     let f: UInt32;
     let mut cs = MultiEq::new(cs);
     match left {
@@ -189,6 +225,7 @@ where
             2 => {
                 f = ripemd_d2(
                     cs.namespace(|| format!("d2 block {} left {}", index, left)),
+                    &md_val[3],
                     &md_val[3],
                     &md_val[1],
                     &md_val[2],
@@ -286,11 +323,62 @@ fn block<Scalar, CS>(
     let mut cs = MultiEq::new(cs);
     let mut f: UInt32;
 
+    f
+}
+
+fn block<Scalar, CS>(
+    cs: CS,
+    md_val: &mut [UInt32; 5],
+    s_val: [usize; 16],
+    i_val: [usize; 16],
+    w: Vec<UInt32>,
+    index: usize,
+    left: bool,
+) where
+    Scalar: PrimeField,
+    CS: ConstraintSystem<Scalar>,
+{
+    let mut cs = MultiEq::new(cs);
+    let mut f: UInt32;
+
     let k_val = match left {
         true => K_BUFFER,
         false => K_BUFFER_PRIME,
     };
     for i in 0..16 {
+        f = compute_f(
+            cs.namespace(|| format!("Compute F block {} left {} index {}", index, left, i)),
+            md_val,
+            index,
+            left,
+        );
+        let mut tmp1 = UInt32::addmany(
+            cs.namespace(|| format!("first add_many block {} left {} index {}", index, left, i)),
+            &[
+                md_val[0].clone(),
+                f.clone(),
+                w[i_val[i]].clone(),
+                UInt32::constant(k_val[index]),
+            ],
+        )
+        .unwrap();
+        tmp1 = or_uint32(
+            cs.namespace(|| format!("first or block {} left {} index {}", index, left, i)),
+            &shl_uint32(&tmp1, s_val[i]).unwrap(),
+            &UInt32::shr(&tmp1, 32 - s_val[i]),
+        )
+        .unwrap();
+        tmp1 = UInt32::addmany(
+            cs.namespace(|| format!("second add_many block {} left {} index {}", index, left, i)),
+            &[tmp1, md_val[4].clone()],
+        )
+        .unwrap();
+        let tmp2 = or_uint32(
+            cs.namespace(|| format!("second or block {} left {} index {}", index, left, i)),
+            &shl_uint32(&md_val[2], 10).unwrap(),
+            &UInt32::shr(&md_val[2], 32 - 10),
+        )
+        .unwrap();
         f = compute_f(
             cs.namespace(|| format!("Compute F block {} left {} index {}", index, left, i)),
             md_val,
@@ -333,6 +421,7 @@ fn block<Scalar, CS>(
 }
 
 pub fn left_step<Scalar, CS>(cs: CS, input: &[Boolean], current_md_value: &mut [UInt32; 5])
+pub fn left_step<Scalar, CS>(cs: CS, input: &[Boolean], current_md_value: &mut [UInt32; 5])
 where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
@@ -343,6 +432,7 @@ where
         .map(UInt32::from_bits_be)
         .collect::<Vec<_>>();
     let mut cs = MultiEq::new(cs);
+    assert_eq!(w.len(), 16);
     assert_eq!(w.len(), 16);
     let mut s_val = [11, 14, 15, 12, 5, 8, 7, 9, 11, 13, 14, 15, 6, 7, 9, 8];
     let mut i_val = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
@@ -356,6 +446,7 @@ where
         true,
     );
     s_val = [7, 6, 8, 13, 11, 9, 7, 15, 7, 12, 15, 9, 11, 7, 13, 12];
+    i_val = [7, 4, 13, 1, 10, 6, 15, 3, 12, 0, 9, 5, 2, 14, 11, 8];
     i_val = [7, 4, 13, 1, 10, 6, 15, 3, 12, 0, 9, 5, 2, 14, 11, 8];
     block(
         cs.namespace(|| "block 1"),
@@ -402,6 +493,7 @@ where
 }
 
 pub fn right_step<Scalar, CS>(cs: CS, input: &[Boolean], current_md_value: &mut [UInt32; 5])
+pub fn right_step<Scalar, CS>(cs: CS, input: &[Boolean], current_md_value: &mut [UInt32; 5])
 where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
@@ -411,6 +503,7 @@ where
         .chunks(32)
         .map(UInt32::from_bits_be)
         .collect::<Vec<_>>();
+    assert_eq!(w.len(), 16);
     assert_eq!(w.len(), 16);
     let mut cs = MultiEq::new(cs);
     let mut s_val = [8, 9, 9, 11, 13, 15, 15, 5, 7, 7, 8, 11, 14, 14, 12, 6];
@@ -469,4 +562,3 @@ where
         false,
     );
 }
-
