@@ -4,7 +4,7 @@ version = "0.2.0"
 edition = "2021"
 authors = ["Varun Thakore <vrnthakore@gmail.com>"]
 description = "R1CS circuit for SHA-512 hash function"
-license = "MIT OR Apache-2.0"
+license.workspace=true
 rust-version = "1.66"
 homepage.workspace = true
 repository.workspace = true
@@ -13,7 +13,7 @@ repository.workspace = true
 bellpepper-core = { workspace = true }
 bellpepper = { workspace = true }
 ff = { workspace = true }
-proptest = "1.4.0"
+bellpepper-uint64 = { version = "0.1.0", path = "../uint64"}
 
 [dev-dependencies]
 blstrs = "0.7.0"
@@ -24,3 +24,4 @@ rand_core = { workspace = true }
 rand_xorshift = { workspace = true }
 sha2 = "0.10.6"
 hex = "0.4.3"
+proptest = { workspace = true}

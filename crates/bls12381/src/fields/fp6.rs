@@ -2,12 +2,12 @@ use bellpepper_core::boolean::{AllocatedBit, Boolean};
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use bls12_381::fp2::Fp2 as BlsFp2;
 use bls12_381::fp6::Fp6 as BlsFp6;
-use ff::{PrimeField, PrimeFieldBits};
+use ff::PrimeFieldBits;
 
 use super::fp2::Fp2Element;
 
 #[derive(Clone)]
-pub struct Fp6Element<F: PrimeField + PrimeFieldBits> {
+pub struct Fp6Element<F: PrimeFieldBits> {
     pub(crate) b0: Fp2Element<F>,
     pub(crate) b1: Fp2Element<F>,
     pub(crate) b2: Fp2Element<F>,
@@ -15,7 +15,7 @@ pub struct Fp6Element<F: PrimeField + PrimeFieldBits> {
 
 impl<F> From<&BlsFp6> for Fp6Element<F>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     fn from(value: &BlsFp6) -> Self {
         let b0 = Fp2Element::<F>::from(&value.c0);
@@ -25,19 +25,21 @@ where
     }
 }
 
-impl<F> From<&Fp6Element<F>> for BlsFp6
+impl<F> TryFrom<&Fp6Element<F>> for BlsFp6
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
-    fn from(value: &Fp6Element<F>) -> Self {
-        let c0 = BlsFp2::from(&value.b0);
-        let c1 = BlsFp2::from(&value.b1);
-        let c2 = BlsFp2::from(&value.b2);
-        Self { c0, c1, c2 }
+    type Error = SynthesisError;
+
+    fn try_from(value: &Fp6Element<F>) -> Result<Self, Self::Error> {
+        let c0 = BlsFp2::try_from(&value.b0)?;
+        let c1 = BlsFp2::try_from(&value.b1)?;
+        let c2 = BlsFp2::try_from(&value.b2)?;
+        Ok(Self { c0, c1, c2 })
     }
 }
 
-impl<F: PrimeField + PrimeFieldBits> Fp6Element<F> {
+impl<F: PrimeFieldBits> Fp6Element<F> {
     pub fn zero() -> Self {
         Self {
             b0: Fp2Element::zero(),
@@ -54,13 +56,16 @@ impl<F: PrimeField + PrimeFieldBits> Fp6Element<F> {
         }
     }
 
-    pub fn alloc_element<CS>(cs: &mut CS, value: &BlsFp6) -> Result<Self, SynthesisError>
+    pub fn alloc_element<CS>(cs: &mut CS, value: &Option<BlsFp6>) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
-        let b0 = Fp2Element::<F>::alloc_element(&mut cs.namespace(|| "allocate b0"), &value.c0)?;
-        let b1 = Fp2Element::<F>::alloc_element(&mut cs.namespace(|| "allocate b1"), &value.c1)?;
-        let b2 = Fp2Element::<F>::alloc_element(&mut cs.namespace(|| "allocate b2"), &value.c2)?;
+        let c0 = value.map(|v| v.c0);
+        let c1 = value.map(|v| v.c1);
+        let c2 = value.map(|v| v.c2);
+        let b0 = Fp2Element::<F>::alloc_element(&mut cs.namespace(|| "allocate b0"), &c0)?;
+        let b1 = Fp2Element::<F>::alloc_element(&mut cs.namespace(|| "allocate b1"), &c1)?;
+        let b2 = Fp2Element::<F>::alloc_element(&mut cs.namespace(|| "allocate b2"), &c2)?;
 
         Ok(Self { b0, b1, b2 })
     }
@@ -366,22 +371,19 @@ impl<F: PrimeField + PrimeFieldBits> Fp6Element<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        let val = BlsFp6::from(self);
-        if val.is_zero().into() {
-            eprintln!("Inverse of zero element cannot be calculated");
-            return Err(SynthesisError::DivisionByZero);
-        }
-        let inv = val.invert().unwrap();
+        let val = BlsFp6::try_from(self).ok();
+        let inv = val.and_then(|val| {
+            if val.is_zero().into() {
+                eprintln!("Inverse of zero Fp6 element cannot be calculated");
+                return None;
+            }
+            Some(val.invert().unwrap())
+        });
 
         let inv_alloc = Self::alloc_element(&mut cs.namespace(|| "alloc inv"), &inv)?;
 
         // x*inv = 1
         let prod = inv_alloc.mul(&mut cs.namespace(|| "x*inv"), self)?;
-
-        // TODO: An alternative implementation would be calling
-        // `assert_equality_to_constant(1)`, however that seems to only work if
-        // we `reduce` the value first, and then the constraint count of just
-        // calling `assert_is_equal` ends up being lower instead.
 
         Self::assert_is_equal(&mut cs.namespace(|| "x*inv = 1 mod P"), &prod, &Self::one())?;
 
@@ -394,15 +396,18 @@ impl<F: PrimeField + PrimeFieldBits> Fp6Element<F> {
     {
         // returns self/value (or x/y)
 
-        let x = BlsFp6::from(self);
-
-        let y = BlsFp6::from(value);
-        if y.is_zero().into() {
-            eprintln!("Inverse of zero element cannot be calculated");
-            return Err(SynthesisError::DivisionByZero);
-        }
-        let y_inv = y.invert().unwrap();
-        let div = y_inv * x;
+        let x = BlsFp6::try_from(self).ok();
+        let y = BlsFp6::try_from(value).ok();
+        let div = x.and_then(|x| {
+            y.and_then(|y| {
+                if y.is_zero().into() {
+                    eprintln!("Division by zero Fp6 element cannot be calculated");
+                    return None;
+                }
+                let y_inv = y.invert().unwrap();
+                Some(y_inv * x)
+            })
+        });
 
         let div_alloc = Self::alloc_element(&mut cs.namespace(|| "alloc div"), &div)?;
 
@@ -448,7 +453,7 @@ impl<F: PrimeField + PrimeFieldBits> Fp6Element<F> {
 mod tests {
     use super::*;
     use bellpepper_core::test_cs::TestConstraintSystem;
-    use pasta_curves::Fp;
+    use halo2curves::bn256::Fq as Fp;
 
     use expect_test::{expect, Expect};
     fn expect_eq(computed: usize, expected: &Expect) {
@@ -463,9 +468,9 @@ mod tests {
         let c = a + b;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
+        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.add(&mut cs.namespace(|| "a+b"), &b_alloc).unwrap();
         Fp6Element::assert_is_equal(&mut cs.namespace(|| "a+b = c"), &res_alloc, &c_alloc).unwrap();
         if !cs.is_satisfied() {
@@ -473,8 +478,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["1662"]);
-        expect_eq(cs.num_constraints(), &expect!["1572"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["1464"]);
+        expect_eq(cs.num_constraints(), &expect!["1356"]);
     }
 
     #[test]
@@ -485,9 +490,9 @@ mod tests {
         let c = a - b;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
+        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.sub(&mut cs.namespace(|| "a-b"), &b_alloc).unwrap();
         Fp6Element::assert_is_equal(&mut cs.namespace(|| "a-b = c"), &res_alloc, &c_alloc).unwrap();
         if !cs.is_satisfied() {
@@ -495,8 +500,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["1662"]);
-        expect_eq(cs.num_constraints(), &expect!["1572"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["1464"]);
+        expect_eq(cs.num_constraints(), &expect!["1356"]);
     }
 
     #[test]
@@ -506,8 +511,8 @@ mod tests {
         let c = a + a;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.double(&mut cs.namespace(|| "2a")).unwrap();
         Fp6Element::assert_is_equal(&mut cs.namespace(|| "2a = c"), &res_alloc, &c_alloc).unwrap();
         if !cs.is_satisfied() {
@@ -515,8 +520,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["1626"]);
-        expect_eq(cs.num_constraints(), &expect!["1572"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["1422"]);
+        expect_eq(cs.num_constraints(), &expect!["1356"]);
     }
 
     #[test]
@@ -529,9 +534,9 @@ mod tests {
         let c = a.mul(b);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
+        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.mul(&mut cs.namespace(|| "a*b"), &b_alloc).unwrap();
         Fp6Element::assert_is_equal(&mut cs.namespace(|| "a*b = c"), &res_alloc, &c_alloc).unwrap();
         if !cs.is_satisfied() {
@@ -539,8 +544,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["4317"]);
-        expect_eq(cs.num_constraints(), &expect!["4227"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["4161"]);
+        expect_eq(cs.num_constraints(), &expect!["4053"]);
     }
 
     #[test]
@@ -550,8 +555,8 @@ mod tests {
         let c = a.mul_by_nonresidue();
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc
             .mul_by_nonresidue(&mut cs.namespace(|| "a*(1+u)"))
             .unwrap();
@@ -562,8 +567,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["1626"]);
-        expect_eq(cs.num_constraints(), &expect!["1572"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["1422"]);
+        expect_eq(cs.num_constraints(), &expect!["1356"]);
     }
 
     #[test]
@@ -573,8 +578,8 @@ mod tests {
         let c = a.square();
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.square(&mut cs.namespace(|| "a²")).unwrap();
         Fp6Element::assert_is_equal(&mut cs.namespace(|| "a² = c"), &res_alloc, &c_alloc).unwrap();
         if !cs.is_satisfied() {
@@ -582,8 +587,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["4248"]);
-        expect_eq(cs.num_constraints(), &expect!["4194"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["4074"]);
+        expect_eq(cs.num_constraints(), &expect!["4008"]);
     }
 
     #[test]
@@ -597,9 +602,9 @@ mod tests {
         let c = a * b.invert().unwrap();
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
+        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc
             .div_unchecked(&mut cs.namespace(|| "a div b"), &b_alloc)
             .unwrap();
@@ -610,8 +615,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["5907"]);
-        expect_eq(cs.num_constraints(), &expect!["5799"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["5541"]);
+        expect_eq(cs.num_constraints(), &expect!["5409"]);
     }
 
     #[test]
@@ -622,9 +627,9 @@ mod tests {
         let c = a * BlsFp6::from(b);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
+        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc
             .mul_by_e2(&mut cs.namespace(|| "a*b (e2)"), &b_alloc)
             .unwrap();
@@ -634,8 +639,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["4131"]);
-        expect_eq(cs.num_constraints(), &expect!["4065"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["3953"]);
+        expect_eq(cs.num_constraints(), &expect!["3873"]);
     }
 
     #[test]
@@ -651,9 +656,10 @@ mod tests {
         let c = a * b;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b0_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc b0"), &b0).unwrap();
-        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b0_alloc =
+            Fp2Element::alloc_element(&mut cs.namespace(|| "alloc b0"), &Some(b0)).unwrap();
+        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc
             .mul_by_0(&mut cs.namespace(|| "a*b (e2)"), &b0_alloc)
             .unwrap();
@@ -663,8 +669,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["4155"]);
-        expect_eq(cs.num_constraints(), &expect!["4089"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["3977"]);
+        expect_eq(cs.num_constraints(), &expect!["3897"]);
     }
 
     #[test]
@@ -681,10 +687,12 @@ mod tests {
         let c = a * b;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b1_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc b1"), &b1).unwrap();
-        let b2_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc b2"), &b2).unwrap();
-        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b1_alloc =
+            Fp2Element::alloc_element(&mut cs.namespace(|| "alloc b1"), &Some(b1)).unwrap();
+        let b2_alloc =
+            Fp2Element::alloc_element(&mut cs.namespace(|| "alloc b2"), &Some(b2)).unwrap();
+        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc
             .mul_by_12(&mut cs.namespace(|| "a*b (e2)"), &b1_alloc, &b2_alloc)
             .unwrap();
@@ -694,8 +702,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["4266"]);
-        expect_eq(cs.num_constraints(), &expect!["4188"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["4102"]);
+        expect_eq(cs.num_constraints(), &expect!["4008"]);
     }
 
     #[test]
@@ -707,10 +715,12 @@ mod tests {
         let c = a.mul_by_01(&b0, &b1);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b0_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc b0"), &b0).unwrap();
-        let b1_alloc = Fp2Element::alloc_element(&mut cs.namespace(|| "alloc b1"), &b1).unwrap();
-        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b0_alloc =
+            Fp2Element::alloc_element(&mut cs.namespace(|| "alloc b0"), &Some(b0)).unwrap();
+        let b1_alloc =
+            Fp2Element::alloc_element(&mut cs.namespace(|| "alloc b1"), &Some(b1)).unwrap();
+        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc
             .mul_by_01(&mut cs.namespace(|| "a*b (e2)"), &b0_alloc, &b1_alloc)
             .unwrap();
@@ -720,8 +730,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["4266"]);
-        expect_eq(cs.num_constraints(), &expect!["4188"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["4102"]);
+        expect_eq(cs.num_constraints(), &expect!["4008"]);
     }
 
     #[test]
@@ -731,8 +741,8 @@ mod tests {
         let c = -&a;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.neg(&mut cs.namespace(|| "-a")).unwrap();
         Fp6Element::assert_is_equal(&mut cs.namespace(|| "-a = c"), &res_alloc, &c_alloc).unwrap();
         if !cs.is_satisfied() {
@@ -740,19 +750,19 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["1626"]);
-        expect_eq(cs.num_constraints(), &expect!["1572"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["1422"]);
+        expect_eq(cs.num_constraints(), &expect!["1356"]);
     }
 
     #[test]
     fn test_random_inverse() {
         let mut rng = rand::thread_rng();
         let a = BlsFp6::random(&mut rng);
-        let c = a.invert().unwrap_or_else(BlsFp6::zero);
+        let c = a.invert().unwrap();
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.inverse(&mut cs.namespace(|| "a^-1")).unwrap();
         Fp6Element::assert_is_equal(&mut cs.namespace(|| "a^-1 = c"), &res_alloc, &c_alloc)
             .unwrap();
@@ -761,8 +771,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["5871"]);
-        expect_eq(cs.num_constraints(), &expect!["5799"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["5499"]);
+        expect_eq(cs.num_constraints(), &expect!["5409"]);
     }
 
     #[test]
@@ -772,12 +782,11 @@ mod tests {
         let b = BlsFp6::random(&mut rng);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
         let res_alloc = a_alloc.sub(&mut cs.namespace(|| "a-a"), &a_alloc).unwrap();
-        let z_alloc =
-            Fp6Element::alloc_element(&mut cs.namespace(|| "alloc zero"), &BlsFp6::zero()).unwrap();
-        Fp6Element::assert_is_equal(&mut cs.namespace(|| "a-a = 0"), &res_alloc, &z_alloc).unwrap();
+        let zero = Fp6Element::zero();
+        Fp6Element::assert_is_equal(&mut cs.namespace(|| "a-a = 0"), &res_alloc, &zero).unwrap();
         let zbit_alloc = res_alloc
             .alloc_is_zero(&mut cs.namespace(|| "z <- a-a ?= 0"))
             .unwrap();
@@ -799,7 +808,7 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["7199"]);
-        expect_eq(cs.num_constraints(), &expect!["7181"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["6551"]);
+        expect_eq(cs.num_constraints(), &expect!["6563"]);
     }
 }

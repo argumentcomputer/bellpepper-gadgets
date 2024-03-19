@@ -1,7 +1,7 @@
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use bls12_381::fp12::Fp12 as BlsFp12;
 use bls12_381::fp6::Fp6 as BlsFp6;
-use ff::{PrimeField, PrimeFieldBits};
+use ff::PrimeFieldBits;
 
 use super::fp::FpElement;
 use super::fp12::Fp12Element;
@@ -9,7 +9,7 @@ use super::fp2::Fp2Element;
 use super::fp6::Fp6Element;
 
 #[derive(Clone)]
-pub struct Torus<F: PrimeField + PrimeFieldBits>(pub Fp6Element<F>);
+pub struct Torus<F: PrimeFieldBits>(pub Fp6Element<F>);
 
 /// From gnark's std/algebra/emulated/fields_bls12381/e12_pairing.go:
 ///
@@ -27,7 +27,7 @@ pub struct Torus<F: PrimeField + PrimeFieldBits>(pub Fp6Element<F>);
 ///    𝔽p²[u] = 𝔽p/u²+1
 ///    𝔽p⁶[v] = 𝔽p²/v³-1-u
 ///    𝔽p¹²[w] = 𝔽p⁶/w²-v
-impl<F: PrimeField + PrimeFieldBits> Torus<F> {
+impl<F: PrimeFieldBits> Torus<F> {
     /// compress_torus compresses x ∈ Fp12 to (x.C0 + 1)/x.C1 ∈ Fp6
     pub fn compress<CS>(cs: &mut CS, x: &Fp12Element<F>) -> Result<Self, SynthesisError>
     where
@@ -58,13 +58,11 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
     where
         CS: ConstraintSystem<F>,
     {
-        // NOTE: if we don't alloc_element and try to just use Fp6Element::one() instead, this fails
-        // (presumably because one() returns a non-allocated constant)
-        let alloc_one = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc 1"), &BlsFp6::one())?;
-        let neg_one = alloc_one.neg(&mut cs.namespace(|| "-1"))?;
+        let one = Fp6Element::one();
+        let neg_one = one.neg(&mut cs.namespace(|| "-1"))?;
         let n = Fp12Element {
             c0: self.0.clone(),
-            c1: alloc_one,
+            c1: one,
         };
         let d = Fp12Element {
             c0: self.0.clone(),
@@ -130,12 +128,13 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
         CS: ConstraintSystem<F>,
     {
         let y = &self.0;
-        let val = BlsFp6::from(y);
-        let val = Self::decompress_native(&val)?;
 
-        let val = val.square(); // NOTE: could be cyclotomic_square, but I think that only makes it faster?
-
-        let val = Self::compress_native(&val)?;
+        let val = BlsFp6::try_from(y).ok().and_then(|val| {
+            Self::decompress_native(&val)
+                .ok()
+                .map(|val| val.square()) // NOTE: could be cyclotomic_square, but I think that only makes it faster? Which doesn't matter in the evaluation
+                .and_then(|val| Self::compress_native(&val).ok())
+        });
 
         let sq_alloc =
             Fp6Element::<F>::alloc_element(&mut cs.namespace(|| "alloc torus square"), &val)?; // x
@@ -174,7 +173,7 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
         let t2 =
             t2.mul_by_nonresidue_1pow4(&mut cs.namespace(|| "t2 <- t2.mul_by_nonresidue_1pow4()"))?;
 
-        let v0 = Fp2Element::<F>::from_dec(("877076961050607968509681729531255177986764537961432449499635504522207616027455086505066378536590128544573588734230", "877076961050607968509681729531255177986764537961432449499635504522207616027455086505066378536590128544573588734230")).unwrap();
+        let v0 = Fp2Element::<F>::from_dec("877076961050607968509681729531255177986764537961432449499635504522207616027455086505066378536590128544573588734230", "877076961050607968509681729531255177986764537961432449499635504522207616027455086505066378536590128544573588734230").unwrap();
         let res = Fp6Element {
             b0: t0,
             b1: t1,
@@ -302,7 +301,7 @@ impl<F: PrimeField + PrimeFieldBits> Torus<F> {
 mod tests {
     use super::*;
     use bellpepper_core::test_cs::TestConstraintSystem;
-    use pasta_curves::Fp;
+    use halo2curves::bn256::Fq as Fp;
 
     use expect_test::{expect, Expect};
     fn expect_eq(computed: usize, expected: &Expect) {
@@ -316,8 +315,9 @@ mod tests {
         let c = Torus::<Fp>::compress_native(&a).unwrap();
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc =
+            Fp12Element::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = Torus::compress(&mut cs.namespace(|| "a.torus()"), &a_alloc).unwrap();
         Fp6Element::assert_is_equal(
             &mut cs.namespace(|| "a.torus() = c"),
@@ -330,8 +330,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["5907"]);
-        expect_eq(cs.num_constraints(), &expect!["5799"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["5541"]);
+        expect_eq(cs.num_constraints(), &expect!["5409"]);
     }
 
     #[test]
@@ -341,8 +341,9 @@ mod tests {
         let c = Torus::<Fp>::decompress_native(&a).unwrap();
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc =
+            Fp12Element::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res = Torus(a_alloc);
         let res_alloc = res
             .decompress(&mut cs.namespace(|| "a.decompress()"))
@@ -358,8 +359,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["12075"]);
-        expect_eq(cs.num_constraints(), &expect!["11931"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["11019"]);
+        expect_eq(cs.num_constraints(), &expect!["10881"]);
     }
 
     #[test]
@@ -382,9 +383,11 @@ mod tests {
         };
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = Fp12Element::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc =
+            Fp12Element::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc =
+            Fp12Element::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
+        let c_alloc = Fp6Element::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let a_alloc = Torus::compress(&mut cs.namespace(|| "a <- a.torus()"), &a_alloc).unwrap();
         let b_alloc = Torus::compress(&mut cs.namespace(|| "b <- b.torus()"), &b_alloc).unwrap();
         let res_alloc = a_alloc.mul(&mut cs.namespace(|| "a*b"), &b_alloc).unwrap();
@@ -395,7 +398,7 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["14709"]);
-        expect_eq(cs.num_constraints(), &expect!["14493"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["14055"]);
+        expect_eq(cs.num_constraints(), &expect!["13791"]);
     }
 }

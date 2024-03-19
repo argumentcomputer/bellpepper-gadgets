@@ -14,15 +14,10 @@ pub fn range_check_num<F, CS>(
     num_bits: usize,
 ) -> Result<(), SynthesisError>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
     CS: ConstraintSystem<F>,
 {
-    range_check_lc(
-        cs,
-        &num.lc(F::ONE),
-        num.get_value().unwrap_or_default(),
-        num_bits,
-    )
+    range_check_lc(cs, &num.lc(F::ONE), num.get_value(), num_bits)
 }
 
 /// Range check an expression represented by a LinearCombination
@@ -31,14 +26,14 @@ where
 pub fn range_check_lc<F, CS>(
     cs: &mut CS,
     lc_input: &LinearCombination<F>,
-    lc_value: F,
+    lc_value: Option<F>,
     num_bits: usize,
 ) -> Result<(), SynthesisError>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
     CS: ConstraintSystem<F>,
 {
-    let value_bits = lc_value.to_le_bits();
+    let value_bits = lc_value.map(|v| v.to_le_bits());
 
     // Allocate all but the first bit.
     let bits: Vec<Variable> = (1..num_bits)
@@ -46,8 +41,12 @@ where
             cs.alloc(
                 || format!("bit {i}"),
                 || {
-                    let r = if value_bits[i] { F::ONE } else { F::ZERO };
-                    Ok(r)
+                    if let Some(bits) = &value_bits {
+                        let r = if bits[i] { F::ONE } else { F::ZERO };
+                        Ok(r)
+                    } else {
+                        Err(SynthesisError::AssignmentMissing)
+                    }
                 },
             )
         })
@@ -93,7 +92,7 @@ where
 /// Range check a constant field element
 pub fn range_check_constant<F>(value: F, num_bits: usize) -> Result<(), SynthesisError>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     let value_bits = value.to_le_bits();
     let mut res = F::ZERO;
@@ -122,7 +121,7 @@ pub fn alloc_num_equals_constant<F: PrimeField, CS: ConstraintSystem<F>>(
 ) -> Result<AllocatedBit, SynthesisError> {
     // Allocate and constrain `r`: result boolean bit.
     // It equals `true` if `a` equals `b`, `false` otherwise
-    let a_value = a.get_value().unwrap_or_default();
+    let a_value = a.get_value().ok_or(SynthesisError::AssignmentMissing)?;
     let r = AllocatedBit::alloc(cs.namespace(|| "r"), Some(a_value == b))?;
 
     // Allocate t s.t. t=1 if a == b else 1/(a - b)
@@ -131,7 +130,7 @@ pub fn alloc_num_equals_constant<F: PrimeField, CS: ConstraintSystem<F>>(
     } else {
         (a_value - b).invert().unwrap()
     };
-    let t = AllocatedNum::alloc(cs.namespace(|| "t"), || Ok(t_value))?;
+    let t = AllocatedNum::alloc_infallible(cs.namespace(|| "t"), || t_value);
 
     cs.enforce(
         || "t*(a - b) = 1 - r",
@@ -153,7 +152,7 @@ pub fn alloc_num_equals_constant<F: PrimeField, CS: ConstraintSystem<F>>(
 /// Convert a non-negative BigInt into a field element
 pub fn bigint_to_scalar<F>(value: &BigInt) -> F
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     assert!(value.bits() as u32 <= F::CAPACITY);
     assert!(!value.is_negative());

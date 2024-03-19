@@ -2,7 +2,7 @@ use bellpepper_core::boolean::Boolean;
 use bellpepper_core::ConstraintSystem;
 use bellpepper_core::SynthesisError;
 
-mod uint64;
+use bellpepper_uint64 as uint64;
 use ff::PrimeField;
 use uint64::UInt64;
 

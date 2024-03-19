@@ -1,11 +1,11 @@
-//! Circuit representation of a [`u64`], with helpers for the [`sha512`]
-//! gadgets.
+//! Circuit representation of a [`u64`],
+//!
+// TODO: consider upstreaming to Bellpepper
 
 use bellpepper::gadgets::multieq::MultiEq;
-use bellpepper_core::{
-    boolean::{AllocatedBit, Boolean},
-    ConstraintSystem, LinearCombination, SynthesisError,
-};
+use bellpepper_core::boolean::{AllocatedBit, Boolean};
+use bellpepper_core::{ConstraintSystem, LinearCombination, SynthesisError};
+use core::fmt;
 use ff::PrimeField;
 
 /// Represents an interpretation of 64 `Boolean` objects as an
@@ -40,10 +40,11 @@ impl UInt64 {
     }
 
     /// Allocate a `UInt64` in the constraint system
-    pub fn alloc<Scalar, CS>(mut cs: CS, value: Option<u64>) -> Result<Self, SynthesisError>
+    #[allow(dead_code)]
+    pub fn alloc<E, CS>(mut cs: CS, value: Option<u64>) -> Result<Self, SynthesisError>
     where
-        Scalar: PrimeField,
-        CS: ConstraintSystem<Scalar>,
+        E: PrimeField,
+        CS: ConstraintSystem<E>,
     {
         let values = match value {
             Some(mut val) => {
@@ -56,7 +57,7 @@ impl UInt64 {
 
                 v
             }
-            None => vec![None; 32],
+            None => vec![None; 64],
         };
 
         let bits = values
@@ -160,6 +161,7 @@ impl UInt64 {
         }
     }
 
+    #[allow(dead_code)]
     pub fn rotr(&self, by: usize) -> Self {
         let by = by % 64;
 
@@ -175,6 +177,87 @@ impl UInt64 {
         Self {
             bits: new_bits,
             value: self.value.map(|v| v.rotate_right(by as u32)),
+        }
+    }
+
+    pub fn rotl(&self, by: usize) -> Self {
+        //ROTL = 64 - ROTR
+        let by = (64 - by) % 64;
+
+        let new_bits = self
+            .bits
+            .iter()
+            .skip(by)
+            .chain(self.bits.iter())
+            .take(64)
+            .cloned()
+            .collect();
+
+        Self {
+            bits: new_bits,
+            value: self.value.map(|v| v.rotate_right(by as u32)),
+        }
+    }
+
+    /// XOR this `UInt64` with another `UInt64`
+    pub fn xor<E, CS>(&self, mut cs: CS, other: &Self) -> Result<Self, SynthesisError>
+    where
+        E: PrimeField,
+        CS: ConstraintSystem<E>,
+    {
+        let new_value = match (self.value, other.value) {
+            (Some(a), Some(b)) => Some(a ^ b),
+            _ => None,
+        };
+
+        let bits = self
+            .bits
+            .iter()
+            .zip(other.bits.iter())
+            .enumerate()
+            .map(|(i, (a, b))| Boolean::xor(cs.namespace(|| format!("xor of bit {}", i)), a, b))
+            .collect::<Result<_, _>>()?;
+
+        Ok(Self {
+            bits,
+            value: new_value,
+        })
+    }
+
+    /// AND this `UInt64` with another `UInt64`
+    pub fn and<E, CS>(&self, mut cs: CS, other: &Self) -> Result<Self, SynthesisError>
+    where
+        E: PrimeField,
+        CS: ConstraintSystem<E>,
+    {
+        let new_value = match (self.value, other.value) {
+            (Some(a), Some(b)) => Some(a & b),
+            _ => None,
+        };
+
+        let bits = self
+            .bits
+            .iter()
+            .zip(other.bits.iter())
+            .enumerate()
+            .map(|(i, (a, b))| Boolean::and(cs.namespace(|| format!("and of bit {}", i)), a, b))
+            .collect::<Result<_, _>>()?;
+
+        Ok(Self {
+            bits,
+            value: new_value,
+        })
+    }
+
+    /// NOT this `UInt64`
+    pub fn not(&self) -> Self {
+        let new_value = self.value.map(|a| !a);
+
+        let bits = self.bits.iter().map(|a| a.not()).collect();
+
+        Self {
+            bits,
+            value: new_value,
         }
     }
 
@@ -198,122 +281,12 @@ impl UInt64 {
         }
     }
 
-    fn triop<Scalar, CS, F, U>(
-        mut cs: CS,
-        a: &Self,
-        b: &Self,
-        c: &Self,
-        tri_fn: F,
-        circuit_fn: U,
-    ) -> Result<Self, SynthesisError>
-    where
-        Scalar: PrimeField,
-        CS: ConstraintSystem<Scalar>,
-        F: Fn(u64, u64, u64) -> u64,
-        U: Fn(&mut CS, usize, &Boolean, &Boolean, &Boolean) -> Result<Boolean, SynthesisError>,
-    {
-        let new_value = match (a.value, b.value, c.value) {
-            (Some(a), Some(b), Some(c)) => Some(tri_fn(a, b, c)),
-            _ => None,
-        };
-
-        let bits = a
-            .bits
-            .iter()
-            .zip(b.bits.iter())
-            .zip(c.bits.iter())
-            .enumerate()
-            .map(|(i, ((a, b), c))| circuit_fn(&mut cs, i, a, b, c))
-            .collect::<Result<_, _>>()?;
-
-        Ok(Self {
-            bits,
-            value: new_value,
-        })
-    }
-
-    /// Compute the `maj` value (a and b) xor (a and c) xor (b and c)
-    /// during SHA512.
-    pub fn sha512_maj<Scalar, CS>(
-        cs: CS,
-        a: &Self,
-        b: &Self,
-        c: &Self,
-    ) -> Result<Self, SynthesisError>
-    where
-        Scalar: PrimeField,
-        CS: ConstraintSystem<Scalar>,
-    {
-        Self::triop(
-            cs,
-            a,
-            b,
-            c,
-            |a, b, c| (a & b) ^ (a & c) ^ (b & c),
-            // Boolean::sha256_maj operates on 3 Booleans and outputs the majority Boolean.
-            // It will remain same for sha512_maj since it does not take into account UInt32 or UInt64.
-            |cs, i, a, b, c| Boolean::sha256_maj(cs.namespace(|| format!("maj {}", i)), a, b, c),
-        )
-    }
-
-    /// Compute the `ch` value `(a and b) xor ((not a) and c)`
-    /// during SHA512.
-    pub fn sha512_ch<Scalar, CS>(
-        cs: CS,
-        a: &Self,
-        b: &Self,
-        c: &Self,
-    ) -> Result<Self, SynthesisError>
-    where
-        Scalar: PrimeField,
-        CS: ConstraintSystem<Scalar>,
-    {
-        Self::triop(
-            cs,
-            a,
-            b,
-            c,
-            |a, b, c| (a & b) ^ ((!a) & c),
-            // Boolean::sha256_ch operates on 3 Booleans and outputs the choice Boolean.
-            // It will remain same for sha512_ch since it does not take into account UInt32 or UInt64.
-            |cs, i, a, b, c| Boolean::sha256_ch(cs.namespace(|| format!("ch {}", i)), a, b, c),
-        )
-    }
-
-    /// XOR this `UInt64` with another `UInt64`
-    pub fn xor<Scalar, CS>(&self, mut cs: CS, other: &Self) -> Result<Self, SynthesisError>
-    where
-        Scalar: PrimeField,
-        CS: ConstraintSystem<Scalar>,
-    {
-        let new_value = match (self.value, other.value) {
-            (Some(a), Some(b)) => Some(a ^ b),
-            _ => None,
-        };
-
-        let bits = self
-            .bits
-            .iter()
-            .zip(other.bits.iter())
-            .enumerate()
-            .map(|(i, (a, b))| Boolean::xor(cs.namespace(|| format!("xor of bit {}", i)), a, b))
-            .collect::<Result<_, _>>()?;
-
-        Ok(Self {
-            bits,
-            value: new_value,
-        })
-    }
-
     /// Perform modular addition of several `UInt64` objects.
     /// # Panics
     ///
     /// This function will panic if Scalar::NUM_BITS < 64 or number of operands are less than 2 or number of operands are greater than 10
     ///  
-    pub(crate) fn addmany<Scalar, CS, M>(
-        mut cs: M,
-        operands: &[Self],
-    ) -> Result<Self, SynthesisError>
+    pub fn addmany<Scalar, CS, M>(mut cs: M, operands: &[Self]) -> Result<Self, SynthesisError>
     where
         Scalar: PrimeField,
         CS: ConstraintSystem<Scalar>,
@@ -422,107 +395,153 @@ impl UInt64 {
             value: modular_value,
         })
     }
+
+    fn triop<Scalar, CS, F, U>(
+        mut cs: CS,
+        a: &Self,
+        b: &Self,
+        c: &Self,
+        tri_fn: F,
+        circuit_fn: U,
+    ) -> Result<Self, SynthesisError>
+    where
+        Scalar: PrimeField,
+        CS: ConstraintSystem<Scalar>,
+        F: Fn(u64, u64, u64) -> u64,
+        U: Fn(&mut CS, usize, &Boolean, &Boolean, &Boolean) -> Result<Boolean, SynthesisError>,
+    {
+        let new_value = match (a.value, b.value, c.value) {
+            (Some(a), Some(b), Some(c)) => Some(tri_fn(a, b, c)),
+            _ => None,
+        };
+
+        let bits = a
+            .bits
+            .iter()
+            .zip(b.bits.iter())
+            .zip(c.bits.iter())
+            .enumerate()
+            .map(|(i, ((a, b), c))| circuit_fn(&mut cs, i, a, b, c))
+            .collect::<Result<_, _>>()?;
+
+        Ok(Self {
+            bits,
+            value: new_value,
+        })
+    }
+
+    /// Compute the `maj` value (a and b) xor (a and c) xor (b and c)
+    /// during SHA512.
+    pub fn sha512_maj<Scalar, CS>(
+        cs: CS,
+        a: &Self,
+        b: &Self,
+        c: &Self,
+    ) -> Result<Self, SynthesisError>
+    where
+        Scalar: PrimeField,
+        CS: ConstraintSystem<Scalar>,
+    {
+        Self::triop(
+            cs,
+            a,
+            b,
+            c,
+            |a, b, c| (a & b) ^ (a & c) ^ (b & c),
+            // Boolean::sha256_maj operates on 3 Booleans and outputs the majority Boolean.
+            // It will remain same for sha512_maj since it does not take into account UInt32 or UInt64.
+            |cs, i, a, b, c| Boolean::sha256_maj(cs.namespace(|| format!("maj {}", i)), a, b, c),
+        )
+    }
+
+    /// Compute the `ch` value `(a and b) xor ((not a) and c)`
+    /// during SHA512.
+    pub fn sha512_ch<Scalar, CS>(
+        cs: CS,
+        a: &Self,
+        b: &Self,
+        c: &Self,
+    ) -> Result<Self, SynthesisError>
+    where
+        Scalar: PrimeField,
+        CS: ConstraintSystem<Scalar>,
+    {
+        Self::triop(
+            cs,
+            a,
+            b,
+            c,
+            |a, b, c| (a & b) ^ ((!a) & c),
+            // Boolean::sha256_ch operates on 3 Booleans and outputs the choice Boolean.
+            // It will remain same for sha512_ch since it does not take into account UInt32 or UInt64.
+            |cs, i, a, b, c| Boolean::sha256_ch(cs.namespace(|| format!("ch {}", i)), a, b, c),
+        )
+    }
+}
+
+impl fmt::Display for UInt64 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let tmp = format!("{:#x}", self.value.unwrap());
+
+        formatter.pad_integral(true, "UInt64 ", &tmp)
+    }
+}
+
+impl fmt::Debug for UInt64 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let tmp = format!("{:#x}", self.value.unwrap());
+
+        formatter.pad_integral(true, "UInt64 ", &tmp)
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::UInt64;
     use bellpepper::gadgets::multieq::MultiEq;
-    use bellpepper_core::{boolean::Boolean, test_cs::TestConstraintSystem, ConstraintSystem};
+    use bellpepper_core::boolean::Boolean;
+    use bellpepper_core::test_cs::TestConstraintSystem;
+    use bellpepper_core::ConstraintSystem;
 
+    use bitvec::prelude::*;
     use blstrs::Scalar as Fr;
     use ff::Field;
-    use rand_core::{RngCore, SeedableRng};
+    use proptest::prelude::*;
+    use rand_core::SeedableRng as _;
     use rand_xorshift::XorShiftRng;
+    use std::convert::TryInto;
 
-    #[test]
-    fn test_uint64_from_bits_be() {
-        let mut rng = XorShiftRng::from_seed([
-            0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
-            0xbc, 0xe5,
-        ]);
-
-        for _ in 0..1000 {
-            let v = (0..64)
-                .map(|_| Boolean::constant(rng.next_u64() % 2 != 0))
-                .collect::<Vec<_>>();
-
-            let b = UInt64::from_bits_be(&v);
-
-            for (i, bit) in b.bits.iter().enumerate() {
-                match *bit {
-                    Boolean::Constant(bit) => {
-                        assert!(bit == ((b.value.unwrap() >> i) & 1 == 1));
-                    }
-                    _ => unreachable!(),
-                }
-            }
-
-            let expected_to_be_same = b.into_bits_be();
-
-            for x in v.iter().zip(expected_to_be_same.iter()) {
-                match x {
-                    (&Boolean::Constant(true), &Boolean::Constant(true))
-                    | (&Boolean::Constant(false), &Boolean::Constant(false)) => {}
-                    _ => unreachable!(),
-                }
-            }
+    proptest! {
+        #[test]
+        fn test_uint64_from_constant(a: u64) {
+            let b = UInt64::constant(a);
+            assert_eq!(a, b.value.unwrap());
         }
-    }
 
-    #[test]
-    fn test_uint64_from_bits() {
-        let mut rng = XorShiftRng::from_seed([
-            0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
-            0xbc, 0xe5,
-        ]);
-
-        for _ in 0..1000 {
-            let v = (0..64)
-                .map(|_| Boolean::constant(rng.next_u32() % 2 != 0))
-                .collect::<Vec<_>>();
-
-            let b = UInt64::from_bits(&v);
-
-            for (i, bit) in b.bits.iter().enumerate() {
-                match *bit {
-                    Boolean::Constant(bit) => {
-                        assert!(bit == ((b.value.unwrap() >> i) & 1 == 1));
-                    }
-                    _ => unreachable!(),
-                }
-            }
-
-            let expected_to_be_same = b.into_bits();
-
-            for x in v.iter().zip(expected_to_be_same.iter()) {
-                match x {
-                    (&Boolean::Constant(true), &Boolean::Constant(true))
-                    | (&Boolean::Constant(false), &Boolean::Constant(false)) => {}
-                    _ => unreachable!(),
-                }
-            }
+        #[test]
+        fn test_uint64_from_bits_be(a: u64) {
+            let a_bv = BitVec::<u64, Msb0>::from_element(a);
+            let a_bits: Vec<Boolean> = a_bv.iter().map(|b| Boolean::constant(*b)).collect();
+            let b = UInt64::from_bits_be(&a_bits);
+            assert_eq!(a, b.value.unwrap());
         }
-    }
 
-    #[test]
-    fn test_uint64_xor() {
-        let mut rng = XorShiftRng::from_seed([
-            0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
-            0xbc, 0xe5,
-        ]);
+        #[test]
+        fn test_uint64_from_bits(a: u64) {
+            let a_bv = BitVec::<u64, Lsb0>::from_element(a);
+            let a_bits: Vec<Boolean> = a_bv.iter().map(|b| Boolean::constant(*b)).collect();
+            let b = UInt64::from_bits(&a_bits);
+            assert_eq!(a, b.value.unwrap());
+        }
 
-        for _ in 0..1000 {
-            let mut cs = TestConstraintSystem::<Fr>::new();
+        #[test]
+        fn test_uint64_xor(a: u64, b: u64, c: u64) {
+            let mut cs = TestConstraintSystem::<pasta_curves::pallas::Scalar>::new();
 
-            let a = rng.next_u64();
-            let b = rng.next_u64();
-            let c = rng.next_u64();
-
-            let mut expected = a ^ b ^ c;
+            let expected = a ^ b ^ c;
 
             let a_bit = UInt64::alloc(cs.namespace(|| "a_bit"), Some(a)).unwrap();
-            let b_bit = UInt64::constant(b);
+            let b_bit = UInt64::constant(b); // Just to mix things up
             let c_bit = UInt64::alloc(cs.namespace(|| "c_bit"), Some(c)).unwrap();
 
             let r = a_bit.xor(cs.namespace(|| "first xor"), &b_bit).unwrap();
@@ -530,24 +549,19 @@ mod test {
 
             assert!(cs.is_satisfied());
 
-            assert!(r.value == Some(expected));
+            assert_eq!(r.value.unwrap(), expected);
+        }
 
-            for b in r.bits.iter() {
-                match *b {
-                    Boolean::Is(ref b) => {
-                        assert_eq!(b.get_value().unwrap(), expected & 1 == 1);
-                    }
-                    Boolean::Not(ref b) => {
-                        assert_ne!(b.get_value().unwrap(), expected & 1 == 1);
-                    }
-                    Boolean::Constant(b) => {
-                        assert_eq!(b, expected & 1 == 1);
-                    }
-                }
+        #[test]
+        fn test_uint64_rotr(a: u64) {
+            let num = UInt64::constant(a);
 
-                expected >>= 1;
+            for i in 0..64 {
+                let b = num.rotr(i);
+                assert_eq!(b.value.unwrap(), a.rotate_right(i.try_into().unwrap()));
             }
         }
+
     }
 
     #[test]
@@ -647,41 +661,6 @@ mod test {
             }
 
             assert!(!cs.is_satisfied());
-        }
-    }
-
-    #[test]
-    fn test_uint64_rotr() {
-        let mut rng = XorShiftRng::from_seed([
-            0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
-            0xbc, 0xe5,
-        ]);
-
-        let mut num = rng.next_u64();
-
-        let a = UInt64::constant(num);
-
-        for _ in 0..50 {
-            for i in 0..64 {
-                let b = a.rotr(i);
-                assert_eq!(a.bits.len(), b.bits.len());
-
-                assert!(b.value.unwrap() == num);
-
-                let mut tmp = num;
-                for b in &b.bits {
-                    match *b {
-                        Boolean::Constant(b) => {
-                            assert_eq!(b, tmp & 1 == 1);
-                        }
-                        _ => unreachable!(),
-                    }
-
-                    tmp >>= 1;
-                }
-
-                num = num.rotate_right(1);
-            }
         }
     }
 

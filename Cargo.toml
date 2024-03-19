@@ -8,6 +8,8 @@ members = [
     "crates/sha1",
     "crates/keccak",
     "crates/merkle-inclusion",
+    "crates/chunk",
+    "crates/uint64",
     "crates/ripemd160",
 ]
 
@@ -24,6 +26,10 @@ pasta_curves = { version = "0.5", features = ["repr-c", "serde"] }
 rand = "0.8.5"
 rand_core = "0.6.4"
 rand_xorshift = "0.3.0"
+num-bigint = "0.4.3"
+num-integer = "0.1.45"
+num-traits = "0.2.15"
+proptest = "1.4.0"
 
 [profile.dev-ci]
 inherits = "dev"

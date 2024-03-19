@@ -6,20 +6,20 @@ use bellpepper_emulated::field_element::{
     EmulatedFieldElement, EmulatedFieldParams, PseudoMersennePrime,
 };
 use bls12_381::fp::Fp as BlsFp;
-use ff::{PrimeField, PrimeFieldBits};
+use ff::PrimeFieldBits;
 use num_bigint::{BigInt, Sign};
 
 pub struct Bls12381FpParams;
 
 impl EmulatedFieldParams for Bls12381FpParams {
     // TODO: Depending on the native field, different limb/bit pairs are more optimal and have less waste. This should be customizable and not hardcoded
-    // for example, in the pasta field, 4/96 could be used instead
+    // for example, in the pasta field, 4/96 could be used instead for savings, but in bn256 7/55 is better
     fn num_limbs() -> usize {
-        6
+        7
     }
 
     fn bits_per_limb() -> usize {
-        64
+        55
     }
 
     fn modulus() -> BigInt {
@@ -39,10 +39,17 @@ impl EmulatedFieldParams for Bls12381FpParams {
     }
 }
 
+impl Bls12381FpParams {
+    /// Third root of unity
+    pub fn w<F: PrimeFieldBits>() -> FpElement<F> {
+        FpElement::<F>::from_dec("4002409555221667392624310435006688643935503118305586438271171395842971157480381377015405980053539358417135540939436").unwrap()
+    }
+}
+
 pub type Bls12381Fp<F> = EmulatedFieldElement<F, Bls12381FpParams>;
 
 #[derive(Clone)]
-pub struct FpElement<F: PrimeField + PrimeFieldBits>(pub(crate) Bls12381Fp<F>);
+pub struct FpElement<F: PrimeFieldBits>(pub(crate) Bls12381Fp<F>);
 
 pub struct Bls12381FrParams;
 
@@ -76,7 +83,7 @@ pub type Bls12381Fr<F> = EmulatedFieldElement<F, Bls12381FrParams>;
 
 impl<F> From<&BlsFp> for FpElement<F>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     fn from(value: &BlsFp) -> Self {
         let bytes = value.to_bytes();
@@ -103,32 +110,48 @@ pub(crate) fn bigint_to_fpelem(val: &BigInt) -> Option<BlsFp> {
     Some(BlsFp::from_bytes(&bytes).unwrap())
 }
 
-pub(crate) fn emulated_to_native<F>(value: &Bls12381Fp<F>) -> BlsFp
+pub(crate) fn emulated_to_native<F>(value: &Bls12381Fp<F>) -> Option<BlsFp>
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
     use std::ops::Rem;
     let p = &Bls12381FpParams::modulus();
-    let val = BigInt::from(value).rem(p);
-    bigint_to_fpelem(&val).unwrap()
+    let val = BigInt::try_from(value).ok().map(|v| v.rem(p));
+    val.and_then(|v| bigint_to_fpelem(&v))
 }
 
-impl<F> From<&FpElement<F>> for BlsFp
+pub(crate) fn big_from_dec(v: &str) -> Option<BigInt> {
+    BigInt::parse_bytes(v.as_bytes(), 10)
+}
+
+pub(crate) fn fp_from_dec(v: &str) -> Option<BlsFp> {
+    big_from_dec(v).as_ref().and_then(bigint_to_fpelem)
+}
+
+impl<F> TryFrom<&FpElement<F>> for BlsFp
 where
-    F: PrimeField + PrimeFieldBits,
+    F: PrimeFieldBits,
 {
-    fn from(value: &FpElement<F>) -> Self {
-        emulated_to_native(&value.0)
+    type Error = SynthesisError;
+
+    fn try_from(value: &FpElement<F>) -> Result<Self, Self::Error> {
+        emulated_to_native(&value.0).ok_or(SynthesisError::AssignmentMissing)
     }
 }
 
-impl<F: PrimeField + PrimeFieldBits> FpElement<F> {
+impl<F: PrimeFieldBits> TryFrom<&FpElement<F>> for BigInt {
+    type Error = SynthesisError;
+
+    fn try_from(value: &FpElement<F>) -> Result<Self, Self::Error> {
+        use std::ops::Rem;
+        let p = &Bls12381FpParams::modulus();
+        Self::try_from(&value.0).map(|v| v.rem(p))
+    }
+}
+
+impl<F: PrimeFieldBits> FpElement<F> {
     pub fn from_dec(val: &str) -> Option<Self> {
-        BigInt::parse_bytes(val.as_bytes(), 10)
-            .as_ref()
-            .and_then(bigint_to_fpelem)
-            .as_ref()
-            .map(Self::from)
+        fp_from_dec(val).as_ref().map(Self::from)
     }
 
     pub fn zero() -> Self {
@@ -139,14 +162,15 @@ impl<F: PrimeField + PrimeFieldBits> FpElement<F> {
         Self(Bls12381Fp::one())
     }
 
-    pub fn alloc_element<CS>(cs: &mut CS, value: &BlsFp) -> Result<Self, SynthesisError>
+    pub fn alloc_element<CS>(cs: &mut CS, value: &Option<BlsFp>) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
-        let val_alloc = Self::from(value);
-        let alloc = val_alloc
-            .0
-            .allocate_field_element_unchecked(&mut cs.namespace(|| "alloc fp elm"))?;
+        let val: Option<BigInt> = value.and_then(|v| BigInt::try_from(&Self::from(&v)).ok());
+        let alloc = Bls12381Fp::<F>::allocate_optional_field_element_unchecked(
+            &mut cs.namespace(|| "alloc fp elm"),
+            &val,
+        )?;
 
         Ok(Self(alloc))
     }
@@ -276,13 +300,21 @@ impl<F: PrimeField + PrimeFieldBits> FpElement<F> {
         )?;
         Ok(Self(res))
     }
+
+    pub fn sgn0<CS>(&self, cs: &mut CS) -> Result<Boolean, SynthesisError>
+    where
+        CS: ConstraintSystem<F>,
+    {
+        self.0.sgn0(cs)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use bellpepper_core::test_cs::TestConstraintSystem;
-    use pasta_curves::Fp;
+    use bls12_381::hash_to_curve::Sgn0;
+    use halo2curves::bn256::Fq as Fp;
 
     use expect_test::{expect, Expect};
     fn expect_eq(computed: usize, expected: &Expect) {
@@ -297,9 +329,9 @@ mod tests {
         let c = a + b;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
+        let c_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.add(&mut cs.namespace(|| "a+b"), &b_alloc).unwrap();
         FpElement::assert_is_equal(&mut cs.namespace(|| "a+b = c"), &res_alloc, &c_alloc).unwrap();
         if !cs.is_satisfied() {
@@ -307,8 +339,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["277"]);
-        expect_eq(cs.num_constraints(), &expect!["262"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["244"]);
+        expect_eq(cs.num_constraints(), &expect!["226"]);
     }
 
     #[test]
@@ -319,9 +351,9 @@ mod tests {
         let c = a - b;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
+        let c_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.sub(&mut cs.namespace(|| "a-b"), &b_alloc).unwrap();
         FpElement::assert_is_equal(&mut cs.namespace(|| "a-b = c"), &res_alloc, &c_alloc).unwrap();
         if !cs.is_satisfied() {
@@ -329,8 +361,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["277"]);
-        expect_eq(cs.num_constraints(), &expect!["262"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["244"]);
+        expect_eq(cs.num_constraints(), &expect!["226"]);
     }
 
     #[test]
@@ -341,18 +373,18 @@ mod tests {
         let c = a * b;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
-        let c_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
+        let c_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.mul(&mut cs.namespace(|| "a*b"), &b_alloc).unwrap();
         FpElement::assert_is_equal(&mut cs.namespace(|| "a*b = c"), &res_alloc, &c_alloc).unwrap();
+        assert!(cs.is_satisfied());
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["651"]);
+        expect_eq(cs.num_constraints(), &expect!["633"]);
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
-        assert!(cs.is_satisfied());
-        expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["681"]);
-        expect_eq(cs.num_constraints(), &expect!["666"]);
     }
 
     #[test]
@@ -368,10 +400,10 @@ mod tests {
         let c = a * b;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
+        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
         let b_elem: FpElement<Fp> = (&b).into();
-        let b_val: BigInt = (&b_elem.0).into();
-        let c_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let b_val: BigInt = (&b_elem.0).try_into().unwrap();
+        let c_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc
             .mul_const(&mut cs.namespace(|| "a*b (const)"), &b_val)
             .unwrap();
@@ -381,8 +413,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["271"]);
-        expect_eq(cs.num_constraints(), &expect!["262"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["237"]);
+        expect_eq(cs.num_constraints(), &expect!["226"]);
     }
 
     #[test]
@@ -392,8 +424,8 @@ mod tests {
         let c = -&a;
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let c_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc c"), &c).unwrap();
+        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc c"), &Some(c)).unwrap();
         let res_alloc = a_alloc.neg(&mut cs.namespace(|| "-a")).unwrap();
         FpElement::assert_is_equal(&mut cs.namespace(|| "-a = c"), &res_alloc, &c_alloc).unwrap();
         if !cs.is_satisfied() {
@@ -401,8 +433,33 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["271"]);
-        expect_eq(cs.num_constraints(), &expect!["262"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["237"]);
+        expect_eq(cs.num_constraints(), &expect!["226"]);
+    }
+
+    #[test]
+    fn test_random_sgn0() {
+        let mut rng = rand::thread_rng();
+        let a = BlsFp::random(&mut rng);
+        let c: bool = a.sgn0().into();
+
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let c_alloc = AllocatedBit::alloc(&mut cs.namespace(|| "alloc c"), Some(c)).unwrap();
+        let res_alloc = a_alloc.sgn0(&mut cs.namespace(|| "a.sgn0()")).unwrap();
+        Boolean::enforce_equal(
+            &mut cs.namespace(|| "a.sgn0() = c"),
+            &res_alloc,
+            &Boolean::from(c_alloc),
+        )
+        .unwrap();
+        if !cs.is_satisfied() {
+            eprintln!("{:?}", cs.which_is_unsatisfied())
+        }
+        assert!(cs.is_satisfied());
+        expect_eq(cs.num_inputs(), &expect!["1"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["10"]);
+        expect_eq(cs.num_constraints(), &expect!["4"]);
     }
 
     #[test]
@@ -412,12 +469,11 @@ mod tests {
         let b = BlsFp::random(&mut rng);
 
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &a).unwrap();
-        let b_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc b"), &b).unwrap();
+        let a_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc a"), &Some(a)).unwrap();
+        let b_alloc = FpElement::alloc_element(&mut cs.namespace(|| "alloc b"), &Some(b)).unwrap();
         let res_alloc = a_alloc.sub(&mut cs.namespace(|| "a-a"), &a_alloc).unwrap();
-        let z_alloc =
-            FpElement::alloc_element(&mut cs.namespace(|| "alloc zero"), &BlsFp::zero()).unwrap();
-        FpElement::assert_is_equal(&mut cs.namespace(|| "a-a = 0"), &res_alloc, &z_alloc).unwrap();
+        let zero = FpElement::zero();
+        FpElement::assert_is_equal(&mut cs.namespace(|| "a-a = 0"), &res_alloc, &zero).unwrap();
         let zbit_alloc = res_alloc
             .alloc_is_zero(&mut cs.namespace(|| "z <- a-a ?= 0"))
             .unwrap();
@@ -439,7 +495,7 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["1199"]);
-        expect_eq(cs.num_constraints(), &expect!["1196"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["1091"]);
+        expect_eq(cs.num_constraints(), &expect!["1093"]);
     }
 }

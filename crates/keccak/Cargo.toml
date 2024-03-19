@@ -3,7 +3,7 @@ name = "bellpepper-keccak"
 version = "0.1.0"
 edition = "2021"
 authors = ["Lurk Lab Engineering <engineering@lurk-lab.com>", "Zatoichi Labs <admin@zatoichi-labs.com>"]
-license = "MIT OR Apache-2.0"
+license.workspace=true
 description = "Keccak  using bellpepper"
 documentation = "https://docs.rs/bellpepper-keccak"
 homepage.workspace = true
@@ -13,12 +13,13 @@ rust-version = "1.66.1"
 [dependencies]
 ff = { workspace = true }
 bellpepper-core = { workspace = true }
+bellpepper-uint64 = { version = "0.1.0", path = "../uint64" }
 
 [dev-dependencies]
 bitvec = "1.0.1"
 bls12_381 = "0.8.0"
 libsecp256k1 = "0.7"
 pairing = "0.23.0"
-proptest = "0.9.6"
+proptest = { workspace = true }
 tiny-keccak = { version = "2.0", features = ["keccak","sha3"] }
 hex = "0.4.3"

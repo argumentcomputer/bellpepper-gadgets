@@ -37,11 +37,8 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ${{ matrix.os }}
+    runs-on: gh-32vcpu-128gbram-ubuntu-2204
     strategy:
-      matrix:
-        os:
-          - ubuntu-latest
       fail-fast: false
     env:
       RUSTFLAGS: -D warnings
@@ -83,11 +80,14 @@ jobs:
       matrix:
         package:
           - "emulated"
+          - "uint64"
+          - "chunk"
           - "sha1"
           - "sha512"
           - "ed25519"
           - "keccak"
           - "bls12381"
+          - "merkle-inclusion"
     steps:
     - uses: actions/checkout@v4
     - name: Install rustup
