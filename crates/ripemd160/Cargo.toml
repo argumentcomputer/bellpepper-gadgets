@@ -1,6 +1,6 @@
 [package]
 name = "ripemd160"
-authors = ["Shourya Goel <shouryagoel10000@gmail.com>", "Himanshu Raheja <himanshu_r@cs.iitr.ac.in>"]
+authors = ["Shourya Goel <shouryagoel10000@gmail.com>", "Himanshu Raheja <hemanshuraheja@gmail.com>"]
 version = "0.1.0"
 edition = "2021"
 license.workspace = true
