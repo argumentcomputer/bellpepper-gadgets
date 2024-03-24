@@ -340,7 +340,7 @@ mod tests {
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
         expect_eq(cs.scalar_aux().len(), &expect!["244"]);
-        expect_eq(cs.num_constraints(), &expect!["226"]);
+        expect_eq(cs.num_constraints(), &expect!["227"]);
     }
 
     #[test]
@@ -362,7 +362,7 @@ mod tests {
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
         expect_eq(cs.scalar_aux().len(), &expect!["244"]);
-        expect_eq(cs.num_constraints(), &expect!["226"]);
+        expect_eq(cs.num_constraints(), &expect!["227"]);
     }
 
     #[test]
@@ -380,8 +380,8 @@ mod tests {
         FpElement::assert_is_equal(&mut cs.namespace(|| "a*b = c"), &res_alloc, &c_alloc).unwrap();
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["651"]);
-        expect_eq(cs.num_constraints(), &expect!["633"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["769"]);
+        expect_eq(cs.num_constraints(), &expect!["754"]);
         if !cs.is_satisfied() {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
@@ -414,7 +414,7 @@ mod tests {
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
         expect_eq(cs.scalar_aux().len(), &expect!["237"]);
-        expect_eq(cs.num_constraints(), &expect!["226"]);
+        expect_eq(cs.num_constraints(), &expect!["227"]);
     }
 
     #[test]
@@ -434,7 +434,7 @@ mod tests {
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
         expect_eq(cs.scalar_aux().len(), &expect!["237"]);
-        expect_eq(cs.num_constraints(), &expect!["226"]);
+        expect_eq(cs.num_constraints(), &expect!["227"]);
     }
 
     #[test]
@@ -496,6 +496,6 @@ mod tests {
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
         expect_eq(cs.scalar_aux().len(), &expect!["1091"]);
-        expect_eq(cs.num_constraints(), &expect!["1093"]);
+        expect_eq(cs.num_constraints(), &expect!["1096"]);
     }
 }
