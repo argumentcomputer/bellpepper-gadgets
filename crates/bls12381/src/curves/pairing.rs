@@ -630,7 +630,7 @@ mod tests {
         Fp12Element::assert_is_equal(&mut cs.namespace(|| "pair(a, b) = c"), &res_alloc, &c_alloc)
             .unwrap();
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.num_constraints(), &expect!["7147240"]);
+        expect_eq(cs.num_constraints(), &expect!["9982166"]);
     }
 
     // NOTE: this test currently takes ~22GB of ram and ~50s to run
@@ -662,8 +662,8 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["7142222"]);
-        expect_eq(cs.num_constraints(), &expect!["7147240"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["9947590"]);
+        expect_eq(cs.num_constraints(), &expect!["9982166"]);
     }
 
     // NOTE: this test currently takes ~50GB of ram and ~110s to run
@@ -715,7 +715,7 @@ mod tests {
         }
         assert!(cs.is_satisfied());
         expect_eq(cs.num_inputs(), &expect!["1"]);
-        expect_eq(cs.scalar_aux().len(), &expect!["17043247"]);
-        expect_eq(cs.num_constraints(), &expect!["17085695"]);
+        expect_eq(cs.scalar_aux().len(), &expect!["20752762"]);
+        expect_eq(cs.num_constraints(), &expect!["20833926"]);
     }
 }
