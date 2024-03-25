@@ -159,32 +159,54 @@ $$\left\lceil \frac{\texttt{d.overflow}+64l+1 -|p|}{64}\right\rceil.$$
 \subsection{Compacting limbs}
 To check that $qn = d$, we first compute the product of the limbed representations of $q$ and the prime $n$. The next step is to compare the limbs of $qn$ and $d$ while accounting for overflows. The number of R1CS constraints to perform the limb-wise comparison increases with the number of limbs.
 
-In some cases, it might be possible to reduce the number of limbs by \textbf{compacting} them. Let us illustrate the compaction process with an example. Suppose the capacity of $\mathbb{F}_p$ is 250 bits. Let $b$ have a non-native representation of the form $\sum_{i=0}^3 b_i 2^{64i}$ where the limbs $b_i$ have nominal bit width of 64 bits and maximum overflow of 100 bits.
+In some cases, it might be possible to reduce the number of limbs by \textbf{compacting} them. Let us illustrate the compaction process with an example. Suppose the capacity of $\mathbb{F}_p$ is 250 bits. Let $b$ have a non-native representation of the form $\sum_{i=0}^3 b_i 2^{64i}$ where the limbs $b_i$ have a bit width of 64 bits and maximum overflow of 100 bits.
 
 The least significant limb $b_0$ will fit in 164 bits. The next significant limb $b_1$ is multiplied by $2^{64}$. So $b_1 2^{64}$ will fit in 228 bits. The sum $b_0 + b_1 2^{64}$ will occupy a maximum of 229 bits, where we add one to the bitwidth of $b_1 2^{64}$ to account for the carry. Since 229 is less than the capacity 250 of $\mathbb{F}_p$, this sum can be represented in a single limb from $\mathbb{F}_p$.
 
-Similarly, the third and fourth limbs $b_2$ and $b_3$ can be combined into a single limb as $b_2 + 2^{64} b_3$. So we have reduced the number of limbs from four to two. This process of combining limbs is called compaction.
+Similarly, the third and fourth limbs $b_2$ and $b_3$ can be combined into a single limb as $b_2 + 2^{64} b_3$. So we have reduced the number of limbs from four to two. This process of combining limbs is called compaction. The new limb width is 128 bits and the new overflow is 101 bits.
 
-If $k$ limbs of $b$ have maximum overflow $\texttt{b.overflow}$ are combined in the compaction process, the overflow of $b$ will increase from $\texttt{b.overflow}$ to $(k-1) \times \texttt{limb\_width} + \texttt{b.overflow} + 1$. This is because the compaction process involves a sum of terms of the form
+If $k$ limbs of $b$ have maximum overflow $\texttt{b.overflow}$ are combined in the compaction process, the limb width will increase from $\texttt{limb\_width}$ to $k \times \texttt{limb\_width}$. 
+Furthermore, the overflow will increase from $\texttt{b.overflow}$ to $\texttt{b.overflow} + 1$. This is because the compaction process involves a sum of terms of the form
 \begin{align*}
   \sum_{i=0}^{k-1} b_i 2^{\texttt{limb\_width} \times i}.
 \end{align*}
-The most significant term in this sum has a maximum possible bitwidth of $k\times \texttt{limb\_width} + \texttt{b.overflow}$. The sum of the other terms can induce a carry of at most 1 bit when added to this most significant term. So the overall sum has a maximum possible bitwidth of $k\times \texttt{limb\_width} + \texttt{b.overflow}+1$ which gives us the overflow value of $(k-1) \times \texttt{limb\_width} + \texttt{b.overflow} + 1$.
-
-
-
-We don't want this new overflow to exceed $\texttt{maximum\_overflow} = \texttt{capacity} - \texttt{limb\_width} - 3$.
-Hence the number of limbs $k$ which can be combined is given by
-$$
-\left\lfloor \frac{\texttt{capacity}-\texttt{b.overflow}-4}{\texttt{limb\_width}}\right\rfloor.
-$$
-
-When $\texttt{b.overflow} = \texttt{maximum\_overflow}$, the above formula will evaluate to zero. So no limbs will be combined. The same holds for the case when $\texttt{b.overflow} = \texttt{maximum\_overflow} + 1$.
+The most significant term in this sum has a maximum possible bitwidth of $k\times \texttt{limb\_width} + \texttt{b.overflow}$. The sum of the other terms can induce a carry of at most 1 bit when added to this most significant term. So the overall sum has a maximum possible bitwidth of $k\times \texttt{limb\_width} + \texttt{b.overflow}+1$ which gives us the overflow value of $\texttt{b.overflow} + 1$.
 
 \begin{remark}
-In the current \texttt{emulated} implementation (March 2024), the number of limbs that can be combined is calculated as $
-\left\lfloor \frac{\texttt{capacity}-\texttt{b.overflow}-1}{\texttt{limb\_width}}\right\rfloor.$
+  In Section \ref{sub:limb_wise_equality_check}, the variable $\texttt{limb\_width}$ refers to the post-compaction limb width. If $k$ limbs are combined in the compaction process, then $$\texttt{post\_compaction\_limb\_width} = k \times \texttt{pre\_compaction\_limb\_width}.$$
 \end{remark}
+
+
+We have two requirements:
+\begin{itemize}
+  \item We don't want the maximum possible bitwidth $k\times \texttt{limb\_width} + \texttt{b.overflow} + 1$ of post-compaction limbs to exceed the capacity of the native field. Hence the number of limbs $k$ which can be combined should satisfy
+    $$
+    k \le \left\lfloor \frac{\texttt{capacity}-\texttt{b.overflow}-1}{\texttt{limb\_width}}\right\rfloor.
+    $$
+
+  \item In Section \ref{sub:maximum_overflow_in_the_difference}, we remarked that the overflow of the difference $d = c-r$ satisfies $\texttt{d.overflow} \le \texttt{maximum\_overflow} + 1$. Since the compaction process changes the limb width and the overflow, we want the post-compaction overflow of $d$ to still be bounded above by $\texttt{maximum\_overflow} + 1$.
+
+    We can ensure this by allowing compaction only when the pre-compaction overflow is less than or equal to $\texttt{maximum\_overflow}$. Then the post-compaction overflow will be at most $\texttt{maximum\_overflow} + 1$. Consider the following formula for the number of limbs that can be combined
+    $$
+    k = \left\lfloor \frac{\texttt{capacity}-\texttt{b.overflow}- 1}{\texttt{limb\_width}}\right\rfloor.
+    $$
+    Recall that $\texttt{maximum\_overflow}= \texttt{capacity} - \texttt{limb\_width} - 3$.
+
+    When $\texttt{b.overflow} = \texttt{maximum\_overflow} + 1$, the above formula evaluates to
+    $$
+    k = \left\lfloor \frac{\texttt{limb\_width}+ 1}{\texttt{limb\_width}}\right\rfloor.
+    $$
+    Then $k = 1$ as long as $\texttt{limb\_width} \ge 2$. So no compaction will take place as long as the pre-compaction limb width is at least 2.
+    \begin{remark}
+    A new assumption of $\texttt{limb\_width} \ge 2$ was made in the above argument.
+    \end{remark}
+
+    If $\texttt{b.overflow} = \texttt{maximum\_overflow}$, the formula for the number of limbs that can be combined reduces to
+    $$
+    k = \left\lfloor \frac{\texttt{limb\_width}+ 2}{\texttt{limb\_width}}\right\rfloor.
+    $$
+    Now $k=2$ if $\texttt{limb\_width} = 2$. So compaction can occur in the extreme case of the pre-compaction limb width being equal to 2 bits.
+\end{itemize}
 
 \subsection{Limb-wise equality check}%
 \label{sub:limb_wise_equality_check}
@@ -226,7 +248,7 @@ Let $\texttt{max\_value}$ = $2^{\texttt{limb\_width}+\texttt{b.overflow}+1}$. No
 This inequality will hold if $\texttt{a.overflow} \le \texttt{capacity} - \texttt{limb\_width} - 2$ and $\texttt{b.overflow} \le \texttt{capacity} - \texttt{limb\_width} - 3$. Since $\texttt{a.overflow} \le \texttt{maximum\_overflow} + 1$ and $\texttt{a.overflow} \le \texttt{maximum\_overflow}$, we require $\texttt{maximum\_overflow}$ to be at most $\texttt{capacity} - \texttt{limb\_width} - 3$.
     \end{remark}
     
-    First, we check that the 64 least significant bits in $e_0$ are all zeros. This will be true if $qn = d$. The addition of $\texttt{max\_value}$ does not affect these least significant bits as it contributes only zeros in the 64 least significant bits.
+    First, we check that the $\texttt{limb\_width}$ least significant bits in $e_0$ are all zeros. This will be true if $qn = d$. The addition of $\texttt{max\_value}$ does not affect these least significant bits as it contributes only zeros in the $\texttt{limb\_width}$ least significant bits.
 
     Next, we will initialize $\texttt{carry\_1}$ with the value of $e_0$ right shifted $\texttt{limb\_width}$ times,
     
@@ -249,7 +271,7 @@ This inequality will hold if $\texttt{a.overflow} \le \texttt{capacity} - \textt
     The $b_1$ term occupies a maximum of $\texttt{limb\_width} + \texttt{b.overflow}$ bits and the $\texttt{max\_value\_shifted}$ term occupies $\texttt{b.overflow} + 2$ bits. If we assume $\texttt{limb\_width} \ge 2$, the sum $b_1 + \texttt{max\_value\_shifted}$ occupies a maximum of $\texttt{limb\_width} + \texttt{b.overflow} + 1$ bits. Since $\texttt{max\_value} = 2^{\texttt{limb\_width}+\texttt{b.overflow}+1}$, the difference $\texttt{max\_value} - b_1 - \texttt{max\_value\_shifted}$ will not underflow. This difference occupies a maximum of $\texttt{limb\_width} + \texttt{b.overflow} + 2$ bits.
 
     \begin{remark}
-    A new assumption of $\texttt{limb\_width} \ge 2$ was made in the above argument.
+    We need the assumption that $\texttt{limb\_width} \ge 2$ in the above argument.
     \end{remark}
 
     The $a_1$ term occupies a maximum of $\texttt{limb\_width} + \texttt{a.overflow}$ bits and the $\texttt{carry\_1}$ term occupies $\max(\texttt{a.overflow}, \texttt{b.overflow} + 2) + 1$ bits. So the sum $a_1 + \texttt{carry\_1}$ occupies a maximum of 
@@ -271,7 +293,7 @@ This inequality will hold if $\texttt{a.overflow} \le \texttt{capacity} - \textt
    To calculate $e_1$ in $\mathbb{F}_p$, we require the above maximum bitwidth to be at most $\texttt{capacity}$. This implies that $\texttt{a.overflow} \le \texttt{capacity} - \texttt{limb\_width} - 2$ and $\texttt{b.overflow} \le \texttt{capacity} - \texttt{limb\_width} - 3$. So $\texttt{maximum\_overflow}$ should be at most $\texttt{capacity} - \texttt{limb\_width} - 3$. This agrees with the bound on $\texttt{maximum\_overflow}$ required to calculate $e_0$ in $\mathbb{F}_p$.
    \end{remark}
 
-    Now, we check that the 64 least significant bits in $e_1$ are all zeros. And initialize $\texttt{carry\_2}$ with the value of $e_1$ right shifted $\texttt{limb\_width}$ times,
+    Now, we check that the $\texttt{limb\_width}$ least significant bits in $e_1$ are all zeros. And initialize $\texttt{carry\_2}$ with the value of $e_1$ right shifted $\texttt{limb\_width}$ times,
 
     $$\texttt{carry\_2} = e_1 \gg \texttt{limb\_width}.$$
 
@@ -301,7 +323,7 @@ This inequality will hold if $\texttt{a.overflow} \le \texttt{capacity} - \textt
 
     Thus, the maximum possible bitwidth of $e_2$ is $\max(\texttt{a.overflow}, \texttt{b.overflow} + 1) + \texttt{limb\_width} + 2,$ which is the same as the maximum bitwidth of $e_1$. So the calculation of $e_2$ in $\mathbb{F}_p$ can be performed as long as $\texttt{maximum\_overflow} \le \texttt{capacity} - \texttt{limb\_width} - 3$.
 
-    As before, we check that the 64 least significant bits in $e_2$ are all zeros. And initialize $\texttt{carry\_3}$ with the value of $e_2$ right shifted $\texttt{limb\_width}$ times,
+    As before, we check that the $\texttt{limb\_width}$ least significant bits in $e_2$ are all zeros. And initialize $\texttt{carry\_3}$ with the value of $e_2$ right shifted $\texttt{limb\_width}$ times,
 
     $$\texttt{carry\_3} = e_2 \gg \texttt{limb\_width}.$$
 
@@ -334,7 +356,7 @@ for i in 0..max_limbs:
     if i > 0:
         e[i] = e[i] - max_value_shifted
     
-    if least_significant_64_bits(e[i]) != 0:
+    if least_significant_limb_width_bits(e[i]) != 0:
         exit with error
 
     carry = e[i] >> limb_width
