@@ -10,11 +10,7 @@ use std::convert::TryInto;
 
 use crate::util::{or_uint32, ripemd_d1, ripemd_d2, shl_uint32, swap_byte_endianness};
 
-#[allow(clippy::unreadable_literal)]
-const MD_BUFFERS: [u32; 5] = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
-
-#[allow(clippy::unreadable_literal)]
-const MD_BUFFERS_PRIME: [u32; 5] = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
+const IV: [u32; 5] = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
 
 #[allow(clippy::unreadable_literal)]
 const K_BUFFER: [u32; 5] = [0x00000000, 0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xa953fd4e];
@@ -53,8 +49,8 @@ where
     // Make the bytes little-endian
     let padded = swap_byte_endianness(&padded);
 
-    let mut cur_md = get_ripemd160_md("md");
-    let mut cur_md_prime = get_ripemd160_md("md_prime");
+    let mut cur_md = get_ripemd160_iv();
+    let mut cur_md_prime = get_ripemd160_iv();
     let mut cs = MultiEq::new(cs);
     for (i, block) in padded.chunks(512).enumerate() {
         let prev_md = cur_md.clone();
@@ -115,12 +111,8 @@ where
     Ok(update_md)
 }
 
-fn get_ripemd160_md(input: &str) -> [UInt32; 5] {
-    match input {
-        "md" => MD_BUFFERS.map(UInt32::constant),
-        "md_prime" => MD_BUFFERS_PRIME.map(UInt32::constant),
-        _ => panic!("Invalid input"),
-    }
+fn get_ripemd160_iv() -> [UInt32; 5] {
+    IV.map(UInt32::constant)
 }
 
 fn compute_f<Scalar, CS>(cs: CS, md_val: &mut [UInt32; 5], index: usize, left: bool) -> UInt32
