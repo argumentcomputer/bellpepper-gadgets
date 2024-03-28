@@ -8,7 +8,7 @@ use bellpepper_core::{boolean::Boolean, ConstraintSystem};
 use ff::PrimeField;
 use std::convert::TryInto;
 
-use crate::util::{or_uint32, ripemd_d1, ripemd_d2, shl_uint32, swap_byte_endianness};
+use crate::util::{ripemd_d1, ripemd_d2, swap_byte_endianness, uint32_rotl};
 
 const IV: [u32; 5] = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
 
@@ -267,23 +267,14 @@ fn block<Scalar, CS>(
             ],
         )
         .unwrap();
-        tmp1 = or_uint32(
-            cs.namespace(|| format!("first or block {} left {} index {}", index, left, i)),
-            &shl_uint32(&tmp1, s_val[i]).unwrap(),
-            &UInt32::shr(&tmp1, 32 - s_val[i]),
-        )
-        .unwrap();
+        tmp1 = uint32_rotl(tmp1, s_val[i]);
         tmp1 = UInt32::addmany(
             cs.namespace(|| format!("second add_many block {} left {} index {}", index, left, i)),
             &[tmp1, md_val[4].clone()],
         )
         .unwrap();
-        let tmp2 = or_uint32(
-            cs.namespace(|| format!("second or block {} left {} index {}", index, left, i)),
-            &shl_uint32(&md_val[2], 10).unwrap(),
-            &UInt32::shr(&md_val[2], 32 - 10),
-        )
-        .unwrap();
+
+        let tmp2 = uint32_rotl(md_val[2].clone(), 10);
         md_val[0] = md_val[4].clone();
         md_val[2] = md_val[1].clone();
         md_val[4] = md_val[3].clone();

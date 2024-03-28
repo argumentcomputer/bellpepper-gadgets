@@ -13,6 +13,11 @@ pub fn swap_byte_endianness(bits: &Vec<Boolean>) -> Vec<Boolean> {
     modified_bits
 }
 
+pub fn uint32_rotl(a: UInt32, by: usize) -> UInt32 {
+    assert!(by < 32usize);
+    a.rotr(32 - by)
+}
+
 fn ripemd160_d1<'a, Scalar, CS>(
     mut cs: CS,
     a: &'a Boolean,
@@ -234,19 +239,6 @@ where
         .into())
 }
 
-pub fn shl_uint32(a: &UInt32, by: usize) -> Result<UInt32, SynthesisError> {
-    let by = by % 32;
-
-    let fill = Boolean::constant(false);
-    let new_bits: Vec<_> = std::iter::repeat(&fill)
-        .take(by)
-        .chain(a.clone().into_bits().iter()) // The bits are least significant first
-        .take(32) // Only 32 bits needed!
-        .cloned()
-        .collect();
-    Ok(UInt32::from_bits(&new_bits))
-}
-
 fn triop<Scalar, CS, U>(
     mut cs: CS,
     a: &UInt32,
@@ -302,24 +294,6 @@ where
     })
 }
 
-/// OR two `UInt32` variables
-pub fn or_uint32<Scalar, CS>(mut cs: CS, a: &UInt32, b: &UInt32) -> Result<UInt32, SynthesisError>
-where
-    Scalar: PrimeField,
-    CS: ConstraintSystem<Scalar>,
-{
-    let a_bits = a.clone().into_bits();
-    let b_bits = b.clone().into_bits();
-    let or_bits = a_bits
-        .iter()
-        .zip(b_bits.iter())
-        .enumerate()
-        .map(|(i, (x, y))| Boolean::or(cs.namespace(|| format!("or {i}")), x, y).unwrap())
-        .collect::<Vec<_>>();
-
-    Ok(UInt32::from_bits(&or_bits))
-}
-
 #[cfg(test)]
 mod test {
 
@@ -349,38 +323,6 @@ mod test {
 
             for (x, y) in a_rev_bits.into_iter().zip(a_rev_bits_exp.into_iter()) {
                 assert_eq!(x.get_value().unwrap(), y.get_value().unwrap());
-            }
-        }
-    }
-
-    #[test]
-    fn test_uint32_shl() {
-        let mut rng = XorShiftRng::from_seed([
-            0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
-            0xbc, 0xe5,
-        ]);
-        for _ in 0..50 {
-            for i in 0..60 {
-                let mut cs = TestConstraintSystem::<Fp>::new();
-                let num = rng.next_u32();
-                let mut expected = num.wrapping_shl(i as u32);
-                let num_bit = UInt32::alloc(cs.namespace(|| "num_bit"), Some(num)).unwrap();
-                let res = shl_uint32(&num_bit, i).unwrap();
-                for b in res.into_bits() {
-                    match b {
-                        Boolean::Is(ref b) => {
-                            assert_eq!(b.get_value().unwrap(), expected & 1 == 1);
-                        }
-                        Boolean::Not(ref b) => {
-                            assert_ne!(b.get_value().unwrap(), expected & 1 == 1);
-                        }
-                        Boolean::Constant(b) => {
-                            assert_eq!(b, expected & 1 == 1);
-                        }
-                    }
-
-                    expected >>= 1;
-                }
             }
         }
     }
@@ -452,49 +394,6 @@ mod test {
 
             for b in r.into_bits().iter() {
                 match *b {
-                    Boolean::Is(ref b) => {
-                        assert_eq!(b.get_value().unwrap(), expected & 1 == 1);
-                    }
-                    Boolean::Not(ref b) => {
-                        assert_ne!(b.get_value().unwrap(), expected & 1 == 1);
-                    }
-                    Boolean::Constant(b) => {
-                        assert_eq!(b, expected & 1 == 1);
-                    }
-                }
-
-                expected >>= 1;
-            }
-        }
-    }
-
-    #[test]
-    fn test_uint32_or() {
-        let mut rng = XorShiftRng::from_seed([
-            0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
-            0xbc, 0xe5,
-        ]);
-
-        for _ in 0..1000 {
-            let mut cs = TestConstraintSystem::<Fp>::new();
-
-            let a = rng.next_u32();
-            let b = rng.next_u32();
-            let c = rng.next_u32();
-
-            let mut expected = a | b | c;
-
-            let a_bit = UInt32::alloc(cs.namespace(|| "a_bit"), Some(a)).unwrap();
-            let b_bit = UInt32::constant(b);
-            let c_bit = UInt32::alloc(cs.namespace(|| "c_bit"), Some(c)).unwrap();
-
-            let r = or_uint32(cs.namespace(|| "first or"), &a_bit, &b_bit).unwrap();
-            let r = or_uint32(cs.namespace(|| "second or"), &r, &c_bit).unwrap();
-
-            assert!(cs.is_satisfied());
-
-            for b in r.into_bits() {
-                match b {
                     Boolean::Is(ref b) => {
                         assert_eq!(b.get_value().unwrap(), expected & 1 == 1);
                     }
