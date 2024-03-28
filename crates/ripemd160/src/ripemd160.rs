@@ -8,7 +8,7 @@ use bellpepper_core::{boolean::Boolean, ConstraintSystem};
 use ff::PrimeField;
 use std::convert::TryInto;
 
-use crate::util::{or_uint32, ripemd_d1, ripemd_d2, shl_uint32};
+use crate::util::{swap_byte_endianness, or_uint32, ripemd_d1, ripemd_d2, shl_uint32};
 
 #[allow(clippy::unreadable_literal)]
 const MD_BUFFERS: [u32; 5] = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
@@ -50,25 +50,8 @@ where
 
     assert!(padded.len() % 512 == 0);
 
-    for i in (0..padded.len()).step_by(32) {
-        let mut tmp = padded[i..i + 32].to_vec();
-        tmp.reverse();
-        let mut iter = 0;
-        for j in tmp {
-            padded[i + iter] = j;
-            iter += 1;
-        }
-    }
-
-    for i in (0..padded.len()).step_by(8) {
-        let mut tmp = padded[i..i + 8].to_vec();
-        tmp.reverse();
-        let mut iter = 0;
-        for j in tmp {
-            padded[i + iter] = j;
-            iter += 1;
-        }
-    }
+    // Make the bytes little-endian
+    let padded = swap_byte_endianness(&padded);
 
     let mut cur_md = get_ripemd160_md("md");
     let mut cur_md_prime = get_ripemd160_md("md_prime");
@@ -95,29 +78,14 @@ where
         cur_md_prime = cur_md.clone();
     }
     let array_data: Result<[UInt32; 5], _> = cur_md.try_into();
-    let mut result = array_data
+    let result = array_data
         .unwrap()
         .into_iter()
-        .flat_map(|e| e.into_bits_be())
+        .flat_map(|e| e.into_bits())
         .collect::<Vec<_>>();
-    for i in (0..result.len()).step_by(32) {
-        let mut tmp = result[i..i + 32].to_vec();
-        tmp.reverse();
-        let mut iter = 0;
-        for j in tmp {
-            result[i + iter] = j;
-            iter += 1;
-        }
-    }
-    for i in (0..result.len()).step_by(8) {
-        let mut tmp = result[i..i + 8].to_vec();
-        tmp.reverse();
-        let mut iter = 0;
-        for j in tmp {
-            result[i + iter] = j;
-            iter += 1;
-        }
-    }
+
+    // Make the bytes big-endian
+    let result = swap_byte_endianness(&result);
     Ok(result.try_into().unwrap())
 }
 
@@ -340,7 +308,7 @@ where
     assert_eq!(input.len(), 512);
     let w = input
         .chunks(32)
-        .map(UInt32::from_bits_be)
+        .map(UInt32::from_bits)
         .collect::<Vec<_>>();
     let mut cs = MultiEq::new(cs);
     assert_eq!(w.len(), 16);
@@ -409,7 +377,7 @@ where
     assert_eq!(input.len(), 512);
     let w = input
         .chunks(32)
-        .map(UInt32::from_bits_be)
+        .map(UInt32::from_bits)
         .collect::<Vec<_>>();
     assert_eq!(w.len(), 16);
     let mut cs = MultiEq::new(cs);
