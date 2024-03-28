@@ -8,7 +8,7 @@ use bellpepper_core::{boolean::Boolean, ConstraintSystem};
 use ff::PrimeField;
 use std::convert::TryInto;
 
-use crate::util::{swap_byte_endianness, or_uint32, ripemd_d1, ripemd_d2, shl_uint32};
+use crate::util::{or_uint32, ripemd_d1, ripemd_d2, shl_uint32, swap_byte_endianness};
 
 #[allow(clippy::unreadable_literal)]
 const MD_BUFFERS: [u32; 5] = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
@@ -306,10 +306,7 @@ where
     CS: ConstraintSystem<Scalar>,
 {
     assert_eq!(input.len(), 512);
-    let w = input
-        .chunks(32)
-        .map(UInt32::from_bits)
-        .collect::<Vec<_>>();
+    let w = input.chunks(32).map(UInt32::from_bits).collect::<Vec<_>>();
     let mut cs = MultiEq::new(cs);
     assert_eq!(w.len(), 16);
     let mut s_val = [11, 14, 15, 12, 5, 8, 7, 9, 11, 13, 14, 15, 6, 7, 9, 8];
@@ -375,10 +372,7 @@ where
     CS: ConstraintSystem<Scalar>,
 {
     assert_eq!(input.len(), 512);
-    let w = input
-        .chunks(32)
-        .map(UInt32::from_bits)
-        .collect::<Vec<_>>();
+    let w = input.chunks(32).map(UInt32::from_bits).collect::<Vec<_>>();
     assert_eq!(w.len(), 16);
     let mut cs = MultiEq::new(cs);
     let mut s_val = [8, 9, 9, 11, 13, 15, 15, 5, 7, 7, 8, 11, 14, 14, 12, 6];
