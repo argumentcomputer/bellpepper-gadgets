@@ -8,15 +8,34 @@ use bellpepper_core::{boolean::Boolean, ConstraintSystem};
 use ff::PrimeField;
 use std::convert::TryInto;
 
-use crate::util::{ripemd_d1, ripemd_d2, swap_byte_endianness, uint32_rotl};
+use crate::util::{f1, f2, f3, f4, f5, swap_byte_endianness, uint32_rotl};
 
 const IV: [u32; 5] = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
+const ROUND_CONSTANTS_LEFT: [u32; 5] = [0x00000000, 0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xa953fd4e];
+const ROUND_CONSTANTS_RIGHT: [u32; 5] =
+    [0x50a28be6, 0x5c4dd124, 0x6d703ef3, 0x7a6d76e9, 0x00000000];
 
-#[allow(clippy::unreadable_literal)]
-const K_BUFFER: [u32; 5] = [0x00000000, 0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xa953fd4e];
+pub const MSG_SEL_IDX_LEFT: [usize; 80] = [
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 7, 4, 13, 1, 10, 6, 15, 3, 12, 0, 9, 5,
+    2, 14, 11, 8, 3, 10, 14, 4, 9, 15, 8, 1, 2, 7, 0, 6, 13, 11, 5, 12, 1, 9, 11, 10, 0, 8, 12, 4,
+    13, 3, 7, 15, 14, 5, 6, 2, 4, 0, 5, 9, 7, 12, 2, 10, 14, 1, 3, 8, 11, 6, 15, 13,
+];
+pub const MSG_SEL_IDX_RIGHT: [usize; 80] = [
+    5, 14, 7, 0, 9, 2, 11, 4, 13, 6, 15, 8, 1, 10, 3, 12, 6, 11, 3, 7, 0, 13, 5, 10, 14, 15, 8, 12,
+    4, 9, 1, 2, 15, 5, 1, 3, 7, 14, 6, 9, 11, 8, 12, 2, 10, 0, 4, 13, 8, 6, 4, 1, 3, 11, 15, 0, 5,
+    12, 2, 13, 9, 7, 10, 14, 12, 15, 10, 4, 1, 5, 8, 7, 6, 2, 13, 14, 0, 3, 9, 11,
+];
 
-#[allow(clippy::unreadable_literal)]
-const K_BUFFER_PRIME: [u32; 5] = [0x50a28be6, 0x5c4dd124, 0x6d703ef3, 0x7a6d76e9, 0x00000000];
+pub const ROL_AMOUNT_LEFT: [usize; 80] = [
+    11, 14, 15, 12, 5, 8, 7, 9, 11, 13, 14, 15, 6, 7, 9, 8, 7, 6, 8, 13, 11, 9, 7, 15, 7, 12, 15,
+    9, 11, 7, 13, 12, 11, 13, 6, 7, 14, 9, 13, 15, 14, 8, 13, 6, 5, 12, 7, 5, 11, 12, 14, 15, 14,
+    15, 9, 8, 9, 14, 5, 6, 8, 6, 5, 12, 9, 15, 5, 11, 6, 8, 13, 12, 5, 12, 13, 14, 11, 8, 5, 6,
+];
+pub const ROL_AMOUNT_RIGHT: [usize; 80] = [
+    8, 9, 9, 11, 13, 15, 15, 5, 7, 7, 8, 11, 14, 14, 12, 6, 9, 13, 15, 7, 12, 8, 9, 11, 7, 7, 12,
+    7, 6, 15, 13, 11, 9, 7, 15, 11, 8, 6, 6, 14, 12, 13, 5, 14, 13, 13, 7, 5, 15, 5, 8, 11, 14, 14,
+    6, 14, 6, 9, 12, 9, 12, 5, 15, 8, 8, 5, 12, 9, 12, 5, 14, 6, 8, 13, 6, 5, 15, 13, 11, 11,
+];
 
 pub fn ripemd160<Scalar, CS>(
     cs: CS,
@@ -50,7 +69,7 @@ where
     let padded = swap_byte_endianness(&padded);
 
     let mut cur_md = get_ripemd160_iv();
-    let mut cur_md_prime = get_ripemd160_iv();
+    let mut cur_md_prime = cur_md.clone();
     let mut cs = MultiEq::new(cs);
     for (i, block) in padded.chunks(512).enumerate() {
         let prev_md = cur_md.clone();
@@ -73,9 +92,7 @@ where
         .unwrap();
         cur_md_prime = cur_md.clone();
     }
-    let array_data: Result<[UInt32; 5], _> = cur_md.try_into();
-    let result = array_data
-        .unwrap()
+    let result = cur_md
         .into_iter()
         .flat_map(|e| e.into_bits())
         .collect::<Vec<_>>();
@@ -115,161 +132,97 @@ fn get_ripemd160_iv() -> [UInt32; 5] {
     IV.map(UInt32::constant)
 }
 
-fn compute_f<Scalar, CS>(cs: CS, md_val: &mut [UInt32; 5], index: usize, left: bool) -> UInt32
+fn compute_f<Scalar, CS>(mut cs: CS, md_val: &mut [UInt32; 5], index: usize, left: bool) -> UInt32
 where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
 {
-    let f: UInt32;
-    let mut cs = MultiEq::new(cs);
-    match left {
-        true => match index {
-            0 => {
-                f = md_val[1]
-                    .xor(
-                        cs.namespace(|| format!("first xor block {} left {} ", index, left)),
-                        &md_val[2],
-                    )
-                    .unwrap()
-                    .xor(
-                        cs.namespace(|| format!("second xor block {} left {}", index, left)),
-                        &md_val[3],
-                    )
-                    .unwrap();
-            }
-            1 => {
-                f = ripemd_d1(
-                    cs.namespace(|| format!("d1 block {} left {}", index, left)),
-                    &md_val[2],
-                    &md_val[1],
-                    &md_val[3],
-                )
-                .unwrap();
-            }
-            2 => {
-                f = ripemd_d2(
-                    cs.namespace(|| format!("d2 block {} left {}", index, left)),
-                    &md_val[3],
-                    &md_val[1],
-                    &md_val[2],
-                )
-                .unwrap();
-            }
-            3 => {
-                f = ripemd_d1(
-                    cs.namespace(|| format!("d1 block {} left {}", index, left)),
-                    &md_val[1],
-                    &md_val[3],
-                    &md_val[2],
-                )
-                .unwrap();
-            }
-            4 => {
-                f = ripemd_d2(
-                    cs.namespace(|| format!("d2 block {} left {}", index, left)),
-                    &md_val[1],
-                    &md_val[2],
-                    &md_val[3],
-                )
-                .unwrap();
-            }
-            _ => panic!("Invalid index"),
-        },
-        false => match index {
-            0 => {
-                f = ripemd_d2(
-                    cs.namespace(|| format!("d2 block {} left {}", index, left)),
-                    &md_val[1],
-                    &md_val[2],
-                    &md_val[3],
-                )
-                .unwrap();
-            }
-            1 => {
-                f = ripemd_d1(
-                    cs.namespace(|| format!("d1 block {} left {}", index, left)),
-                    &md_val[1],
-                    &md_val[3],
-                    &md_val[2],
-                )
-                .unwrap();
-            }
-            2 => {
-                f = ripemd_d2(
-                    cs.namespace(|| format!("d2 block {} left {}", index, left)),
-                    &md_val[3],
-                    &md_val[1],
-                    &md_val[2],
-                )
-                .unwrap();
-            }
-            3 => {
-                f = ripemd_d1(
-                    cs.namespace(|| format!("d1 block {} left {}", index, left)),
-                    &md_val[2],
-                    &md_val[1],
-                    &md_val[3],
-                )
-                .unwrap();
-            }
-            4 => {
-                f = md_val[1]
-                    .xor(
-                        cs.namespace(|| format!("first xor block {} left {}", index, left)),
-                        &md_val[2],
-                    )
-                    .unwrap()
-                    .xor(
-                        cs.namespace(|| format!("second xor block {} left {}", index, left)),
-                        &md_val[3],
-                    )
-                    .unwrap();
-            }
-            _ => panic!("Invalid index"),
-        },
-    }
+    let f = match (index, left) {
+        (0, true) | (4, false) => f1(
+            cs.namespace(|| "f1 {index} {left}"),
+            &md_val[1],
+            &md_val[2],
+            &md_val[3],
+        )
+        .unwrap(),
+        (1, true) | (3, false) => f2(
+            cs.namespace(|| "f2 {index} {left}"),
+            &md_val[1],
+            &md_val[2],
+            &md_val[3],
+        )
+        .unwrap(),
+        (2, _) => f3(
+            cs.namespace(|| "f3 {index} {left}"),
+            &md_val[1],
+            &md_val[2],
+            &md_val[3],
+        )
+        .unwrap(),
+        (3, true) | (1, false) => f4(
+            cs.namespace(|| "f4 {index} {left}"),
+            &md_val[1],
+            &md_val[2],
+            &md_val[3],
+        )
+        .unwrap(),
+        (4, true) | (0, false) => f5(
+            cs.namespace(|| "f5 {index} {left}"),
+            &md_val[1],
+            &md_val[2],
+            &md_val[3],
+        )
+        .unwrap(),
+        _ => panic!("Invalid index"),
+    };
     f
 }
 
-fn block<Scalar, CS>(
-    cs: CS,
-    md_val: &mut [UInt32; 5],
-    s_val: [usize; 16],
-    i_val: [usize; 16],
-    w: Vec<UInt32>,
-    index: usize,
-    left: bool,
-) where
+fn block<Scalar, CS>(cs: CS, md_val: &mut [UInt32; 5], w: Vec<UInt32>, left: bool)
+where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
 {
     let mut cs = MultiEq::new(cs);
     let mut f: UInt32;
-
-    let k_val = match left {
-        true => K_BUFFER,
-        false => K_BUFFER_PRIME,
+    let (k_val, i_val, s_val) = if left {
+        (ROUND_CONSTANTS_LEFT, MSG_SEL_IDX_LEFT, ROL_AMOUNT_LEFT)
+    } else {
+        (ROUND_CONSTANTS_RIGHT, MSG_SEL_IDX_RIGHT, ROL_AMOUNT_RIGHT)
     };
-    for i in 0..16 {
+
+    for i in 0..80 {
+        let phase_index = i / 16;
+
         f = compute_f(
-            cs.namespace(|| format!("Compute F block {} left {} index {}", index, left, i)),
+            cs.namespace(|| format!("Compute F block {} left {} index {}", phase_index, left, i)),
             md_val,
-            index,
+            phase_index,
             left,
         );
         let mut tmp1 = UInt32::addmany(
-            cs.namespace(|| format!("first add_many block {} left {} index {}", index, left, i)),
+            cs.namespace(|| {
+                format!(
+                    "first add_many block {} left {} index {}",
+                    phase_index, left, i
+                )
+            }),
             &[
                 md_val[0].clone(),
                 f.clone(),
                 w[i_val[i]].clone(),
-                UInt32::constant(k_val[index]),
+                UInt32::constant(k_val[phase_index]),
             ],
         )
         .unwrap();
         tmp1 = uint32_rotl(tmp1, s_val[i]);
         tmp1 = UInt32::addmany(
-            cs.namespace(|| format!("second add_many block {} left {} index {}", index, left, i)),
+            cs.namespace(|| {
+                format!(
+                    "second add_many block {} left {} index {}",
+                    phase_index, left, i
+                )
+            }),
             &[tmp1, md_val[4].clone()],
         )
         .unwrap();
@@ -292,59 +245,10 @@ where
     let w = input.chunks(32).map(UInt32::from_bits).collect::<Vec<_>>();
     let mut cs = MultiEq::new(cs);
     assert_eq!(w.len(), 16);
-    let mut s_val = [11, 14, 15, 12, 5, 8, 7, 9, 11, 13, 14, 15, 6, 7, 9, 8];
-    let mut i_val = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
     block(
         cs.namespace(|| "block 0"),
         current_md_value,
-        s_val,
-        i_val,
         w.clone(),
-        0,
-        true,
-    );
-    s_val = [7, 6, 8, 13, 11, 9, 7, 15, 7, 12, 15, 9, 11, 7, 13, 12];
-    i_val = [7, 4, 13, 1, 10, 6, 15, 3, 12, 0, 9, 5, 2, 14, 11, 8];
-    block(
-        cs.namespace(|| "block 1"),
-        current_md_value,
-        s_val,
-        i_val,
-        w.clone(),
-        1,
-        true,
-    );
-    s_val = [11, 13, 6, 7, 14, 9, 13, 15, 14, 8, 13, 6, 5, 12, 7, 5];
-    i_val = [3, 10, 14, 4, 9, 15, 8, 1, 2, 7, 0, 6, 13, 11, 5, 12];
-    block(
-        cs.namespace(|| "block 2"),
-        current_md_value,
-        s_val,
-        i_val,
-        w.clone(),
-        2,
-        true,
-    );
-    s_val = [11, 12, 14, 15, 14, 15, 9, 8, 9, 14, 5, 6, 8, 6, 5, 12];
-    i_val = [1, 9, 11, 10, 0, 8, 12, 4, 13, 3, 7, 15, 14, 5, 6, 2];
-    block(
-        cs.namespace(|| "block 3"),
-        current_md_value,
-        s_val,
-        i_val,
-        w.clone(),
-        3,
-        true,
-    );
-    s_val = [9, 15, 5, 11, 6, 8, 13, 12, 5, 12, 13, 14, 11, 8, 5, 6];
-    i_val = [4, 0, 5, 9, 7, 12, 2, 10, 14, 1, 3, 8, 11, 6, 15, 13];
-    block(
-        cs.namespace(|| "block 4"),
-        current_md_value,
-        s_val,
-        i_val,
-        w.clone(),
-        4,
         true,
     );
 }
@@ -356,61 +260,12 @@ where
 {
     assert_eq!(input.len(), 512);
     let w = input.chunks(32).map(UInt32::from_bits).collect::<Vec<_>>();
-    assert_eq!(w.len(), 16);
     let mut cs = MultiEq::new(cs);
-    let mut s_val = [8, 9, 9, 11, 13, 15, 15, 5, 7, 7, 8, 11, 14, 14, 12, 6];
-    let mut i_val = [5, 14, 7, 0, 9, 2, 11, 4, 13, 6, 15, 8, 1, 10, 3, 12];
+    assert_eq!(w.len(), 16);
     block(
         cs.namespace(|| "block 0"),
         current_md_value,
-        s_val,
-        i_val,
         w.clone(),
-        0,
-        false,
-    );
-    s_val = [9, 13, 15, 7, 12, 8, 9, 11, 7, 7, 12, 7, 6, 15, 13, 11];
-    i_val = [6, 11, 3, 7, 0, 13, 5, 10, 14, 15, 8, 12, 4, 9, 1, 2];
-    block(
-        cs.namespace(|| "block 1"),
-        current_md_value,
-        s_val,
-        i_val,
-        w.clone(),
-        1,
-        false,
-    );
-    s_val = [9, 7, 15, 11, 8, 6, 6, 14, 12, 13, 5, 14, 13, 13, 7, 5];
-    i_val = [15, 5, 1, 3, 7, 14, 6, 9, 11, 8, 12, 2, 10, 0, 4, 13];
-    block(
-        cs.namespace(|| "block 2"),
-        current_md_value,
-        s_val,
-        i_val,
-        w.clone(),
-        2,
-        false,
-    );
-    s_val = [15, 5, 8, 11, 14, 14, 6, 14, 6, 9, 12, 9, 12, 5, 15, 8];
-    i_val = [8, 6, 4, 1, 3, 11, 15, 0, 5, 12, 2, 13, 9, 7, 10, 14];
-    block(
-        cs.namespace(|| "block 3"),
-        current_md_value,
-        s_val,
-        i_val,
-        w.clone(),
-        3,
-        false,
-    );
-    s_val = [8, 5, 12, 9, 12, 5, 14, 6, 8, 13, 6, 5, 15, 13, 11, 11];
-    i_val = [12, 15, 10, 4, 1, 5, 8, 7, 6, 2, 13, 14, 0, 3, 9, 11];
-    block(
-        cs.namespace(|| "block 4"),
-        current_md_value,
-        s_val,
-        i_val,
-        w.clone(),
-        4,
         false,
     );
 }
