@@ -68,31 +68,42 @@ where
     // Make the bytes little-endian
     let padded = swap_byte_endianness(&padded);
 
-    let mut cur_md = get_ripemd160_iv();
-    let mut cur_md_prime = cur_md.clone();
+    let mut msg_digest_left = get_ripemd160_iv();
+    let mut msg_digest_right = msg_digest_left.clone();
     let mut cs = MultiEq::new(cs);
-    for (i, block) in padded.chunks(512).enumerate() {
-        let prev_md = cur_md.clone();
-        left_step(
-            cs.namespace(|| format!("left_step {}", i)),
-            block,
-            &mut cur_md,
+    for (i, msg_block) in padded.chunks(512).enumerate() {
+        let prev_msg_digest_left = msg_digest_left.clone();
+        let msg_words = msg_block
+            .chunks(32)
+            .map(UInt32::from_bits)
+            .collect::<Vec<_>>();
+
+        // Process left half of RIPEMD-160 compressesion function
+        half_compression_function(
+            cs.namespace(|| format!("left half {}", i)),
+            &mut msg_digest_left,
+            msg_words.clone(),
+            true,
         );
-        right_step(
-            cs.namespace(|| format!("right_step {}", i)),
-            block,
-            &mut cur_md_prime,
+
+        // Process right half of RIPEMD-160 compressesion function
+        half_compression_function(
+            cs.namespace(|| format!("right half {}", i)),
+            &mut msg_digest_right,
+            msg_words,
+            false,
         );
-        cur_md = combine_left_and_right(
-            cs.namespace(|| format!("combine_left_and_right_step {}", i)),
-            cur_md,
-            cur_md_prime,
-            prev_md,
+
+        msg_digest_left = combine_left_and_right(
+            cs.namespace(|| format!("combine left and right {}", i)),
+            msg_digest_left,
+            msg_digest_right,
+            prev_msg_digest_left,
         )
         .unwrap();
-        cur_md_prime = cur_md.clone();
+        msg_digest_right = msg_digest_left.clone();
     }
-    let result = cur_md
+    let result = msg_digest_left
         .into_iter()
         .flat_map(|e| e.into_bits())
         .collect::<Vec<_>>();
@@ -102,30 +113,32 @@ where
     Ok(result.try_into().unwrap())
 }
 
-fn combine_left_and_right<Scalar, CS>(
-    cs: CS,
-    cur_md: [UInt32; 5],
-    cur_md_prime: [UInt32; 5],
-    prev_md: [UInt32; 5],
+fn combine_left_and_right<Scalar, CS, M>(
+    mut cs: M,
+    msg_digest_left: [UInt32; 5],
+    msg_digest_right: [UInt32; 5],
+    prev_msg_digest_left: [UInt32; 5],
 ) -> Result<[UInt32; 5], bellpepper_core::SynthesisError>
 where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
+    M: ConstraintSystem<Scalar, Root = MultiEq<Scalar, CS>>,
 {
-    let mut cs = MultiEq::new(cs);
-    let mut update_md = cur_md.clone();
+    let mut combined_msg_digest: Vec<UInt32> = vec![];
     for i in 0..5 {
-        update_md[(i + 4) % 5] = UInt32::addmany(
-            cs.namespace(|| format!("first add_many {}", i)),
-            &[
-                prev_md[i].clone(),
-                cur_md[(i + 1) % 5].clone(),
-                cur_md_prime[(i + 2) % 5].clone(),
-            ],
-        )
-        .unwrap();
+        combined_msg_digest.push(
+            UInt32::addmany(
+                cs.namespace(|| format!("add_many: combined msg digest, index {i}")),
+                &[
+                    prev_msg_digest_left[(i + 1) % 5].clone(),
+                    msg_digest_left[(i + 2) % 5].clone(),
+                    msg_digest_right[(i + 3) % 5].clone(),
+                ],
+            )
+            .unwrap(),
+        );
     }
-    Ok(update_md)
+    Ok(combined_msg_digest.try_into().unwrap())
 }
 
 fn get_ripemd160_iv() -> [UInt32; 5] {
@@ -139,35 +152,35 @@ where
 {
     let f = match (index, left) {
         (0, true) | (4, false) => f1(
-            cs.namespace(|| "f1 {index} {left}"),
+            cs.namespace(|| "f1 in phase {index}. left = {left}"),
             &md_val[1],
             &md_val[2],
             &md_val[3],
         )
         .unwrap(),
         (1, true) | (3, false) => f2(
-            cs.namespace(|| "f2 {index} {left}"),
+            cs.namespace(|| "f2 in phase {index}. left = {left}"),
             &md_val[1],
             &md_val[2],
             &md_val[3],
         )
         .unwrap(),
         (2, _) => f3(
-            cs.namespace(|| "f3 {index} {left}"),
+            cs.namespace(|| "f3 in phase {index}. left = {left}"),
             &md_val[1],
             &md_val[2],
             &md_val[3],
         )
         .unwrap(),
         (3, true) | (1, false) => f4(
-            cs.namespace(|| "f4 {index} {left}"),
+            cs.namespace(|| "f4 in phase {index}. left = {left}"),
             &md_val[1],
             &md_val[2],
             &md_val[3],
         )
         .unwrap(),
         (4, true) | (0, false) => f5(
-            cs.namespace(|| "f5 {index} {left}"),
+            cs.namespace(|| "f5 in phase {index}. left = {left}"),
             &md_val[1],
             &md_val[2],
             &md_val[3],
@@ -178,96 +191,61 @@ where
     f
 }
 
-fn block<Scalar, CS>(cs: CS, md_val: &mut [UInt32; 5], w: Vec<UInt32>, left: bool)
-where
+fn half_compression_function<Scalar, CS, M>(
+    mut cs: M,
+    msg_digest: &mut [UInt32; 5],
+    w: Vec<UInt32>,
+    left: bool,
+) where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
+    M: ConstraintSystem<Scalar, Root = MultiEq<Scalar, CS>>,
 {
-    let mut cs = MultiEq::new(cs);
-    let mut f: UInt32;
-    let (k_val, i_val, s_val) = if left {
-        (ROUND_CONSTANTS_LEFT, MSG_SEL_IDX_LEFT, ROL_AMOUNT_LEFT)
-    } else {
-        (ROUND_CONSTANTS_RIGHT, MSG_SEL_IDX_RIGHT, ROL_AMOUNT_RIGHT)
-    };
-
     for i in 0..80 {
         let phase_index = i / 16;
+        let (round_constant, msg_word_index, rotl_amount) = if left {
+            (
+                ROUND_CONSTANTS_LEFT[phase_index],
+                MSG_SEL_IDX_LEFT[i],
+                ROL_AMOUNT_LEFT[i],
+            )
+        } else {
+            (
+                ROUND_CONSTANTS_RIGHT[phase_index],
+                MSG_SEL_IDX_RIGHT[i],
+                ROL_AMOUNT_RIGHT[i],
+            )
+        };
 
-        f = compute_f(
-            cs.namespace(|| format!("Compute F block {} left {} index {}", phase_index, left, i)),
-            md_val,
+        let f = compute_f(
+            cs.namespace(|| format!("compute_f in round {i}. left = {left}")),
+            msg_digest,
             phase_index,
             left,
         );
-        let mut tmp1 = UInt32::addmany(
-            cs.namespace(|| {
-                format!(
-                    "first add_many block {} left {} index {}",
-                    phase_index, left, i
-                )
-            }),
+        let mut t = UInt32::addmany(
+            cs.namespace(|| format!("first add_many in compute_f: round {i}, left = {left}",)),
             &[
-                md_val[0].clone(),
+                msg_digest[0].clone(),
                 f.clone(),
-                w[i_val[i]].clone(),
-                UInt32::constant(k_val[phase_index]),
+                w[msg_word_index].clone(),
+                UInt32::constant(round_constant),
             ],
         )
         .unwrap();
-        tmp1 = uint32_rotl(tmp1, s_val[i]);
-        tmp1 = UInt32::addmany(
-            cs.namespace(|| {
-                format!(
-                    "second add_many block {} left {} index {}",
-                    phase_index, left, i
-                )
-            }),
-            &[tmp1, md_val[4].clone()],
+        t = uint32_rotl(t, rotl_amount);
+        t = UInt32::addmany(
+            cs.namespace(|| format!("second add_many in compute_f: round {i}, left = {left}",)),
+            &[t, msg_digest[4].clone()],
         )
         .unwrap();
 
-        let tmp2 = uint32_rotl(md_val[2].clone(), 10);
-        md_val[0] = md_val[4].clone();
-        md_val[2] = md_val[1].clone();
-        md_val[4] = md_val[3].clone();
-        md_val[1] = tmp1.clone();
-        md_val[3] = tmp2.clone();
+        msg_digest[0] = msg_digest[4].clone();
+        msg_digest[4] = msg_digest[3].clone();
+        msg_digest[3] = uint32_rotl(msg_digest[2].clone(), 10);
+        msg_digest[2] = msg_digest[1].clone();
+        msg_digest[1] = t;
     }
-}
-
-pub fn left_step<Scalar, CS>(cs: CS, input: &[Boolean], current_md_value: &mut [UInt32; 5])
-where
-    Scalar: PrimeField,
-    CS: ConstraintSystem<Scalar>,
-{
-    assert_eq!(input.len(), 512);
-    let w = input.chunks(32).map(UInt32::from_bits).collect::<Vec<_>>();
-    let mut cs = MultiEq::new(cs);
-    assert_eq!(w.len(), 16);
-    block(
-        cs.namespace(|| "block 0"),
-        current_md_value,
-        w.clone(),
-        true,
-    );
-}
-
-pub fn right_step<Scalar, CS>(cs: CS, input: &[Boolean], current_md_value: &mut [UInt32; 5])
-where
-    Scalar: PrimeField,
-    CS: ConstraintSystem<Scalar>,
-{
-    assert_eq!(input.len(), 512);
-    let w = input.chunks(32).map(UInt32::from_bits).collect::<Vec<_>>();
-    let mut cs = MultiEq::new(cs);
-    assert_eq!(w.len(), 16);
-    block(
-        cs.namespace(|| "block 0"),
-        current_md_value,
-        w.clone(),
-        false,
-    );
 }
 
 #[cfg(test)]
