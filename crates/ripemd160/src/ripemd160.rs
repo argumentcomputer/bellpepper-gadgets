@@ -252,9 +252,11 @@ fn half_compression_function<Scalar, CS, M>(
 mod test {
     use super::*;
     use bellpepper::gadgets::multipack::bytes_to_bits;
-    use bellpepper_core::test_cs::TestConstraintSystem;
+    use bellpepper_core::{boolean::AllocatedBit, test_cs::TestConstraintSystem};
     use hex_literal::hex;
     use pasta_curves::Fp;
+    use rand_core::{RngCore, SeedableRng};
+    use rand_xorshift::XorShiftRng;
 
     #[test]
     fn test_blank_hash() {
@@ -268,7 +270,10 @@ mod test {
             .collect::<Vec<_>>();
 
         let out_bits = ripemd160(cs.namespace(|| "ripemd160"), &input_bits).unwrap();
+
         assert!(cs.is_satisfied());
+        assert_eq!(cs.num_constraints(), 0);
+
         let expected = hex!("9c1185a5c5e9fc54612808977ee8f548b2258d31");
         let mut out = out_bits.iter();
         for b in expected.iter() {
@@ -291,6 +296,10 @@ mod test {
             .collect::<Vec<_>>();
 
         let out_bits = ripemd160(cs.namespace(|| "ripemd160"), &input_bits).unwrap();
+
+        assert!(cs.is_satisfied());
+        assert_eq!(cs.num_constraints(), 0);
+
         assert!(cs.is_satisfied());
         let expected = hex!("8eb208f7e05d987a9b044a8e98c6b087f15a0bfc");
         let mut out = out_bits.iter();
@@ -314,7 +323,10 @@ mod test {
             .collect::<Vec<_>>();
 
         let out_bits = ripemd160(cs.namespace(|| "ripemd160"), &input_bits).unwrap();
+
         assert!(cs.is_satisfied());
+        assert_eq!(cs.num_constraints(), 0);
+
         let expected = hex!("12a053384a9c0c88e405a06c27dcf49ada62eb2b");
         let mut out = out_bits.iter();
         for b in expected.iter() {
@@ -323,5 +335,57 @@ mod test {
                 assert_eq!(c, (b >> (7 - i)) & 1u8 == 1u8);
             }
         }
+    }
+
+    #[test]
+    fn test_one_block_hash() {
+        let mut rng = XorShiftRng::from_seed([
+            0x59, 0x62, 0xbe, 0x3d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
+            0xbc, 0xe5,
+        ]);
+
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let input_bits: Vec<_> = (0..256)
+            .map(|i| {
+                Boolean::from(
+                    AllocatedBit::alloc(
+                        cs.namespace(|| format!("input bit {}", i)),
+                        Some(rng.next_u32() % 2 != 0),
+                    )
+                    .unwrap(),
+                )
+            })
+            .collect();
+
+        ripemd160(cs.namespace(|| "ripemd160"), &input_bits).unwrap();
+
+        assert!(cs.is_satisfied());
+        assert_eq!(cs.num_constraints() - 256, 22893);
+    }
+
+    #[test]
+    fn test_two_blocks_hash() {
+        let mut rng = XorShiftRng::from_seed([
+            0x59, 0x62, 0xbe, 0x3d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
+            0xbc, 0xe5,
+        ]);
+
+        let mut cs = TestConstraintSystem::<Fp>::new();
+        let input_bits: Vec<_> = (0..512)
+            .map(|i| {
+                Boolean::from(
+                    AllocatedBit::alloc(
+                        cs.namespace(|| format!("input bit {}", i)),
+                        Some(rng.next_u32() % 2 != 0),
+                    )
+                    .unwrap(),
+                )
+            })
+            .collect();
+
+        ripemd160(cs.namespace(|| "ripemd160"), &input_bits).unwrap();
+
+        assert!(cs.is_satisfied());
+        assert_eq!(cs.num_constraints() - 512, 46117);
     }
 }
