@@ -145,48 +145,53 @@ fn get_ripemd160_iv() -> [UInt32; 5] {
     IV.map(UInt32::constant)
 }
 
-fn compute_f<Scalar, CS>(mut cs: CS, md_val: &mut [UInt32; 5], index: usize, left: bool) -> UInt32
+fn compute_f<Scalar, CS>(
+    mut cs: CS,
+    msg_digest: &mut [UInt32; 5],
+    round_index: usize,
+    left: bool,
+) -> UInt32
 where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
 {
-    let f = match (index, left) {
+    let f = match (round_index, left) {
         (0, true) | (4, false) => f1(
-            cs.namespace(|| "f1 in phase {index}. left = {left}"),
-            &md_val[1],
-            &md_val[2],
-            &md_val[3],
+            cs.namespace(|| "f1 in round {round_index}. left = {left}"),
+            &msg_digest[1],
+            &msg_digest[2],
+            &msg_digest[3],
         )
         .unwrap(),
         (1, true) | (3, false) => f2(
-            cs.namespace(|| "f2 in phase {index}. left = {left}"),
-            &md_val[1],
-            &md_val[2],
-            &md_val[3],
+            cs.namespace(|| "f2 in round {round_index}. left = {left}"),
+            &msg_digest[1],
+            &msg_digest[2],
+            &msg_digest[3],
         )
         .unwrap(),
         (2, _) => f3(
-            cs.namespace(|| "f3 in phase {index}. left = {left}"),
-            &md_val[1],
-            &md_val[2],
-            &md_val[3],
+            cs.namespace(|| "f3 in round {round_index}. left = {left}"),
+            &msg_digest[1],
+            &msg_digest[2],
+            &msg_digest[3],
         )
         .unwrap(),
         (3, true) | (1, false) => f4(
-            cs.namespace(|| "f4 in phase {index}. left = {left}"),
-            &md_val[1],
-            &md_val[2],
-            &md_val[3],
+            cs.namespace(|| "f4 in round {round_index}. left = {left}"),
+            &msg_digest[1],
+            &msg_digest[2],
+            &msg_digest[3],
         )
         .unwrap(),
         (4, true) | (0, false) => f5(
-            cs.namespace(|| "f5 in phase {index}. left = {left}"),
-            &md_val[1],
-            &md_val[2],
-            &md_val[3],
+            cs.namespace(|| "f5 in round {round_index}. left = {left}"),
+            &msg_digest[1],
+            &msg_digest[2],
+            &msg_digest[3],
         )
         .unwrap(),
-        _ => panic!("Invalid index"),
+        _ => panic!("Invalid round"),
     };
     f
 }
@@ -202,16 +207,16 @@ fn half_compression_function<Scalar, CS, M>(
     M: ConstraintSystem<Scalar, Root = MultiEq<Scalar, CS>>,
 {
     for i in 0..80 {
-        let phase_index = i / 16;
+        let round_index = i / 16;
         let (round_constant, msg_word_index, rotl_amount) = if left {
             (
-                ROUND_CONSTANTS_LEFT[phase_index],
+                ROUND_CONSTANTS_LEFT[round_index],
                 MSG_SEL_IDX_LEFT[i],
                 ROL_AMOUNT_LEFT[i],
             )
         } else {
             (
-                ROUND_CONSTANTS_RIGHT[phase_index],
+                ROUND_CONSTANTS_RIGHT[round_index],
                 MSG_SEL_IDX_RIGHT[i],
                 ROL_AMOUNT_RIGHT[i],
             )
@@ -220,7 +225,7 @@ fn half_compression_function<Scalar, CS, M>(
         let f = compute_f(
             cs.namespace(|| format!("compute_f in round {i}. left = {left}")),
             msg_digest,
-            phase_index,
+            round_index,
             left,
         );
         let mut t = UInt32::addmany(
