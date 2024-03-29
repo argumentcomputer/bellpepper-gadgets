@@ -159,171 +159,52 @@ mod test {
         }
     }
 
-    #[test]
-    fn test_uint32_f2() {
-        let mut rng = XorShiftRng::from_seed([
-            0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
-            0xbc, 0xe5,
-        ]);
+    macro_rules! test_helper_function {
+        ($test_name:ident, $func:ident, $expected_res_calculator:expr) => {
+            #[test]
+            fn $test_name() {
+                let mut rng = XorShiftRng::from_seed([
+                    0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54,
+                    0x06, 0xbc, 0xe5,
+                ]);
 
-        for _ in 0..1000 {
-            let mut cs = TestConstraintSystem::<Fp>::new();
+                for _ in 0..1000 {
+                    let mut cs = TestConstraintSystem::<Fp>::new();
 
-            let a = rng.next_u32();
-            let b = rng.next_u32();
-            let c = rng.next_u32();
+                    let a = rng.next_u32();
+                    let b = rng.next_u32();
+                    let c = rng.next_u32();
 
-            let mut expected = (a & b) | ((!a) & c);
+                    let mut expected = $expected_res_calculator(a, b, c);
 
-            let a_bit = UInt32::alloc(cs.namespace(|| "a_bit"), Some(a)).unwrap();
-            let b_bit = UInt32::constant(b);
-            let c_bit = UInt32::alloc(cs.namespace(|| "c_bit"), Some(c)).unwrap();
+                    let a_uint32 = UInt32::alloc(cs.namespace(|| "alloc a"), Some(a)).unwrap();
+                    let b_uint32 = UInt32::alloc(cs.namespace(|| "alloc b"), Some(b)).unwrap();
+                    let c_uint32 = UInt32::alloc(cs.namespace(|| "alloc c"), Some(c)).unwrap();
 
-            let r = f2(&mut cs, &a_bit, &b_bit, &c_bit).unwrap();
+                    let res = $func(&mut cs, &a_uint32, &b_uint32, &c_uint32).unwrap();
 
-            assert!(cs.is_satisfied());
+                    assert!(cs.is_satisfied());
 
-            for b in r.into_bits().iter() {
-                match *b {
-                    Boolean::Is(ref b) => {
-                        assert_eq!(b.get_value().unwrap(), expected & 1 == 1);
-                    }
-                    Boolean::Not(ref b) => {
-                        assert_ne!(b.get_value().unwrap(), expected & 1 == 1);
-                    }
-                    Boolean::Constant(b) => {
-                        assert_eq!(b, expected & 1 == 1);
+                    for x in res.into_bits().iter() {
+                        assert_eq!(x.get_value().unwrap(), expected & 1 == 1);
+                        expected >>= 1;
                     }
                 }
-
-                expected >>= 1;
             }
-        }
+        };
     }
 
-    #[test]
-    fn test_uint32_f4() {
-        let mut rng = XorShiftRng::from_seed([
-            0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
-            0xbc, 0xe5,
-        ]);
-
-        for _ in 0..1000 {
-            let mut cs = TestConstraintSystem::<Fp>::new();
-
-            let a = rng.next_u32();
-            let b = rng.next_u32();
-            let c = rng.next_u32();
-
-            let mut expected = (a & c) | (b & !c);
-
-            let a_bit = UInt32::alloc(cs.namespace(|| "a_bit"), Some(a)).unwrap();
-            let b_bit = UInt32::constant(b);
-            let c_bit = UInt32::alloc(cs.namespace(|| "c_bit"), Some(c)).unwrap();
-
-            let r = f4(&mut cs, &a_bit, &b_bit, &c_bit).unwrap();
-
-            assert!(cs.is_satisfied());
-
-            for b in r.into_bits().iter() {
-                match *b {
-                    Boolean::Is(ref b) => {
-                        assert_eq!(b.get_value().unwrap(), expected & 1 == 1);
-                    }
-                    Boolean::Not(ref b) => {
-                        assert_ne!(b.get_value().unwrap(), expected & 1 == 1);
-                    }
-                    Boolean::Constant(b) => {
-                        assert_eq!(b, expected & 1 == 1);
-                    }
-                }
-
-                expected >>= 1;
-            }
-        }
-    }
-
-    #[test]
-    fn test_uint32_f3() {
-        let mut rng = XorShiftRng::from_seed([
-            0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
-            0xbc, 0xe5,
-        ]);
-
-        for _ in 0..1000 {
-            let mut cs = TestConstraintSystem::<Fp>::new();
-
-            let a = rng.next_u32();
-            let b = rng.next_u32();
-            let c = rng.next_u32();
-
-            let mut expected = ((a) | !b) ^ c;
-
-            let a_bit = UInt32::alloc(cs.namespace(|| "a_bit"), Some(a)).unwrap();
-            let b_bit = UInt32::constant(b);
-            let c_bit = UInt32::alloc(cs.namespace(|| "c_bit"), Some(c)).unwrap();
-
-            let r = f3(&mut cs, &a_bit, &b_bit, &c_bit).unwrap();
-
-            assert!(cs.is_satisfied());
-
-            for b in r.into_bits().iter() {
-                match *b {
-                    Boolean::Is(ref b) => {
-                        assert_eq!(b.get_value().unwrap(), expected & 1 == 1);
-                    }
-                    Boolean::Not(ref b) => {
-                        assert_ne!(b.get_value().unwrap(), expected & 1 == 1);
-                    }
-                    Boolean::Constant(b) => {
-                        assert_eq!(b, expected & 1 == 1);
-                    }
-                }
-
-                expected >>= 1;
-            }
-        }
-    }
-
-    #[test]
-    fn test_uint32_f5() {
-        let mut rng = XorShiftRng::from_seed([
-            0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
-            0xbc, 0xe5,
-        ]);
-
-        for _ in 0..1000 {
-            let mut cs = TestConstraintSystem::<Fp>::new();
-
-            let a = rng.next_u32();
-            let b = rng.next_u32();
-            let c = rng.next_u32();
-
-            let mut expected = a ^ (b | !c);
-
-            let a_bit = UInt32::alloc(cs.namespace(|| "a_bit"), Some(a)).unwrap();
-            let b_bit = UInt32::constant(b);
-            let c_bit = UInt32::alloc(cs.namespace(|| "c_bit"), Some(c)).unwrap();
-
-            let r = f5(&mut cs, &a_bit, &b_bit, &c_bit).unwrap();
-
-            assert!(cs.is_satisfied());
-
-            for b in r.into_bits().iter() {
-                match *b {
-                    Boolean::Is(ref b) => {
-                        assert_eq!(b.get_value().unwrap(), expected & 1 == 1);
-                    }
-                    Boolean::Not(ref b) => {
-                        assert_ne!(b.get_value().unwrap(), expected & 1 == 1);
-                    }
-                    Boolean::Constant(b) => {
-                        assert_eq!(b, expected & 1 == 1);
-                    }
-                }
-
-                expected >>= 1;
-            }
-        }
-    }
+    test_helper_function!(test_uint32_f1, f1, |a: u32, b: u32, c: u32| { a ^ b ^ c });
+    test_helper_function!(test_uint32_f2, f2, |a: u32, b: u32, c: u32| {
+        (a & b) | ((!a) & c)
+    });
+    test_helper_function!(test_uint32_f3, f3, |a: u32, b: u32, c: u32| {
+        ((a) | !b) ^ c
+    });
+    test_helper_function!(test_uint32_f4, f4, |a: u32, b: u32, c: u32| {
+        (a & c) | (b & !c)
+    });
+    test_helper_function!(test_uint32_f5, f5, |a: u32, b: u32, c: u32| {
+        a ^ (b | !c)
+    });
 }
