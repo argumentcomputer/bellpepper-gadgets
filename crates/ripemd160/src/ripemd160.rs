@@ -4,7 +4,7 @@
 //! [RIPEMD-160]: https://homes.esat.kuleuven.be/~bosselae/ripemd160.html
 
 use bellpepper::gadgets::{multieq::MultiEq, uint32::UInt32};
-use bellpepper_core::{boolean::Boolean, ConstraintSystem};
+use bellpepper_core::{boolean::Boolean, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
 use std::convert::TryInto;
 
@@ -37,10 +37,7 @@ pub const ROL_AMOUNT_RIGHT: [usize; 80] = [
     6, 14, 6, 9, 12, 9, 12, 5, 15, 8, 8, 5, 12, 9, 12, 5, 14, 6, 8, 13, 6, 5, 15, 13, 11, 11,
 ];
 
-pub fn ripemd160<Scalar, CS>(
-    cs: CS,
-    input: &[Boolean],
-) -> Result<[Boolean; 160], bellpepper_core::SynthesisError>
+pub fn ripemd160<Scalar, CS>(cs: CS, input: &[Boolean]) -> Result<[Boolean; 160], SynthesisError>
 where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
@@ -68,42 +65,16 @@ where
     // Make the bytes little-endian
     let padded = swap_byte_endianness(&padded);
 
-    let mut msg_digest_left = get_ripemd160_iv();
-    let mut msg_digest_right = msg_digest_left.clone();
     let mut cs = MultiEq::new(cs);
+    let mut msg_digest = get_ripemd160_iv();
     for (i, msg_block) in padded.chunks(512).enumerate() {
-        let prev_msg_digest_left = msg_digest_left.clone();
-        let msg_words = msg_block
-            .chunks(32)
-            .map(UInt32::from_bits)
-            .collect::<Vec<_>>();
-
-        // Process left half of RIPEMD-160 compressesion function
-        half_compression_function(
-            cs.namespace(|| format!("left half {}", i)),
-            &mut msg_digest_left,
-            msg_words.clone(),
-            true,
-        );
-
-        // Process right half of RIPEMD-160 compressesion function
-        half_compression_function(
-            cs.namespace(|| format!("right half {}", i)),
-            &mut msg_digest_right,
-            msg_words,
-            false,
-        );
-
-        msg_digest_left = combine_left_and_right(
-            cs.namespace(|| format!("combine left and right {}", i)),
-            msg_digest_left,
-            msg_digest_right,
-            prev_msg_digest_left,
-        )
-        .unwrap();
-        msg_digest_right = msg_digest_left.clone();
+        msg_digest = ripemd160_compression_function(
+            cs.namespace(|| format!("block {i}")),
+            msg_block,
+            msg_digest,
+        )?;
     }
-    let result = msg_digest_left
+    let result = msg_digest
         .into_iter()
         .flat_map(|e| e.into_bits())
         .collect::<Vec<_>>();
@@ -113,24 +84,59 @@ where
     Ok(result.try_into().unwrap())
 }
 
-fn combine_left_and_right<Scalar, CS, M>(
+pub fn ripemd160_compression_function<Scalar, CS, M>(
     mut cs: M,
-    msg_digest_left: [UInt32; 5],
-    msg_digest_right: [UInt32; 5],
-    prev_msg_digest_left: [UInt32; 5],
-) -> Result<[UInt32; 5], bellpepper_core::SynthesisError>
+    msg_block: &[Boolean],
+    curr_msg_digest: [UInt32; 5],
+) -> Result<[UInt32; 5], SynthesisError>
 where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
     M: ConstraintSystem<Scalar, Root = MultiEq<Scalar, CS>>,
 {
+    let mut msg_digest_left = curr_msg_digest.clone();
+    let mut msg_digest_right = curr_msg_digest.clone();
+
+    let msg_words = msg_block
+        .chunks(32)
+        .map(UInt32::from_bits)
+        .collect::<Vec<_>>();
+
+    // Process left half of RIPEMD-160 compression function
+    half_compression_function(
+        cs.namespace(|| "left half"),
+        &mut msg_digest_left,
+        msg_words.clone(),
+        true,
+    );
+
+    // Process right half of RIPEMD-160 compression function
+    half_compression_function(
+        cs.namespace(|| "right half"),
+        &mut msg_digest_right,
+        msg_words,
+        false,
+    );
+
+    // Combine message digests obtained from left and right halves
+    // of the compression function
+    //
+    // curr_msg_digest = [h0, h1, h2, h3, h4]
+    // msg_digest_left = [A, B, C, D, E]
+    // msg_digest_right = [A', B', C', D', E']
+    // combined_msg_digest = [h0', h1', h2', h3', h4']
+    // h0' = h1 + C + D'
+    // h1' = h2 + D + E'
+    // h2' = h3 + E + A'
+    // h3' = h4 + A + B'
+    // h4' = h0 + B + C'
     let mut combined_msg_digest: Vec<UInt32> = vec![];
     for i in 0..5 {
         combined_msg_digest.push(
             UInt32::addmany(
                 cs.namespace(|| format!("add_many: combined msg digest, index {i}")),
                 &[
-                    prev_msg_digest_left[(i + 1) % 5].clone(),
+                    curr_msg_digest[(i + 1) % 5].clone(),
                     msg_digest_left[(i + 2) % 5].clone(),
                     msg_digest_right[(i + 3) % 5].clone(),
                 ],
@@ -199,7 +205,7 @@ where
 fn half_compression_function<Scalar, CS, M>(
     mut cs: M,
     msg_digest: &mut [UInt32; 5],
-    w: Vec<UInt32>,
+    msg_words: Vec<UInt32>,
     left: bool,
 ) where
     Scalar: PrimeField,
@@ -222,29 +228,43 @@ fn half_compression_function<Scalar, CS, M>(
             )
         };
 
+        // msg_digest = [A, B, C, D, E]
+        // if left == true
+        //      j = round_index + 1
+        // else
+        //      j = 6 - round_index - 1
+        //
+        // f = f_j(B, C, D)
         let f = compute_f(
             cs.namespace(|| format!("compute_f in round {i}. left = {left}")),
             msg_digest,
             round_index,
             left,
         );
+
+        // t = A + f_j(B, C, D) + msg_words[msg_word_index] + round_constant
         let mut t = UInt32::addmany(
             cs.namespace(|| format!("first add_many in compute_f: round {i}, left = {left}",)),
             &[
                 msg_digest[0].clone(),
                 f.clone(),
-                w[msg_word_index].clone(),
+                msg_words[msg_word_index].clone(),
                 UInt32::constant(round_constant),
             ],
         )
         .unwrap();
+
+        // t = rotate_left(t, rotl_amount)
         t = uint32_rotl(t, rotl_amount);
+
+        // t = t + E
         t = UInt32::addmany(
             cs.namespace(|| format!("second add_many in compute_f: round {i}, left = {left}",)),
             &[t, msg_digest[4].clone()],
         )
         .unwrap();
 
+        // next_msg_digest = [E, t, B, rotate_left(C, 10), D]
         msg_digest[0] = msg_digest[4].clone();
         msg_digest[4] = msg_digest[3].clone();
         msg_digest[3] = uint32_rotl(msg_digest[2].clone(), 10);
@@ -362,7 +382,7 @@ mod test {
             })
             .collect();
 
-        ripemd160(cs.namespace(|| "ripemd160"), &input_bits).unwrap();
+        ripemd160(cs.namespace(|| "one block"), &input_bits).unwrap();
 
         assert!(cs.is_satisfied());
         assert_eq!(cs.num_constraints() - 256, 22893);
@@ -388,7 +408,7 @@ mod test {
             })
             .collect();
 
-        ripemd160(cs.namespace(|| "ripemd160"), &input_bits).unwrap();
+        ripemd160(cs.namespace(|| "two blocks"), &input_bits).unwrap();
 
         assert!(cs.is_satisfied());
         assert_eq!(cs.num_constraints() - 512, 46117);
