@@ -484,7 +484,7 @@ where
                 ));
             }
 
-            let new_num_limbs = (P::num_limbs() + group_size - 1) / group_size;
+            let new_num_limbs = (allocated_limbs.len() + group_size - 1) / group_size;
             let mut res = vec![Num::<F>::zero(); new_num_limbs];
 
             for i in 0..new_num_limbs {
@@ -904,7 +904,7 @@ mod tests {
             println!("{:?}", cs.which_is_unsatisfied());
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 157);
+        assert_eq!(cs.num_constraints(), 158);
     }
 
     #[test]
@@ -946,7 +946,7 @@ mod tests {
             println!("{:?}", cs.which_is_unsatisfied());
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 157);
+        assert_eq!(cs.num_constraints(), 158);
     }
 
     #[test]
@@ -986,7 +986,7 @@ mod tests {
             println!("{:?}", cs.which_is_unsatisfied());
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 235);
+        assert_eq!(cs.num_constraints(), 236);
     }
 
     #[test]
@@ -1041,7 +1041,7 @@ mod tests {
             println!("{:?}", cs.which_is_unsatisfied());
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 882);
+        assert_eq!(cs.num_constraints(), 885);
     }
 
     #[test]
@@ -1090,7 +1090,7 @@ mod tests {
             println!("{:?}", cs.which_is_unsatisfied());
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 882);
+        assert_eq!(cs.num_constraints(), 885);
     }
 
     #[test]

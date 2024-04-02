@@ -305,7 +305,7 @@ where
         let ch = UInt64::sha512_ch(cs.namespace(|| "ch"), &new_e, &f, &g)?;
 
         // temp1 := h + S1 + ch + k[i] + w[i]
-        let temp1 = vec![
+        let temp1 = [
             h.clone(),
             s1,
             ch,
@@ -323,7 +323,7 @@ where
         let maj = UInt64::sha512_maj(cs.namespace(|| "maj"), &new_a, &b, &c)?;
 
         // temp2 := S0 + maj
-        let temp2 = vec![s0, maj];
+        let temp2 = [s0, maj];
 
         /*
         h := g
