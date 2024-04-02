@@ -112,6 +112,19 @@ where
                     num_bits_per_limb + num_carry_bits + 1,
                 )?;
             }
+
+            // Check that the final carry equals max_value_shift
+            cs.enforce(
+                || "enforce equality between final carry and max_value_shift",
+                |lc| lc,
+                |lc| lc,
+                |lc| {
+                    lc + &carry
+                        .clone()
+                        .add_bool_with_coeff(CS::one(), &Boolean::Constant(true), -max_value_shift)
+                        .lc(F::ONE)
+                },
+            );
         } else {
             eprintln!("Both inputs must be allocated limbs, not constants");
             return Err(SynthesisError::Unsatisfiable);
