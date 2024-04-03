@@ -1,5 +1,5 @@
 [package]
-name = "ripemd160"
+name = "bellpepper-ripemd160"
 authors = ["Shourya Goel <shouryagoel10000@gmail.com>", "Himanshu Raheja <hemanshuraheja@gmail.com>", "Saravanan Vijayakumaran <sarva@ee.iitb.ac.in>"]
 version = "0.1.0"
 edition = "2021"
