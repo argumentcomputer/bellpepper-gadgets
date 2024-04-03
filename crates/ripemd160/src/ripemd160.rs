@@ -71,7 +71,7 @@ where
         msg_digest = ripemd160_compression_function(
             cs.namespace(|| format!("block {i}")),
             msg_block,
-            msg_digest,
+            &msg_digest,
         )?;
     }
     let result = msg_digest
@@ -87,7 +87,7 @@ where
 pub fn ripemd160_compression_function<Scalar, CS, M>(
     mut cs: M,
     msg_block: &[Boolean],
-    curr_msg_digest: [UInt32; 5],
+    curr_msg_digest: &[UInt32; 5],
 ) -> Result<[UInt32; 5], SynthesisError>
 where
     Scalar: PrimeField,
@@ -106,7 +106,7 @@ where
     half_compression_function(
         cs.namespace(|| "left half"),
         &mut msg_digest_left,
-        msg_words.clone(),
+        &msg_words,
         true,
     );
 
@@ -114,7 +114,7 @@ where
     half_compression_function(
         cs.namespace(|| "right half"),
         &mut msg_digest_right,
-        msg_words,
+        &msg_words,
         false,
     );
 
@@ -205,7 +205,7 @@ where
 fn half_compression_function<Scalar, CS, M>(
     mut cs: M,
     msg_digest: &mut [UInt32; 5],
-    msg_words: Vec<UInt32>,
+    msg_words: &[UInt32],
     left: bool,
 ) where
     Scalar: PrimeField,
@@ -255,7 +255,7 @@ fn half_compression_function<Scalar, CS, M>(
         .unwrap();
 
         // t = rotate_left(t, rotl_amount)
-        t = uint32_rotl(t, rotl_amount);
+        t = uint32_rotl(&t, rotl_amount);
 
         // t = t + E
         t = UInt32::addmany(
@@ -267,7 +267,7 @@ fn half_compression_function<Scalar, CS, M>(
         // next_msg_digest = [E, t, B, rotate_left(C, 10), D]
         msg_digest[0] = msg_digest[4].clone();
         msg_digest[4] = msg_digest[3].clone();
-        msg_digest[3] = uint32_rotl(msg_digest[2].clone(), 10);
+        msg_digest[3] = uint32_rotl(&msg_digest[2], 10);
         msg_digest[2] = msg_digest[1].clone();
         msg_digest[1] = t;
     }
