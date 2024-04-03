@@ -108,7 +108,7 @@ where
         &mut msg_digest_left,
         &msg_words,
         true,
-    );
+    )?;
 
     // Process right half of RIPEMD-160 compression function
     half_compression_function(
@@ -116,7 +116,7 @@ where
         &mut msg_digest_right,
         &msg_words,
         false,
-    );
+    )?;
 
     // Combine message digests obtained from left and right halves
     // of the compression function
@@ -132,17 +132,14 @@ where
     // h4' = h0 + B + C'
     let mut combined_msg_digest: Vec<UInt32> = vec![];
     for i in 0..5 {
-        combined_msg_digest.push(
-            UInt32::addmany(
-                cs.namespace(|| format!("add_many: combined msg digest, index {i}")),
-                &[
-                    curr_msg_digest[(i + 1) % 5].clone(),
-                    msg_digest_left[(i + 2) % 5].clone(),
-                    msg_digest_right[(i + 3) % 5].clone(),
-                ],
-            )
-            .unwrap(),
-        );
+        combined_msg_digest.push(UInt32::addmany(
+            cs.namespace(|| format!("add_many: combined msg digest, index {i}")),
+            &[
+                curr_msg_digest[(i + 1) % 5].clone(),
+                msg_digest_left[(i + 2) % 5].clone(),
+                msg_digest_right[(i + 3) % 5].clone(),
+            ],
+        )?);
     }
     Ok(combined_msg_digest.try_into().unwrap())
 }
@@ -156,7 +153,7 @@ fn compute_f<Scalar, CS>(
     msg_digest: &mut [UInt32; 5],
     round_index: usize,
     left: bool,
-) -> UInt32
+) -> Result<UInt32, SynthesisError>
 where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
@@ -167,39 +164,34 @@ where
             &msg_digest[1],
             &msg_digest[2],
             &msg_digest[3],
-        )
-        .unwrap(),
+        )?,
         (1, true) | (3, false) => f2(
             cs.namespace(|| "f2 in round {round_index}. left = {left}"),
             &msg_digest[1],
             &msg_digest[2],
             &msg_digest[3],
-        )
-        .unwrap(),
+        )?,
         (2, _) => f3(
             cs.namespace(|| "f3 in round {round_index}. left = {left}"),
             &msg_digest[1],
             &msg_digest[2],
             &msg_digest[3],
-        )
-        .unwrap(),
+        )?,
         (3, true) | (1, false) => f4(
             cs.namespace(|| "f4 in round {round_index}. left = {left}"),
             &msg_digest[1],
             &msg_digest[2],
             &msg_digest[3],
-        )
-        .unwrap(),
+        )?,
         (4, true) | (0, false) => f5(
             cs.namespace(|| "f5 in round {round_index}. left = {left}"),
             &msg_digest[1],
             &msg_digest[2],
             &msg_digest[3],
-        )
-        .unwrap(),
+        )?,
         _ => panic!("Invalid round"),
     };
-    f
+    Ok(f)
 }
 
 fn half_compression_function<Scalar, CS, M>(
@@ -207,7 +199,8 @@ fn half_compression_function<Scalar, CS, M>(
     msg_digest: &mut [UInt32; 5],
     msg_words: &[UInt32],
     left: bool,
-) where
+) -> Result<(), SynthesisError>
+where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
     M: ConstraintSystem<Scalar, Root = MultiEq<Scalar, CS>>,
@@ -240,7 +233,7 @@ fn half_compression_function<Scalar, CS, M>(
             msg_digest,
             round_index,
             left,
-        );
+        )?;
 
         // t = A + f_j(B, C, D) + msg_words[msg_word_index] + round_constant
         let mut t = UInt32::addmany(
@@ -251,8 +244,7 @@ fn half_compression_function<Scalar, CS, M>(
                 msg_words[msg_word_index].clone(),
                 UInt32::constant(round_constant),
             ],
-        )
-        .unwrap();
+        )?;
 
         // t = rotate_left(t, rotl_amount)
         t = uint32_rotl(&t, rotl_amount);
@@ -261,8 +253,7 @@ fn half_compression_function<Scalar, CS, M>(
         t = UInt32::addmany(
             cs.namespace(|| format!("second add_many in compute_f: round {i}, left = {left}",)),
             &[t, msg_digest[4].clone()],
-        )
-        .unwrap();
+        )?;
 
         // next_msg_digest = [E, t, B, rotate_left(C, 10), D]
         msg_digest[0] = msg_digest[4].clone();
@@ -271,6 +262,7 @@ fn half_compression_function<Scalar, CS, M>(
         msg_digest[2] = msg_digest[1].clone();
         msg_digest[1] = t;
     }
+    Ok(())
 }
 
 #[cfg(test)]
