@@ -2,7 +2,7 @@ use bellpepper::gadgets::uint32::UInt32;
 use bellpepper_core::{boolean::Boolean, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
 
-pub fn swap_byte_endianness(bits: &[Boolean]) -> Vec<Boolean> {
+pub fn swap_byte_endianness(bits: &Vec<Boolean>) -> Vec<Boolean> {
     assert!(bits.len() % 8 == 0);
     let mut modified_bits = vec![];
     for i in 0..bits.len() / 8 {
@@ -13,7 +13,7 @@ pub fn swap_byte_endianness(bits: &[Boolean]) -> Vec<Boolean> {
     modified_bits
 }
 
-pub fn uint32_rotl(a: &UInt32, by: usize) -> UInt32 {
+pub fn uint32_rotl(a: UInt32, by: usize) -> UInt32 {
     assert!(by < 32usize);
     a.rotr(32 - by)
 }
@@ -175,8 +175,7 @@ mod test {
                     let b = rng.next_u32();
                     let c = rng.next_u32();
 
-                    let f = $expected_res_calculator;
-                    let mut expected = f(a, b, c);
+                    let mut expected = $expected_res_calculator(a, b, c);
 
                     let a_uint32 = UInt32::alloc(cs.namespace(|| "alloc a"), Some(a)).unwrap();
                     let b_uint32 = UInt32::alloc(cs.namespace(|| "alloc b"), Some(b)).unwrap();
