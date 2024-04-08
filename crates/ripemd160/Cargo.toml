@@ -17,3 +17,4 @@ pasta_curves = { workspace = true }
 hex-literal = "0.4.1"
 rand_core = { workspace = true }
 rand_xorshift = { workspace = true }
+ripemd = "0.1.3"

@@ -405,4 +405,48 @@ mod test {
         assert!(cs.is_satisfied());
         assert_eq!(cs.num_constraints() - 512, 46117);
     }
+
+    #[test]
+    fn test_against_vectors() {
+        use ripemd::{Digest, Ripemd160};
+
+        let mut rng = XorShiftRng::from_seed([
+            0x59, 0x62, 0xbe, 0x3d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
+            0xbc, 0xe5,
+        ]);
+
+        for input_len in (0..32).chain((32..256).filter(|a| a % 8 == 0)) {
+            let mut h = Ripemd160::new();
+            let data: Vec<u8> = (0..input_len).map(|_| rng.next_u32() as u8).collect();
+            h.update(&data);
+            let hash_result = h.finalize();
+
+            let mut cs = TestConstraintSystem::<Fp>::new();
+            let mut input_bits = vec![];
+
+            for (byte_i, input_byte) in data.into_iter().enumerate() {
+                for bit_i in (0..8).rev() {
+                    let cs = cs.namespace(|| format!("input bit {} {}", byte_i, bit_i));
+
+                    input_bits.push(
+                        AllocatedBit::alloc(cs, Some((input_byte >> bit_i) & 1u8 == 1u8))
+                            .unwrap()
+                            .into(),
+                    );
+                }
+            }
+
+            let r = ripemd160(&mut cs, &input_bits).unwrap();
+
+            assert!(cs.is_satisfied());
+
+            let mut s = hash_result
+                .iter()
+                .flat_map(|&byte| (0..8).rev().map(move |i| (byte >> i) & 1u8 == 1u8));
+
+            for b in r {
+                assert_eq!(b.get_value().unwrap(), s.next().unwrap());
+            }
+        }
+    }
 }
