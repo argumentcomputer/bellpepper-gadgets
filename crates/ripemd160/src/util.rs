@@ -4,13 +4,9 @@ use ff::PrimeField;
 
 pub fn swap_byte_endianness(bits: &[Boolean]) -> Vec<Boolean> {
     assert!(bits.len() % 8 == 0);
-    let mut modified_bits = vec![];
-    for i in 0..bits.len() / 8 {
-        for j in 0..8 {
-            modified_bits.push(bits[i * 8 + 7 - j].clone());
-        }
-    }
-    modified_bits
+    bits.chunks(8) // Process 8 bits (1 byte) at a time
+        .flat_map(|byte| byte.iter().rev().cloned())
+        .collect()
 }
 
 #[inline]
