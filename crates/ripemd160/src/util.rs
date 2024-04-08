@@ -2,13 +2,6 @@ use bellpepper::gadgets::uint32::UInt32;
 use bellpepper_core::{boolean::Boolean, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
 
-pub fn swap_byte_endianness(bits: &[Boolean]) -> Vec<Boolean> {
-    assert!(bits.len() % 8 == 0);
-    bits.chunks(8) // Process 8 bits (1 byte) at a time
-        .flat_map(|byte| byte.iter().rev().cloned())
-        .collect()
-}
-
 #[inline]
 pub(crate) fn uint32_rotl(a: &UInt32, by: usize) -> UInt32 {
     assert!(by < 32usize);
@@ -154,29 +147,6 @@ mod test {
     use rand_xorshift::XorShiftRng;
 
     use super::*;
-
-    #[test]
-    fn test_swap_byte_endianness() {
-        let mut rng = XorShiftRng::from_seed([
-            0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
-            0xbc, 0xe5,
-        ]);
-
-        for _ in 0..50 {
-            let a = rng.next_u32();
-            let a_le_bytes = a.to_le_bytes();
-            let a_rev_le_bytes = a_le_bytes.map(|b| b.reverse_bits());
-            let a_rev = u32::from_le_bytes(a_rev_le_bytes);
-
-            let a_bits = UInt32::constant(a).into_bits_be();
-            let a_rev_bits = UInt32::constant(a_rev).into_bits_be();
-            let a_rev_bits_exp = swap_byte_endianness(&a_bits);
-
-            for (x, y) in a_rev_bits.into_iter().zip(a_rev_bits_exp.into_iter()) {
-                assert_eq!(x.get_value().unwrap(), y.get_value().unwrap());
-            }
-        }
-    }
 
     macro_rules! test_helper_function {
         ($test_name:ident, $func:ident, $expected_res_calculator:expr) => {

@@ -8,7 +8,7 @@ use bellpepper_core::{boolean::Boolean, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
 use std::{convert::TryInto, iter};
 
-use crate::util::{f1, f2, f3, f4, f5, swap_byte_endianness, uint32_rotl};
+use crate::util::{f1, f2, f3, f4, f5, uint32_rotl};
 
 const IV: [u32; 5] = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
 const ROUND_CONSTANTS_LEFT: [u32; 5] = [0x00000000, 0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xa953fd4e];
@@ -65,9 +65,6 @@ where
 
     assert!(padded.len() % 512 == 0);
 
-    // Make the bytes little-endian
-    let padded = swap_byte_endianness(&padded);
-
     let mut cs = MultiEq::new(cs);
     let mut msg_digest = get_ripemd160_iv();
     for (i, msg_block) in padded.chunks(512).enumerate() {
@@ -77,13 +74,21 @@ where
             &msg_digest,
         )?;
     }
+
+    // The UInt32::into_bits function outputs the bit sequence corresponding to
+    // a 32-bit integer in little-endian order b0, b1, ..., b31
+    // But RIPEMD160 outputs each 8 bit chunk in big-endian order.
+    // So we need to output the sequence
+    // b7, b6, ..., b0, b15, b14, ..., b8, b23, b22, ..., b16, b31, b30, ..., b24.
+    // The below code performs this conversion
     let result = msg_digest
         .into_iter()
         .flat_map(|e| e.into_bits())
+        .collect::<Vec<_>>()
+        .chunks(8)
+        .flat_map(|byte| byte.iter().rev().cloned())
         .collect::<Vec<_>>();
 
-    // Make the bytes big-endian
-    let result = swap_byte_endianness(&result);
     Ok(result.try_into().unwrap())
 }
 
@@ -100,7 +105,21 @@ where
     let mut msg_digest_left = curr_msg_digest.clone();
     let mut msg_digest_right = curr_msg_digest.clone();
 
+    // Given a chunk of 32 bits b0, b1,..., b31, RIPEMD160 converts them into
+    // a 32-bit integer as follows:
+    // - Bits b0 to b7 represent the least significant byte in big-endian order
+    // - Bits b8 to b15 represent the next most significant byte in big-endian order
+    // - Bits b16 to b23 represent the next most significant byte in big-endian order
+    // - Bits b24 to b31 represent the most significant byte in big-endian order
+    //
+    // But the UInt32::from_bits function expects the bit sequence corresponding to
+    // a 32-bit integer to be in little-endian order. So we need to feed it the sequence
+    // b7, b6, ..., b0, b15, b14, ..., b8, b23, b22, ..., b16, b31, b30, ..., b24.
+    // The below code performs this conversion
     let msg_words = msg_block
+        .chunks(8)
+        .flat_map(|byte| byte.iter().rev().cloned())
+        .collect::<Vec<_>>()
         .chunks(32)
         .map(UInt32::from_bits)
         .collect::<Vec<_>>();
