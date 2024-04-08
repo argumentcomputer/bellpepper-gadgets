@@ -13,7 +13,8 @@ pub fn swap_byte_endianness(bits: &[Boolean]) -> Vec<Boolean> {
     modified_bits
 }
 
-pub fn uint32_rotl(a: &UInt32, by: usize) -> UInt32 {
+#[inline]
+pub(crate) fn uint32_rotl(a: &UInt32, by: usize) -> UInt32 {
     assert!(by < 32usize);
     a.rotr(32 - by)
 }
@@ -43,7 +44,7 @@ where
     Ok(UInt32::from_bits(&bits))
 }
 
-pub fn f1<Scalar, CS>(
+pub(crate) fn f1<Scalar, CS>(
     mut cs: CS,
     x: &UInt32,
     y: &UInt32,
@@ -72,7 +73,12 @@ where
     Boolean::or(cs.namespace(|| "(x AND y) OR ((!x) AND z)"), &tmp1, &tmp2)
 }
 
-pub fn f2<Scalar, CS>(cs: CS, x: &UInt32, y: &UInt32, z: &UInt32) -> Result<UInt32, SynthesisError>
+pub(crate) fn f2<Scalar, CS>(
+    cs: CS,
+    x: &UInt32,
+    y: &UInt32,
+    z: &UInt32,
+) -> Result<UInt32, SynthesisError>
 where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
@@ -96,7 +102,13 @@ where
     Boolean::xor(cs.namespace(|| "(x OR !y) XOR z"), &tmp, z)
 }
 
-pub fn f3<Scalar, CS>(cs: CS, x: &UInt32, y: &UInt32, z: &UInt32) -> Result<UInt32, SynthesisError>
+#[inline]
+pub(crate) fn f3<Scalar, CS>(
+    cs: CS,
+    x: &UInt32,
+    y: &UInt32,
+    z: &UInt32,
+) -> Result<UInt32, SynthesisError>
 where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
@@ -106,7 +118,13 @@ where
     })
 }
 
-pub fn f4<Scalar, CS>(cs: CS, x: &UInt32, y: &UInt32, z: &UInt32) -> Result<UInt32, SynthesisError>
+#[inline]
+pub(crate) fn f4<Scalar, CS>(
+    cs: CS,
+    x: &UInt32,
+    y: &UInt32,
+    z: &UInt32,
+) -> Result<UInt32, SynthesisError>
 where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
@@ -116,7 +134,13 @@ where
     })
 }
 
-pub fn f5<Scalar, CS>(cs: CS, x: &UInt32, y: &UInt32, z: &UInt32) -> Result<UInt32, SynthesisError>
+#[inline]
+pub(crate) fn f5<Scalar, CS>(
+    cs: CS,
+    x: &UInt32,
+    y: &UInt32,
+    z: &UInt32,
+) -> Result<UInt32, SynthesisError>
 where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
