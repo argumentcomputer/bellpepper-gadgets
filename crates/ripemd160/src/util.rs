@@ -17,9 +17,9 @@ pub(crate) fn uint32_rotl(a: &UInt32, by: usize) -> UInt32 {
 
 fn triop<Scalar, CS, U>(
     mut cs: CS,
-    a: &UInt32,
-    b: &UInt32,
-    c: &UInt32,
+    a: UInt32,
+    b: UInt32,
+    c: UInt32,
     circuit_fn: U,
 ) -> Result<UInt32, SynthesisError>
 where
@@ -28,11 +28,10 @@ where
     U: Fn(&mut CS, usize, &Boolean, &Boolean, &Boolean) -> Result<Boolean, SynthesisError>,
 {
     let bits: Vec<_> = a
-        .clone()
         .into_bits()
         .iter()
-        .zip(b.clone().into_bits().iter())
-        .zip(c.clone().into_bits().iter())
+        .zip(b.into_bits().iter())
+        .zip(c.into_bits().iter())
         .enumerate()
         .map(|(i, ((a, b), c))| circuit_fn(&mut cs, i, a, b, c))
         .collect::<Result<_, _>>()?;
@@ -79,7 +78,7 @@ where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
 {
-    triop(cs, x, y, z, |cs, i, a, b, c| {
+    triop(cs, x.clone(), y.clone(), z.clone(), |cs, i, a, b, c| {
         f2_boolean(cs.namespace(|| format!("f2 {}", i)), a, b, c)
     })
 }
@@ -109,7 +108,7 @@ where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
 {
-    triop(cs, x, y, z, |cs, i, a, b, c| {
+    triop(cs, x.clone(), y.clone(), z.clone(), |cs, i, a, b, c| {
         f3_boolean(cs.namespace(|| format!("f3 {}", i)), a, b, c)
     })
 }
@@ -125,7 +124,7 @@ where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
 {
-    triop(cs, x, y, z, |cs, i, a, b, c| {
+    triop(cs, x.clone(), y.clone(), z.clone(), |cs, i, a, b, c| {
         f2_boolean(cs.namespace(|| format!("f4 {}", i)), c, a, b)
     })
 }
@@ -141,7 +140,7 @@ where
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
 {
-    triop(cs, x, y, z, |cs, i, a, b, c| {
+    triop(cs, x.clone(), y.clone(), z.clone(), |cs, i, a, b, c| {
         f3_boolean(cs.namespace(|| format!("f5 {}", i)), b, c, a)
     })
 }
