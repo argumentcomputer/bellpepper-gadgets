@@ -6,7 +6,7 @@
 use bellpepper::gadgets::{multieq::MultiEq, uint32::UInt32};
 use bellpepper_core::{boolean::Boolean, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
-use std::convert::TryInto;
+use std::{convert::TryInto, iter};
 
 use crate::util::{f1, f2, f3, f4, f5, swap_byte_endianness, uint32_rotl};
 
@@ -48,8 +48,11 @@ where
     let plen = padded.len() as u64;
     padded.push(Boolean::Constant(true));
 
-    while (padded.len() + 64) % 512 != 0 {
-        padded.push(Boolean::constant(false));
+    let num_zero_bits = 512 - (padded.len() + 64) % 512;
+    // If num_zero_bits == 512, then (padded.len() + 64) is already a multiple of 512
+    // No zero bits need to be appended in this case
+    if num_zero_bits != 512 {
+        padded.extend(iter::repeat(Boolean::Constant(false)).take(num_zero_bits));
     }
 
     for i in (0..64).step_by(8) {
