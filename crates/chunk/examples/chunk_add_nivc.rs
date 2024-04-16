@@ -4,13 +4,12 @@ use arecibo::supernova::{
 };
 use arecibo::traits::snark::default_ck_hint;
 use arecibo::traits::{CurveCycleEquipped, Dual, Engine};
-use bellpepper_chunk::traits::{ChunkCircuitInner, ChunkStepCircuit};
-use bellpepper_chunk::{FoldStep, InnerCircuit};
+use bellpepper_chunk::traits::InnerIterationStepCircuit;
+use bellpepper_chunk::IterationStep;
+use bellpepper_core::boolean::Boolean;
 use bellpepper_core::num::AllocatedNum;
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use ff::{Field, PrimeField};
-use flate2::write::ZlibEncoder;
-use flate2::Compression;
 use halo2curves::bn256::Bn256;
 use std::marker::PhantomData;
 use std::time::Instant;
@@ -36,7 +35,7 @@ struct ChunkStep<F: PrimeField> {
     _p: PhantomData<F>,
 }
 
-impl<F: PrimeField> ChunkStepCircuit<F> for ChunkStep<F> {
+impl<F: PrimeField> InnerIterationStepCircuit<F> for ChunkStep<F> {
     fn new() -> Self {
         Self {
             _p: Default::default(),
@@ -48,12 +47,14 @@ impl<F: PrimeField> ChunkStepCircuit<F> for ChunkStep<F> {
         cs: &mut CS,
         _pc: Option<&AllocatedNum<F>>,
         z: &[AllocatedNum<F>],
-        chunk_in: &[AllocatedNum<F>],
+        chunk_in: &[(Boolean, F)],
     ) -> Result<Vec<AllocatedNum<F>>, SynthesisError> {
         let mut acc = z[0].clone();
 
-        for (i, elem) in chunk_in.iter().enumerate() {
-            acc = acc.add(&mut cs.namespace(|| format!("add{i}")), elem)?;
+        for (i, (_, elem)) in chunk_in.iter().enumerate() {
+            let allocated_elem =
+                AllocatedNum::alloc(cs.namespace(|| format!("input_{}", i)), || Ok(*elem))?;
+            acc = acc.add(&mut cs.namespace(|| format!("add{i}")), &allocated_elem)?;
         }
 
         Ok(vec![acc])
@@ -62,18 +63,20 @@ impl<F: PrimeField> ChunkStepCircuit<F> for ChunkStep<F> {
 
 // NIVC `StepCircuit`` implementation
 #[derive(Clone, Debug)]
-struct FoldStepWrapper<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
-    inner: FoldStep<F, C, N>,
+struct IterationStepWrapper<F: PrimeField, C: InnerIterationStepCircuit<F>, const N: usize> {
+    inner: IterationStep<F, C, N>,
 }
 
-impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> FoldStepWrapper<F, C, N> {
-    pub fn new(fold_step: FoldStep<F, C, N>) -> Self {
-        Self { inner: fold_step }
+impl<F: PrimeField, C: InnerIterationStepCircuit<F>, const N: usize> IterationStepWrapper<F, C, N> {
+    pub fn new(iteration_step: IterationStep<F, C, N>) -> Self {
+        Self {
+            inner: iteration_step,
+        }
     }
 }
 
-impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> StepCircuit<F>
-    for FoldStepWrapper<F, C, N>
+impl<F: PrimeField, C: InnerIterationStepCircuit<F>, const N: usize> StepCircuit<F>
+    for IterationStepWrapper<F, C, N>
 {
     fn arity(&self) -> usize {
         self.inner.arity()
@@ -91,40 +94,50 @@ impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> StepCircuit<F>
     ) -> Result<(Option<AllocatedNum<F>>, Vec<AllocatedNum<F>>), SynthesisError> {
         let (next_pc, res_inner_synth) =
             self.inner
-                .synthesize(&mut cs.namespace(|| "fold_step_wrapper"), pc, z)?;
+                .synthesize(&mut cs.namespace(|| "iteration_step_wrapper"), pc, z)?;
 
         Ok((next_pc, res_inner_synth))
     }
 }
 
 // NIVC `NonUniformCircuit` implementation
-struct ChunkCircuit<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
-    inner: InnerCircuit<F, C, N>,
+struct ChunkCircuit<F: PrimeField, C: InnerIterationStepCircuit<F>, const N: usize> {
+    iteration_steps: Vec<IterationStep<F, C, N>>,
 }
 
-impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> ChunkCircuit<F, C, N> {
-    pub fn new(inner: InnerCircuit<F, C, N>) -> Self {
-        Self { inner }
+impl<F: PrimeField, C: InnerIterationStepCircuit<F>, const N: usize> ChunkCircuit<F, C, N> {
+    pub fn new(inputs: &[F]) -> Self {
+        Self {
+            iteration_steps: IterationStep::from_inputs(0, inputs, F::ZERO),
+        }
+    }
+
+    fn get_iteration_step(&self, step: usize) -> IterationStep<F, C, N> {
+        self.iteration_steps[step].clone()
+    }
+
+    fn get_iteration_circuit(&self, step: usize) -> ChunkCircuitSet<F, C, N> {
+        ChunkCircuitSet::IterationStep(IterationStepWrapper::new(self.get_iteration_step(step)))
     }
 }
 
 #[derive(Clone, Debug)]
-enum ChunkCircuitSet<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
-    IterStep(FoldStepWrapper<F, C, N>),
+enum ChunkCircuitSet<F: PrimeField, C: InnerIterationStepCircuit<F>, const N: usize> {
+    IterationStep(IterationStepWrapper<F, C, N>),
 }
 
-impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> StepCircuit<F>
+impl<F: PrimeField, C: InnerIterationStepCircuit<F>, const N: usize> StepCircuit<F>
     for ChunkCircuitSet<F, C, N>
 {
     fn arity(&self) -> usize {
         match self {
-            Self::IterStep(fold_step) => fold_step.inner.arity(),
+            Self::IterationStep(iteration_step) => iteration_step.inner.arity(),
         }
     }
 
     fn circuit_index(&self) -> usize {
         match self {
-            Self::IterStep(fold_step) => *fold_step.inner.step_nbr(),
+            Self::IterationStep(iteration_step) => *iteration_step.inner.circuit_index(),
         }
     }
 
@@ -135,26 +148,28 @@ impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> StepCircuit<F>
         z: &[AllocatedNum<F>],
     ) -> Result<(Option<AllocatedNum<F>>, Vec<AllocatedNum<F>>), SynthesisError> {
         match self {
-            Self::IterStep(fold_step) => fold_step.synthesize(cs, pc, z),
+            Self::IterationStep(iteration_step) => iteration_step.synthesize(cs, pc, z),
         }
     }
 }
 
-impl<E1: CurveCycleEquipped, C: ChunkStepCircuit<E1::Scalar>, const N: usize> NonUniformCircuit<E1>
-    for ChunkCircuit<E1::Scalar, C, N>
+impl<E1: CurveCycleEquipped, C: InnerIterationStepCircuit<E1::Scalar>, const N: usize>
+    NonUniformCircuit<E1> for ChunkCircuit<E1::Scalar, C, N>
 {
     type C1 = ChunkCircuitSet<E1::Scalar, C, N>;
     type C2 = TrivialSecondaryCircuit<<Dual<E1> as Engine>::Scalar>;
 
     fn num_circuits(&self) -> usize {
-        self.inner.num_fold_steps()
+        1
     }
 
     fn primary_circuit(&self, circuit_index: usize) -> Self::C1 {
-        if let Some(fold_step) = self.inner.circuits().get(circuit_index) {
-            return Self::C1::IterStep(FoldStepWrapper::new(fold_step.clone()));
+        match circuit_index {
+            0 => {
+                Self::C1::IterationStep(IterationStepWrapper::new(self.iteration_steps[0].clone()))
+            }
+            _ => panic!("No circuit found for index {}", circuit_index),
         }
-        unreachable!()
     }
 
     fn secondary_circuit(&self) -> Self::C2 {
@@ -165,23 +180,14 @@ impl<E1: CurveCycleEquipped, C: ChunkStepCircuit<E1::Scalar>, const N: usize> No
 fn main() {
     const NUM_ITERS_PER_STEP: usize = 3;
 
-    type Inner =
-        InnerCircuit<<E1 as Engine>::Scalar, ChunkStep<<E1 as Engine>::Scalar>, NUM_ITERS_PER_STEP>;
     type C1 =
         ChunkCircuit<<E1 as Engine>::Scalar, ChunkStep<<E1 as Engine>::Scalar>, NUM_ITERS_PER_STEP>;
 
     println!("NIVC addition accumulator with a Chunk pattern");
     println!("=========================================================");
 
-    let z0_primary = vec![
+    let inputs = vec![
         <E1 as Engine>::Scalar::zero(),
-        <E1 as Engine>::Scalar::zero(),
-        <E1 as Engine>::Scalar::zero(),
-        <E1 as Engine>::Scalar::zero(),
-    ];
-
-    // Different instantiations of circuit for each of the nova fold steps
-    let inner_chunk_circuit = Inner::new(&[
         <E1 as Engine>::Scalar::one(),
         <E1 as Engine>::Scalar::from(2),
         <E1 as Engine>::Scalar::from(3),
@@ -192,24 +198,22 @@ fn main() {
         <E1 as Engine>::Scalar::from(8),
         <E1 as Engine>::Scalar::from(9),
         <E1 as Engine>::Scalar::from(10),
-    ])
-    .unwrap();
+    ];
 
-    let chunk_circuit = C1::new(inner_chunk_circuit);
+    let z0_primary = &[<E1 as Engine>::Scalar::zero()];
+
+    let intermediate_inputs = &inputs;
+
+    // Different instantiations of circuit for each of the nova fold steps
+    let chunk_circuit = C1::new(intermediate_inputs);
 
     let circuit_secondary = <C1 as NonUniformCircuit<E1>>::secondary_circuit(&chunk_circuit);
-
-    // produce non-deterministic hint
-    assert_eq!(
-        <C1 as NonUniformCircuit<E1>>::num_circuits(&chunk_circuit),
-        5
-    );
 
     let z0_secondary = vec![<Dual<E1> as Engine>::Scalar::ZERO];
 
     println!(
         "Proving {} iterations of Chunk per step",
-        <C1 as NonUniformCircuit<E1>>::num_circuits(&chunk_circuit)
+        inputs.len() / NUM_ITERS_PER_STEP + 1
     );
 
     // produce public parameters
@@ -229,21 +233,16 @@ fn main() {
         &chunk_circuit,
         &circuit_primary,
         &circuit_secondary,
-        &z0_primary,
+        z0_primary,
         &z0_secondary,
     )
     .unwrap();
 
-    for step in 0..<C1 as NonUniformCircuit<E1>>::num_circuits(&chunk_circuit) {
-        let start = Instant::now();
+    let start = Instant::now();
 
-        let circuit_primary =
-            <ChunkCircuit<
-                <E1 as Engine>::Scalar,
-                ChunkStep<<E1 as Engine>::Scalar>,
-                NUM_ITERS_PER_STEP,
-            > as NonUniformCircuit<E1>>::primary_circuit(&chunk_circuit, step);
-
+    // We +1 the number of folding steps to account for the modulo of intermediate_inputs.len() by NUM_ITERS_PER_STEP being != 0
+    for step in 0..inputs.len() / NUM_ITERS_PER_STEP + 1 {
+        let circuit_primary = chunk_circuit.get_iteration_circuit(step);
         let res = recursive_snark.prove_step(&pp, &circuit_primary, &circuit_secondary);
         assert!(res.is_ok());
         println!(
@@ -252,18 +251,11 @@ fn main() {
             res.is_ok(),
             start.elapsed()
         );
-
-        let start = Instant::now();
-
-        let res = recursive_snark.verify(&pp, &z0_primary, &z0_secondary);
-        assert!(res.is_ok());
-        println!(
-            "RecursiveSNARK::verify {}: {:?}, took {:?} ",
-            step,
-            res.is_ok(),
-            start.elapsed()
-        );
     }
+    assert_eq!(
+        &<E1 as Engine>::Scalar::from(55),
+        recursive_snark.zi_primary().first().unwrap()
+    );
     println!(
         "Calculated sum: {:?}",
         recursive_snark.zi_primary().first().unwrap()
@@ -282,18 +274,10 @@ fn main() {
     assert!(res.is_ok());
     let compressed_snark = res.unwrap();
 
-    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
-    bincode::serialize_into(&mut encoder, &compressed_snark).unwrap();
-    let compressed_snark_encoded = encoder.finish().unwrap();
-    println!(
-        "CompressedSNARK::len {:?} bytes",
-        compressed_snark_encoded.len()
-    );
-
     // verify the compressed SNARK
     println!("Verifying a CompressedSNARK...");
     let start = Instant::now();
-    let res = compressed_snark.verify(&pp, &verifier_key, &z0_primary, &z0_secondary);
+    let res = compressed_snark.verify(&pp, &verifier_key, z0_primary, &z0_secondary);
     println!(
         "CompressedSNARK::verify: {:?}, took {:?}",
         res.is_ok(),

@@ -1,6 +1,8 @@
 pub mod traits;
+mod utils;
 
 use crate::traits::GadgetDigest;
+use crate::utils::conditionally_select_vec;
 use bellpepper_core::boolean::Boolean;
 use bellpepper_core::{ConstraintSystem, SynthesisError};
 use ff::PrimeField;
@@ -102,23 +104,41 @@ where
         .zip(proof.siblings().iter())
         .enumerate()
     {
-        let b = bit.get_value().ok_or(SynthesisError::Unsatisfiable)?;
-
-        // Determine the order of hashing based on the bit value.
-        let hash_order = if b {
-            vec![sibling_hash.to_owned(), actual_root_hash]
-        } else {
-            vec![actual_root_hash, sibling_hash.to_owned()]
-        };
-
         // Compute the new hash.
-        actual_root_hash = GD::digest(
-            cs.namespace(|| format!("sibling {}", i)),
-            &hash_order.concat(),
+        actual_root_hash = conditional_hash::<_, _, GD>(
+            &mut cs.namespace(|| format!("updating accumulator for sibling {}", i)),
+            &actual_root_hash,
+            sibling_hash,
+            bit,
         )?;
     }
 
     hash_equality(cs, expected_root, actual_root_hash)
+}
+
+pub fn conditional_hash<E, CS, GD>(
+    mut cs: CS,
+    acc: &[Boolean],
+    sibling: &[Boolean],
+    bit: &Boolean,
+) -> Result<Vec<Boolean>, SynthesisError>
+where
+    E: PrimeField,
+    CS: ConstraintSystem<E>,
+    GD: GadgetDigest<E>,
+{
+    // Determine the order of hashing based on the bit value.
+    let hash_order: Vec<Boolean> = conditionally_select_vec(
+        &mut cs.namespace(|| "hash order"),
+        &[sibling, acc].concat(),
+        &[acc, sibling].concat(),
+        bit,
+    )?;
+
+    // Compute the new hash.
+    let new_acc = GD::digest(&mut cs.namespace(|| "digest leaf & sibling"), &hash_order)?;
+
+    Ok(new_acc)
 }
 
 /// Compares two hash values for equality bit by bit.
@@ -130,7 +150,7 @@ where
 ///
 /// # Returns
 /// A result containing the actual hash value if the hashes are equal, or a `SynthesisError` otherwise.
-fn hash_equality<E, CS>(
+pub fn hash_equality<E, CS>(
     mut cs: CS,
     expected: &[Boolean],
     actual: HashValue,
