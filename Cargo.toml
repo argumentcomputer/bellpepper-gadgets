@@ -10,6 +10,7 @@ members = [
     "crates/merkle-inclusion",
     "crates/chunk",
     "crates/uint64",
+    "crates/ripemd160",
 ]
 
 [workspace.package]

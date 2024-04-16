@@ -1,0 +1,20 @@
+[package]
+name = "bellpepper-ripemd160"
+authors = ["Shourya Goel <shouryagoel10000@gmail.com>", "Himanshu Raheja <hemanshuraheja@gmail.com>", "Saravanan Vijayakumaran <sarva@ee.iitb.ac.in>"]
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+bellpepper-core = { workspace = true }
+bellpepper = { workspace = true }
+ff = { workspace = true }
+
+[dev-dependencies]
+pasta_curves = { workspace = true }
+hex-literal = "0.4.1"
+rand_core = { workspace = true }
+rand_xorshift = { workspace = true }
+ripemd = "0.1.3"
