@@ -1,6 +1,7 @@
 \documentclass[a4paper, 12pt]{article}
 \usepackage[margin=0.5in]{geometry}
 \usepackage{amsmath, amssymb, amsthm}
+\usepackage{hyperref}
 
 \newtheorem*{remark}{Remark}
 
@@ -72,7 +73,7 @@ In general, the product of $a = \sum_{i=0}^{k_a-1}a_i 2^{64 i}$ and $b= \sum_{i=
 Now consider the difference $a-b$ of the limbed representations of the ed25519 base field elements $a = \sum_{i=0}^3 a_i 2^{64i}$ and $b = \sum_{i=0}^3 b_i 2^{64i}$.
 In the subtraction operation, we have to ensure that there is no \textbf{underflow} when a limb is deducted from another. For any $a_i$ that is less than $b_i$, the value of $a_i - b_i$ will wrap around and be equal to $p+a_i - b_i$.
 
-We can prevent the undeflow in all the limbs of $a-b$ by computing $a+kn-b$ where $kn$ is a multiple of the prime $n$ that ensures that $kn-b$ has no limbs that underflow.  To calculate $kn-b$, we proceed as follows.
+We can prevent the underflow in all the limbs of $a-b$ by computing $a+kn-b$ where $kn$ is a multiple of the prime $n$ that ensures that $kn-b$ has no limbs that underflow.  To calculate $kn-b$, we proceed as follows.
 \begin{itemize}
   \item If $b$ has overflow $\texttt{b.overflow}$, then the maximum bitwidth of any limb of $b$ is $\texttt{b.overflow}+64$. So every limb of $b$ is at most $2^{\texttt{b.overflow}+64}-1$.
   \item  We compute a big integer $u$ corresponding to each limb being equal to its largest possible value.
@@ -80,7 +81,7 @@ We can prevent the undeflow in all the limbs of $a-b$ by computing $a+kn-b$ wher
     $$u = \sum_{i=0}^{3} \left[2^{\texttt{b.overflow}+ 64} - 1 \right] 2^{64i}$$
 
     \begin{remark}
-    In the current \texttt{emulated} implementation (March 2024), the integer $u$ is calculated as $$u = \sum_{i=0}^{3} \left[2^{\texttt{b.overflow}+ 64} \right] 2^{64i}.$$ But $2^{\texttt{b.overflow}+ 64}$ has an overflow of $\texttt{b.overflow}+1$. Choosing the above expression keeps the overflow in the limbs of $u$ to be $\texttt{b.overflow}$. Lower values of overflow allow us to further delay the reduction step.
+    In the current\footnote{\url{https://github.com/lurk-lab/bellpepper-gadgets/tree/adc96d8441141c74402d06499a63484c5458299d}} \texttt{emulated} implementation (April 2024), the integer $u$ is calculated as $$u = \sum_{i=0}^{3} \left[2^{\texttt{b.overflow}+ 64} \right] 2^{64i}.$$ But $2^{\texttt{b.overflow}+ 64}$ has an overflow of $\texttt{b.overflow}+1$. Choosing the expression above this remark keeps the overflow in the limbs of $u$ to be $\texttt{b.overflow}$. Lower values of overflow allow us to further delay the reduction step.
     \end{remark}
 
   \item  We compute a remainder $r = u \bmod n$ as a big integer.
@@ -90,7 +91,7 @@ We can prevent the undeflow in all the limbs of $a-b$ by computing $a+kn-b$ wher
 
     $$kn = \sum_{i=0}^{3} \left[2^{\texttt{b.overflow}+ 64} - 1 + r'_i\right] 2^{64i}.$$
     
-    Note that the maximum possible overflow in $kn$ is $\texttt{b.overflow}+1$.  This is because adding $r'_i$ can result in a carry in a limb. Some limb values in $r'$ could be zero resulting in no carry.
+    Note that the maximum possible overflow in $kn$ is $\texttt{b.overflow}+1$.  This is because adding $r'_i$ can result in a carry in a limb.
 
   \item  Now the limbs of $kn-b$ can be represented as the following without any chance of underflow.
 
@@ -132,9 +133,10 @@ Using the big integer representation of $d$, we compute the quotient $q$ when $d
 
 Let the number of limbs in $d = c-r$ be $l$. Since the overflow in $c-r$ is $\texttt{c.overflow}+1$, we have $\texttt{d.overflow} = \texttt{c.overflow}+1$. The maximum value of $d$ is bounded by 
 \begin{align*}
-\sum_{i=0}^{l-1} \left[2^{\texttt{64 + d.overflow}}-1\right]2^{64i} & = \left[2^{\texttt{64 + d.overflow}}-1\right]\sum_{i=0}^{l-1} 2^{64i} \\\
-& =  \left[2^{\texttt{64 + d.overflow}}-1\right] \frac{2^{64l}-1}{2^{64}-1}\\
-& \le \frac{2^{64+\texttt{d.overflow}+64l}-1}{2^{64}-1} \\
+\sum_{i=0}^{l-1} \left[2^{64 + \texttt{d.overflow}}-1\right]2^{64i} & = \left[2^{64 + \texttt{d.overflow}}-1\right]\sum_{i=0}^{l-1} 2^{64i} \\\
+& =  \left[2^{64 + \texttt{d.overflow}}-1\right] \frac{2^{64l}-1}{2^{64}-1}\\
+& = \frac{2^{64+\texttt{d.overflow}+64l}- 2^{64+\texttt{d.overflow}}-2^{64l} + 1}{2^{64}-1} \\
+& \le \frac{2^{64+\texttt{d.overflow}+64l}-1}{2^{64}-1} \hspace{10mm} (\text{since } 2^{64 + \texttt{d.overflow}} + 2^{64l} - 1 \ge 1) \\
 & \le 2^{\texttt{d.overflow} + 64l+1} -1.
 \end{align*}
          
@@ -186,7 +188,7 @@ We have two requirements:
 
   \item In Section \ref{sub:maximum_overflow_in_the_difference}, we remarked that the overflow of the difference $d = c-r$ satisfies $\texttt{d.overflow} \le \texttt{maximum\_overflow} + 1$. Since the compaction process changes the limb width and the overflow, we want the post-compaction overflow of $d$ to still be bounded above by $\texttt{maximum\_overflow} + 1$.
 
-    We can ensure this by allowing compaction only when the pre-compaction overflow is less than or equal to $\texttt{maximum\_overflow}$. Then the post-compaction overflow will be at most $\texttt{maximum\_overflow} + 1$. Consider the following formula for the number of limbs that can be combined
+    We can ensure this by allowing compaction \textbf{only} when the pre-compaction overflow is less than or equal to $\texttt{maximum\_overflow}$. Then the post-compaction overflow will be at most $\texttt{maximum\_overflow} + 1$. Consider the following formula for the number of limbs that can be combined
     $$
     k = \left\lfloor \frac{\texttt{capacity}-\texttt{b.overflow}- 1}{\texttt{limb\_width}}\right\rfloor.
     $$
@@ -235,7 +237,7 @@ Let $\texttt{max\_value}$ = $2^{\texttt{limb\_width}+\texttt{b.overflow}+1}$. No
     which is the difference of the least significant limbs of $a$ and $b$ offset by $\texttt{max\_value}$ to prevent underflow.  The maximum value of a limb in $b$ is given by $2^{\texttt{limb\_width} + \texttt{b.overflow}}-1$.
 
     \begin{remark}
-    We can set $\texttt{max\_value}$ to $2^{\texttt{limb\_width}+\texttt{b.overflow}}$ and still prevent underflow. The larger value of $\texttt{max\_value}$ is required in the more significant limbs. We stick with the larger value for simplicity.
+    We can set $\texttt{max\_value}$ to $2^{\texttt{limb\_width}+\texttt{b.overflow}}$ and still prevent underflow in the least significant limb. The larger value of $\texttt{max\_value}$ is required in the more significant limbs. We stick with the larger value for simplicity.
     \end{remark}
     
     The $a_0$ term occupies a maximum of $\texttt{limb\_width} + \texttt{a.overflow}$ bits and the $\texttt{max\_value} - b_0$ term occupies a maximum of $\texttt{limb\_width} + \texttt{b.overflow} + 2$ bits. Hence the limb $e_0$ occupies a maximum of $\texttt{limb\_width} + \max(\texttt{a.overflow}, \texttt{b.overflow} + 2) + 1$ bits.
@@ -245,7 +247,7 @@ Let $\texttt{max\_value}$ = $2^{\texttt{limb\_width}+\texttt{b.overflow}+1}$. No
 \begin{align*}
   \texttt{limb\_width} + \max(\texttt{a.overflow}, \texttt{b.overflow} + 2) + 1 \le \texttt{capacity}.
 \end{align*}
-This inequality will hold if $\texttt{a.overflow} \le \texttt{capacity} - \texttt{limb\_width} - 2$ and $\texttt{b.overflow} \le \texttt{capacity} - \texttt{limb\_width} - 3$. Since $\texttt{a.overflow} \le \texttt{maximum\_overflow} + 1$ and $\texttt{a.overflow} \le \texttt{maximum\_overflow}$, we require $\texttt{maximum\_overflow}$ to be at most $\texttt{capacity} - \texttt{limb\_width} - 3$.
+This inequality will hold if $\texttt{a.overflow} \le \texttt{capacity} - \texttt{limb\_width} - 1$ and $\texttt{b.overflow} \le \texttt{capacity} - \texttt{limb\_width} - 3$. Since $\texttt{a.overflow} \le \texttt{maximum\_overflow} + 1$ and $\texttt{b.overflow} \le \texttt{maximum\_overflow}$, we require $\texttt{maximum\_overflow}$ to be at most $\texttt{capacity} - \texttt{limb\_width} - 3$.
     \end{remark}
     
     First, we check that the $\texttt{limb\_width}$ least significant bits in $e_0$ are all zeros. This will be true if $qn = d$. The addition of $\texttt{max\_value}$ does not affect these least significant bits as it contributes only zeros in the $\texttt{limb\_width}$ least significant bits.
@@ -290,7 +292,7 @@ This inequality will hold if $\texttt{a.overflow} \le \texttt{capacity} - \textt
    \end{align*}
 
    \begin{remark}
-   To calculate $e_1$ in $\mathbb{F}_p$, we require the above maximum bitwidth to be at most $\texttt{capacity}$. This implies that $\texttt{a.overflow} \le \texttt{capacity} - \texttt{limb\_width} - 2$ and $\texttt{b.overflow} \le \texttt{capacity} - \texttt{limb\_width} - 3$. So $\texttt{maximum\_overflow}$ should be at most $\texttt{capacity} - \texttt{limb\_width} - 3$. This agrees with the bound on $\texttt{maximum\_overflow}$ required to calculate $e_0$ in $\mathbb{F}_p$.
+   To calculate $e_1$ in $\mathbb{F}_p$, we require the above maximum bitwidth to be at most $\texttt{capacity}$. This implies that $\texttt{a.overflow} \le \texttt{capacity} - \texttt{limb\_width} - 2$ and $\texttt{b.overflow} \le \texttt{capacity} - \texttt{limb\_width} - 3$. Since $\texttt{a.overflow} \le \texttt{maximum\_overflow} + 1$ and $\texttt{b.overflow} \le \texttt{maximum\_overflow}$, we require $\texttt{maximum\_overflow}$ to be at most $\texttt{capacity} - \texttt{limb\_width} - 3$. This agrees with the bound on $\texttt{maximum\_overflow}$ required to calculate $e_0$ in $\mathbb{F}_p$.
    \end{remark}
 
     Now, we check that the $\texttt{limb\_width}$ least significant bits in $e_1$ are all zeros. And initialize $\texttt{carry\_2}$ with the value of $e_1$ right shifted $\texttt{limb\_width}$ times,
@@ -364,7 +366,4 @@ for i in 0..max_limbs:
 assert_is_equal(carry, max_value_shifted)
 \end{verbatim}
 
-\begin{remark}
-The current \texttt{emulated} implementation (March 2024) is missing the last equality check between the final $\texttt{carry}$ and $\texttt{max\_value\_shifted}$.
-\end{remark}
 \end{document}
