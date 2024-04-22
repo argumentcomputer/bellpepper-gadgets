@@ -220,7 +220,7 @@ where
     }
 
     pub fn max_overflow() -> usize {
-        F::CAPACITY as usize - P::bits_per_limb()
+        F::CAPACITY as usize - P::bits_per_limb() - 3
     }
 
     pub fn new_internal_element(limbs: EmulatedLimbs<F>, overflow: usize) -> Self {
@@ -904,7 +904,7 @@ mod tests {
             println!("{:?}", cs.which_is_unsatisfied());
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 158);
+        assert_eq!(cs.num_constraints(), 162);
     }
 
     #[test]
@@ -946,7 +946,7 @@ mod tests {
             println!("{:?}", cs.which_is_unsatisfied());
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 158);
+        assert_eq!(cs.num_constraints(), 162);
     }
 
     #[test]
@@ -986,7 +986,7 @@ mod tests {
             println!("{:?}", cs.which_is_unsatisfied());
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 236);
+        assert_eq!(cs.num_constraints(), 242);
     }
 
     #[test]
@@ -1041,7 +1041,7 @@ mod tests {
             println!("{:?}", cs.which_is_unsatisfied());
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 885);
+        assert_eq!(cs.num_constraints(), 901);
     }
 
     #[test]
@@ -1090,7 +1090,7 @@ mod tests {
             println!("{:?}", cs.which_is_unsatisfied());
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 885);
+        assert_eq!(cs.num_constraints(), 901);
     }
 
     #[test]

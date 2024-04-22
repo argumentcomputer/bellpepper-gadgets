@@ -533,7 +533,7 @@ mod tests {
                 eprintln!("{:?}", cs.which_is_unsatisfied())
             }
             assert!(cs.is_satisfied());
-            assert_eq!(cs.num_constraints(), 316);
+            assert_eq!(cs.num_constraints(), 324);
             assert_eq!(cs.num_inputs(), 1);
         }
 
@@ -563,7 +563,7 @@ mod tests {
                 );
             }
 
-            assert_eq!(cs.num_constraints(), 316);
+            assert_eq!(cs.num_constraints(), 324);
             assert_eq!(cs.num_inputs(), 1);
         }
     }
@@ -604,7 +604,7 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 3941);
+        assert_eq!(cs.num_constraints(), 3969);
         assert_eq!(cs.num_inputs(), 1);
     }
 
@@ -634,7 +634,7 @@ mod tests {
             eprintln!("{:?}", cs.which_is_unsatisfied())
         }
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 2003);
+        assert_eq!(cs.num_constraints(), 2027);
         assert_eq!(cs.num_inputs(), 1);
     }
 
@@ -676,17 +676,17 @@ mod tests {
         assert_eq!(p, p_al.value);
 
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 798_750);
+        assert_eq!(cs.num_constraints(), 806_854);
         assert_eq!(cs.num_inputs(), 1);
     }
 
     #[test]
     fn alloc_affine_scalar_multiplication_window_range() {
-        assert_eq!(scalar_multiplication_helper(1), 1_501_070);
-        assert_eq!(scalar_multiplication_helper(2), 1_009_705);
-        assert_eq!(scalar_multiplication_helper(3), 856_168);
-        assert_eq!(scalar_multiplication_helper(4), 798_750);
-        assert_eq!(scalar_multiplication_helper(5), 822_822);
+        assert_eq!(scalar_multiplication_helper(1), 1_514_174);
+        assert_eq!(scalar_multiplication_helper(2), 1_019_309);
+        assert_eq!(scalar_multiplication_helper(3), 864_676);
+        assert_eq!(scalar_multiplication_helper(4), 806_854);
+        assert_eq!(scalar_multiplication_helper(5), 831_122);
     }
 
     fn scalar_multiplication_helper(window_size: i32) -> usize {

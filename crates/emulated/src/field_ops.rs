@@ -43,44 +43,63 @@ where
     F: PrimeFieldBits,
     P: EmulatedFieldParams,
 {
-    fn compact(
-        a: &Self,
-        b: &Self,
-    ) -> Result<(EmulatedLimbs<F>, EmulatedLimbs<F>, usize), SynthesisError> {
+    fn compact(a: &Self, b: &Self) -> Result<(Self, Self, usize), SynthesisError> {
         let max_overflow = a.overflow.max(b.overflow);
         // Substract one bit to account for overflow due to grouping in compact_limbs
         let max_num_bits = F::CAPACITY as usize - 1 - max_overflow;
         let group_size = max_num_bits / P::bits_per_limb();
 
-        if group_size == 0 {
+        if group_size <= 1 {
             // No space for compacting
-            return Ok((a.limbs.clone(), b.limbs.clone(), P::bits_per_limb()));
+            return Ok((a.clone(), b.clone(), P::bits_per_limb()));
         }
 
         let new_bits_per_limb = P::bits_per_limb() * group_size;
         let a_compact = a.compact_limbs(group_size, new_bits_per_limb)?;
         let b_compact = b.compact_limbs(group_size, new_bits_per_limb)?;
 
-        Ok((a_compact, b_compact, new_bits_per_limb))
+        // group_size > 1 at this stage, so the overflows have to be incremented by 1
+        Ok((
+            Self {
+                limbs: a_compact,
+                overflow: a.overflow + 1,
+                internal: a.internal,
+                marker: PhantomData,
+            },
+            Self {
+                limbs: b_compact,
+                overflow: b.overflow + 1,
+                internal: b.internal,
+                marker: PhantomData,
+            },
+            new_bits_per_limb,
+        ))
     }
 
     /// Asserts that two allocated limbs vectors represent the same integer value.
     /// This is a costly operation as it performs bit decomposition of the limbs.
     fn assert_limbs_equality_slow<CS>(
         cs: &mut CS,
-        a: &EmulatedLimbs<F>,
-        b: &EmulatedLimbs<F>,
+        a: &Self,
+        b: &Self,
         num_bits_per_limb: usize,
-        num_carry_bits: usize,
     ) -> Result<(), SynthesisError>
     where
         CS: ConstraintSystem<F>,
     {
-        if let (EmulatedLimbs::Allocated(a_l), EmulatedLimbs::Allocated(b_l)) = (a, b) {
+        // Set a to be the element with higher overflow
+        let (a, b, a_o, b_o) = if a.overflow > b.overflow {
+            (a, b, a.overflow, b.overflow)
+        } else {
+            (b, a, b.overflow, a.overflow)
+        };
+
+        if let (EmulatedLimbs::Allocated(a_l), EmulatedLimbs::Allocated(b_l)) =
+            (a.clone().limbs, b.clone().limbs)
+        {
             let num_limbs = a_l.len().max(b_l.len());
-            let max_value =
-                bigint_to_scalar::<F>(&BigInt::one().shl(num_bits_per_limb + num_carry_bits));
-            let max_value_shift = bigint_to_scalar::<F>(&BigInt::one().shl(num_carry_bits));
+            let max_value = bigint_to_scalar::<F>(&BigInt::one().shl(num_bits_per_limb + b_o + 1));
+            let max_value_shift = bigint_to_scalar::<F>(&BigInt::one().shl(b_o + 1));
 
             let mut carry = Num::<F>::zero();
             for i in 0..num_limbs {
@@ -109,7 +128,7 @@ where
                     &mut cs.namespace(|| format!("right shift to get carry {i}")),
                     &diff_num,
                     num_bits_per_limb,
-                    num_bits_per_limb + num_carry_bits + 1,
+                    num_bits_per_limb + (a_o + 2).max(b_o + 3),
                 )?;
             }
 
@@ -205,23 +224,12 @@ where
         }
         let (a_c, b_c, bits_per_limb) = Self::compact(a, b)?;
 
-        if a.overflow > b.overflow {
-            Self::assert_limbs_equality_slow(
-                &mut cs.namespace(|| "check limbs equality"),
-                &a_c,
-                &b_c,
-                bits_per_limb,
-                a.overflow,
-            )?;
-        } else {
-            Self::assert_limbs_equality_slow(
-                &mut cs.namespace(|| "check limbs equality"),
-                &b_c,
-                &a_c,
-                bits_per_limb,
-                b.overflow,
-            )?;
-        }
+        Self::assert_limbs_equality_slow(
+            &mut cs.namespace(|| "check limbs equality"),
+            &a_c,
+            &b_c,
+            bits_per_limb,
+        )?;
 
         Ok(())
     }
@@ -310,11 +318,18 @@ where
     where
         CS: ConstraintSystem<F>,
     {
-        assert!(self.overflow + 2 <= Self::max_overflow(),
-                "Not enough bits in native field to accomodate a subtraction operation which is performed during reduce: {} > {}",
-                self.overflow + 2,
-                Self::max_overflow(),
-            );
+        assert!(
+            P::bits_per_limb() >= 3,
+            "The reduce computation assumes that limb width {} is at least 3",
+            P::bits_per_limb(),
+        );
+
+        assert!(
+            self.overflow <= Self::max_overflow(),
+            "Attempt to reduce an element whose overflow {} exceeds the maximum overflow {}",
+            self.overflow,
+            Self::max_overflow(),
+        );
 
         self.enforce_width_conditional(&mut cs.namespace(|| "ensure bitwidths in input"))?;
         if self.overflow == 0 {
@@ -411,7 +426,7 @@ where
 
     fn sub_precondition(a: &Self, b: &Self) -> Result<usize, OverflowError> {
         let reduce_right = a.overflow < b.overflow;
-        let next_overflow = a.overflow.max(b.overflow + 2);
+        let next_overflow = a.overflow.max(b.overflow + 1) + 1;
 
         if next_overflow > Self::max_overflow() {
             Err(OverflowError {
@@ -430,7 +445,7 @@ where
     /// If d is a multiple of P::modulus() that is greater than b, then
     /// (a[0]+d[0]-b[0], a[1]+d[1]-b[1],...) will not underflow
     fn sub_padding(overflow: usize, limb_count: usize) -> Result<Vec<F>, SynthesisError> {
-        let tmp = BigInt::one() << (overflow + P::bits_per_limb());
+        let tmp = &BigInt::one().shl(overflow + P::bits_per_limb()) - BigInt::one();
         let upper_bound_limbs = vec![tmp; limb_count];
 
         let p = P::modulus();
