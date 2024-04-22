@@ -124,7 +124,7 @@ The difference $d = c-r$ will have a maximum overflow of $\max(\texttt{c.overflo
 Since $\texttt{c.overflow} \le \texttt{maximum\_overflow}$, $\texttt{c.overflow} + 1 \le \texttt{maximum\_overflow} + 1 = \texttt{capacity} - \texttt{limb\_width} - 2$. So the limbs in the difference $d = c-r$ will not experience a modular reduction.
 
 \begin{remark}
-  We will perform a limb-wise equality check between $qn$ and $d$ using the procedure described in Section \ref{sub:limb_wise_equality_check}. During the equality check, we can assume that $\texttt{qn.overflow} \le \texttt{maximum\_overflow}$. But we can only assume that $\texttt{d.overflow} \le \texttt{maximum\_overflow} + 1$. So the overflow in $d$ can exceed the value of $\texttt{maximum\_overflow}$. This violation is temporary and will disappear at the end of the reduction operation. We have to ensure that all the steps in the reduction procedure do not overflow the capacity of $\mathbb{F}_p$ in spite of this violation.
+  We will perform a limb-wise equality check between $qn$ and $d$ using the procedure described in Section \ref{sub:post_compaction_limb_wise_equality_check}. During the equality check, we can assume that $\texttt{qn.overflow} \le \texttt{maximum\_overflow}$. But we can only assume that $\texttt{d.overflow} \le \texttt{maximum\_overflow} + 1$. So the overflow in $d$ can exceed the value of $\texttt{maximum\_overflow}$. This violation is temporary and will disappear at the end of the reduction operation. We have to ensure that all the steps in the reduction procedure do not overflow the capacity of $\mathbb{F}_p$ in spite of this violation.
 \end{remark}
 
 \subsection{Number of limbs in the quotient}
@@ -167,16 +167,14 @@ The least significant limb $b_0$ will fit in 164 bits. The next significant limb
 
 Similarly, the third and fourth limbs $b_2$ and $b_3$ can be combined into a single limb as $b_2 + 2^{64} b_3$. So we have reduced the number of limbs from four to two. This process of combining limbs is called compaction. The new limb width is 128 bits and the new overflow is 101 bits.
 
-If $k$ limbs of $b$ have maximum overflow $\texttt{b.overflow}$ are combined in the compaction process, the limb width will increase from $\texttt{limb\_width}$ to $k \times \texttt{limb\_width}$. 
+So the strategy will be to compact the limbs of $qn$ and $d$, and then check their compacted versions for equality. But we have to be mindful of the overflows induced by the compaction process.
+
+Let $b$ denote either $qn$ or $d$. If $k$ limbs of $b$ having maximum overflow $\texttt{b.overflow}$ are combined in the compaction process, the limb width will increase from $\texttt{limb\_width}$ to $k \times \texttt{limb\_width}$. 
 Furthermore, the overflow will increase from $\texttt{b.overflow}$ to $\texttt{b.overflow} + 1$. This is because the compaction process involves a sum of terms of the form
 \begin{align*}
   \sum_{i=0}^{k-1} b_i 2^{\texttt{limb\_width} \times i}.
 \end{align*}
 The most significant term in this sum has a maximum possible bitwidth of $k\times \texttt{limb\_width} + \texttt{b.overflow}$. The sum of the other terms can induce a carry of at most 1 bit when added to this most significant term. So the overall sum has a maximum possible bitwidth of $k\times \texttt{limb\_width} + \texttt{b.overflow}+1$ which gives us the overflow value of $\texttt{b.overflow} + 1$.
-
-\begin{remark}
-  In Section \ref{sub:limb_wise_equality_check}, the variable $\texttt{limb\_width}$ refers to the post-compaction limb width. If $k$ limbs are combined in the compaction process, then $$\texttt{post\_compaction\_limb\_width} = k \times \texttt{pre\_compaction\_limb\_width}.$$
-\end{remark}
 
 
 We have two requirements:
@@ -185,33 +183,52 @@ We have two requirements:
     $$
     k \le \left\lfloor \frac{\texttt{capacity}-\texttt{b.overflow}-1}{\texttt{limb\_width}}\right\rfloor.
     $$
+    Since $b$ can be either $qn$ or $d$, we have
+    $$
+    k \le \left\lfloor \frac{\texttt{capacity}-\max(\texttt{qn.overflow}, \texttt{d.overflow})- 1}{\texttt{limb\_width}}\right\rfloor.
+    $$
+  \item Recall from Section \ref{sub:maximum_overflow_in_the_difference} that $\texttt{d.overflow}$ can be equal to $\texttt{maximum\_overflow} + 1$. We have $\texttt{qn.overflow} \le \texttt{maximum\_overflow}$ since $qn$ is the result of a multiplication operation (which would have been reduced if its overflow exceeded $\texttt{maximum\_overflow}$). In Section \ref{sub:post_compaction_limb_wise_equality_check}, we describe a procedure for limb-wise equality check between $qn$ and $d$. This procedure assumes that
+    \begin{align*}
+      \min(\texttt{qn.overflow}, \texttt{d.overflow}) &\le \texttt{maximum\_overflow}, \\
+      \max(\texttt{qn.overflow}, \texttt{d.overflow}) &\le \texttt{maximum\_overflow} + 1.
+    \end{align*}
+    These bounds correspond to the case when no compaction is applied to $qn$ and $d$. The value of $\texttt{maximum\_overflow} = \texttt{capacity} - \texttt{limb\_width} - 3$ is chosen based on these bounds on the overflows of $a$ and $b$. \textbf{We would like the post-compaction overflows $qn$ and $d$ to also satisfy these bounds.} Then a single implementation of the limb-wise equality check will suffice irrespective of whether compaction is applied. 
 
-  \item In Section \ref{sub:maximum_overflow_in_the_difference}, we remarked that the overflow of the difference $d = c-r$ satisfies $\texttt{d.overflow} \le \texttt{maximum\_overflow} + 1$. Since the compaction process changes the limb width and the overflow, we want the post-compaction overflow of $d$ to still be bounded above by $\texttt{maximum\_overflow} + 1$.
-
-    We can ensure this by allowing compaction \textbf{only} when the pre-compaction overflow is less than or equal to $\texttt{maximum\_overflow}$. Then the post-compaction overflow will be at most $\texttt{maximum\_overflow} + 1$. Consider the following formula for the number of limbs that can be combined
-    $$
-    k = \left\lfloor \frac{\texttt{capacity}-\texttt{b.overflow}- 1}{\texttt{limb\_width}}\right\rfloor.
-    $$
-    Recall that $\texttt{maximum\_overflow}= \texttt{capacity} - \texttt{limb\_width} - 3$.
-
-    When $\texttt{b.overflow} = \texttt{maximum\_overflow} + 1$, the above formula evaluates to
-    $$
-    k = \left\lfloor \frac{\texttt{limb\_width}+ 1}{\texttt{limb\_width}}\right\rfloor.
-    $$
-    Then $k = 1$ as long as $\texttt{limb\_width} \ge 2$. So no compaction will take place as long as the pre-compaction limb width is at least 2.
-    \begin{remark}
-    A new assumption of $\texttt{limb\_width} \ge 2$ was made in the above argument.
-    \end{remark}
-
-    If $\texttt{b.overflow} = \texttt{maximum\_overflow}$, the formula for the number of limbs that can be combined reduces to
-    $$
-    k = \left\lfloor \frac{\texttt{limb\_width}+ 2}{\texttt{limb\_width}}\right\rfloor.
-    $$
-    Now $k=2$ if $\texttt{limb\_width} = 2$. So compaction can occur in the extreme case of the pre-compaction limb width being equal to 2 bits.
+  To satisfy the above requirement, we should \textbf{not apply} compaction for the following pre-compaction overflow values:
+    \begin{itemize}
+      \item $\texttt{d.overflow} = \texttt{maximum\_overflow} + 1$
+      \item $\texttt{d.overflow} = \texttt{maximum\_overflow}$, $\texttt{qn.overflow} = \texttt{maximum\_overflow}$
+    \end{itemize}
 \end{itemize}
+Consider the following formula for the number of limbs that can be combined
+$$
+k = \left\lfloor \frac{\texttt{capacity}-\max(\texttt{qn.overflow}, \texttt{d.overflow})- 1}{\texttt{limb\_width}}\right\rfloor.
+$$
+Recall that $\texttt{maximum\_overflow}= \texttt{capacity} - \texttt{limb\_width} - 3$.
 
-\subsection{Limb-wise equality check}%
-\label{sub:limb_wise_equality_check}
+When $\texttt{d.overflow} = \texttt{maximum\_overflow}+ 1$, the formula for $k$ evaluates to
+$$
+k = \left\lfloor \frac{\texttt{limb\_width}+ 1}{\texttt{limb\_width}}\right\rfloor.
+$$
+Then $k = 1$ as long as $\texttt{limb\_width} \ge 2$. So no compaction will take place as long as the pre-compaction limb width is at least 2.
+
+When both $\texttt{d.overflow}$ and $\texttt{qn.overflow}$ equal $\texttt{maximum\_overflow}$, the formula for $k$ evaluates to
+$$
+k = \left\lfloor \frac{\texttt{limb\_width}+ 2}{\texttt{limb\_width}}\right\rfloor.
+$$
+Then $k = 1$ as long as $\texttt{limb\_width} \ge 3$. So no compaction will take place as long as the pre-compaction limb width is at least 3.
+
+Thus the post-compaction overflows of $qn$ and $d$ satisfy the required bounds as long as the limb width is at least 3.
+\begin{remark}
+A new assumption of $\texttt{limb\_width} \ge 3$ was made in the above argument. This is a reasonable assumption in practice as the limb widths are typically 32 bits or more.
+\end{remark}
+
+\begin{remark}
+  In Section \ref{sub:post_compaction_limb_wise_equality_check}, the variable $\texttt{limb\_width}$ refers to the post-compaction limb width. If $k$ limbs are combined in the compaction process, then $$\texttt{post\_compaction\_limb\_width} = k \times \texttt{pre\_compaction\_limb\_width}.$$
+\end{remark}
+
+\subsection{Post-compaction limb-wise equality check}%
+\label{sub:post_compaction_limb_wise_equality_check}
 
 If $qn = d$, it is not necessary that their respective limbs will all be equal to each other. But they will be equal as big integers. 
  The main challenge is to check the equality of the big integer representations of $qn$ and $d$ using only arithmetic in $\mathbb{F}_p$.
@@ -221,7 +238,7 @@ For example, suppose the limb width is 4 bits. The integer 100 can be written as
 
 While $q$ and $n$ both have zero overflow, their product $qn$ will have limbs with non-zero overflow as explained in the section on multiplication. If $\texttt{qn.overflow} > \texttt{d.overflow}$, set $a = qn$ and $b = d$. Otherwise, set $a = d$ and $b = qn$.
 
-Recall from Section \ref{sub:maximum_overflow_in_the_difference} that $\texttt{d.overflow}$ can be equal to $\texttt{maximum\_overflow} + 1$. But $\texttt{qn.overflow} \le \texttt{maximum\_overflow}$ since $qn$ is the result of a multiplication operation (which would have been reduced if its overflow exceeded $\texttt{maximum\_overflow}$). Since we are setting $b$ to be the non-native field element with the possibly lower overflow, we have
+Since we are setting $b$ to be the non-native field element with the possibly lower overflow, we have
 \begin{align*}
   \texttt{b.overflow} & = \min(\texttt{qn.overflow}, \texttt{d.overflow}) \le \texttt{maximum\_overflow}, \\
 \texttt{a.overflow} & = \max(\texttt{qn.overflow}, \texttt{d.overflow}) \le \texttt{maximum\_overflow} + 1.
