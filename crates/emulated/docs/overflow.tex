@@ -159,6 +159,7 @@ If we want to represent the quotient $q$  in a limbed representation with 64-bit
 $$\left\lceil \frac{\texttt{d.overflow}+64l+1 -|p|}{64}\right\rceil.$$
 
 \subsection{Compacting limbs}
+\label{sub:compacting_limbs}
 To check that $qn = d$, we first compute the product of the limbed representations of $q$ and the prime $n$. The next step is to compare the limbs of $qn$ and $d$ while accounting for overflows. The number of R1CS constraints to perform the limb-wise comparison increases with the number of limbs.
 
 In some cases, it might be possible to reduce the number of limbs by \textbf{compacting} them. Let us illustrate the compaction process with an example. Suppose the capacity of $\mathbb{F}_p$ is 250 bits. Let $b$ have a non-native representation of the form $\sum_{i=0}^3 b_i 2^{64i}$ where the limbs $b_i$ have a bit width of 64 bits and maximum overflow of 100 bits.
@@ -236,8 +237,13 @@ If $qn = d$, it is not necessary that their respective limbs will all be equal t
 For example, suppose the limb width is 4 bits. The integer 100 can be written as $a = 6 \times 2^4 + 4$ and $b = 5 \times 2^4  +20$. The limbs of $a$ are $a_0=4, a_1=6$ and the limbs of $b$ are $b_0 = 20, b_1 =5$. There is no overflow in the limbs of $a$ while the limbs of $b$ have an overflow of 1 bit. The overflow allows the two different sets of limbs to represent the same integer. The difference of the limbs $a_0 - b_0 = -16$. This means that $-1$ has to be carried and added to the difference $a_1 - b_1 = 1$.
 
 
-While $q$ and $n$ both have zero overflow, their product $qn$ will have limbs with non-zero overflow as explained in the section on multiplication. If $\texttt{qn.overflow} > \texttt{d.overflow}$, set $a = qn$ and $b = d$. Otherwise, set $a = d$ and $b = qn$.
+While $q$ and $n$ both have zero overflow, their product $qn$ will have limbs with non-zero overflow as explained in the section on multiplication. As per our discussion in Section \ref{sub:compacting_limbs}, even after compaction the overflows of $qn$ and $d$ satisfy
+\begin{align*}
+  \texttt{qn.overflow} & \le \texttt{maximum\_overflow}, \\
+  \texttt{d.overflow} &\le \texttt{maximum\_overflow} + 1.
+\end{align*}
 
+If $\texttt{qn.overflow} > \texttt{d.overflow}$, set $a = qn$ and $b = d$. Otherwise, set $a = d$ and $b = qn$.
 Since we are setting $b$ to be the non-native field element with the possibly lower overflow, we have
 \begin{align*}
   \texttt{b.overflow} & = \min(\texttt{qn.overflow}, \texttt{d.overflow}) \le \texttt{maximum\_overflow}, \\
@@ -287,21 +293,21 @@ This inequality will hold if $\texttt{a.overflow} \le \texttt{capacity} - \textt
       \item $\texttt{max\_value}$ is added to prevent underflow.
     \end{itemize}
     
-    The $b_1$ term occupies a maximum of $\texttt{limb\_width} + \texttt{b.overflow}$ bits and the $\texttt{max\_value\_shifted}$ term occupies $\texttt{b.overflow} + 2$ bits. If we assume $\texttt{limb\_width} \ge 2$, the sum $b_1 + \texttt{max\_value\_shifted}$ occupies a maximum of $\texttt{limb\_width} + \texttt{b.overflow} + 1$ bits. Since $\texttt{max\_value} = 2^{\texttt{limb\_width}+\texttt{b.overflow}+1}$, the difference $\texttt{max\_value} - b_1 - \texttt{max\_value\_shifted}$ will not underflow. This difference occupies a maximum of $\texttt{limb\_width} + \texttt{b.overflow} + 2$ bits.
+    The $b_1$ term occupies a maximum of $\texttt{limb\_width} + \texttt{b.overflow}$ bits and the $\texttt{max\_value\_shifted}$ term occupies $\texttt{b.overflow} + 2$ bits. If we assume $\texttt{limb\_width} \ge 3$, the sum $b_1 + \texttt{max\_value\_shifted}$ occupies a maximum of $\texttt{limb\_width} + \texttt{b.overflow} + 1$ bits. Since $\texttt{max\_value} = 2^{\texttt{limb\_width}+\texttt{b.overflow}+1}$, the difference $\texttt{max\_value} - b_1 - \texttt{max\_value\_shifted}$ will not underflow. This difference occupies a maximum of $\texttt{limb\_width} + \texttt{b.overflow} + 2$ bits.
 
     \begin{remark}
-    We need the assumption that $\texttt{limb\_width} \ge 2$ in the above argument.
+    We are using the assumption that $\texttt{limb\_width} \ge 3$ in the above argument.
     \end{remark}
 
     The $a_1$ term occupies a maximum of $\texttt{limb\_width} + \texttt{a.overflow}$ bits and the $\texttt{carry\_1}$ term occupies $\max(\texttt{a.overflow}, \texttt{b.overflow} + 2) + 1$ bits. So the sum $a_1 + \texttt{carry\_1}$ occupies a maximum of 
     $$\max(\texttt{limb\_width} + \texttt{a.overflow}, \max(\texttt{a.overflow}, \texttt{b.overflow} + 2) + 1) + 1$$
     bits. This maximum bitwidth can be simplified to 
     $$\max(\texttt{limb\_width} + \texttt{a.overflow}, \texttt{b.overflow} + 3) + 1$$
-    as we have already assumed that $\texttt{limb\_width} \ge 2$.
+    as we have already assumed that $\texttt{limb\_width} \ge 3$.
     
     Hence the limb $e_1$, being the sum of $\texttt{max\_value} - b_1 - \texttt{max\_value\_shifted}$ and $a_1 + \texttt{carry\_1}$ occupies a maximum of 
     $$\max(\texttt{limb\_width} + \texttt{b.overflow} + 2, \max(\texttt{limb\_width} + \texttt{a.overflow}, \texttt{b.overflow} + 3) + 1) + 1$$
-    bits. Using the $\texttt{limb\_width} \ge 2$ assumption, we can simplify this maximum bitwidth to 
+    bits. Using the $\texttt{limb\_width} \ge 3$ assumption, we can simplify this maximum bitwidth to 
     \begin{align*}
      &\max(\texttt{limbWidth} + \texttt{b.overflow} + 2, \texttt{limbWidth} + \texttt{a.overflow} + 1) + 1\\
     & = \max(\texttt{b.overflow} + 1, \texttt{a.overflow}) + \texttt{limbWidth} + 2 \\
@@ -338,7 +344,7 @@ This inequality will hold if $\texttt{a.overflow} \le \texttt{capacity} - \textt
     $$\max(\texttt{limb\_width} + \texttt{a.overflow}, \max(\texttt{a.overflow}, \texttt{b.overflow} + 1) + 2) + 1$$
     bits. This maximum bitwidth can be simplified to 
     $$\max(\texttt{limb\_width} + \texttt{a.overflow}, \texttt{b.overflow} + 3) + 1$$
-    as we have already assumed that $\texttt{limb\_width} \ge 2$. This bitwidth is \textbf{equal} to the maximum bitwidth of $a_1 + \texttt{carry\_1}$.
+    as we have already assumed that $\texttt{limb\_width} \ge 3$. This bitwidth is \textbf{equal} to the maximum bitwidth of $a_1 + \texttt{carry\_1}$.
 
     Thus, the maximum possible bitwidth of $e_2$ is $\max(\texttt{a.overflow}, \texttt{b.overflow} + 1) + \texttt{limb\_width} + 2,$ which is the same as the maximum bitwidth of $e_1$. So the calculation of $e_2$ in $\mathbb{F}_p$ can be performed as long as $\texttt{maximum\_overflow} \le \texttt{capacity} - \texttt{limb\_width} - 3$.
 
@@ -347,12 +353,20 @@ This inequality will hold if $\texttt{a.overflow} \le \texttt{capacity} - \textt
     $$\texttt{carry\_3} = e_2 \gg \texttt{limb\_width}.$$
 
     If the maximum number of limbs in $a$ and $b$ is 3, then we check that $\texttt{carry\_3}$ equals $\texttt{max\_value\_shifted}$. Otherwise, we continue calculating limb differences.
+\end{itemize}
 
     \begin{remark}
-    At this step, the maximum bitwidth of the carry has stabilized, in the sense that the incoming and outgoing carries have the same bitwidth. So all future limb differences can be calculated in $\mathbb{F}_p$ without worrying about the calculation overflowing its capacity.
+    At this step, the maximum bitwidth of the carry has stabilized to $$\max(\texttt{a.overflow}, \texttt{b.overflow} + 1) + 2 = \max(\texttt{a.overflow} + 2, \texttt{b.overflow} + 3),$$ in the sense that the incoming and outgoing carries have the same bitwidth. So all future limb differences can be calculated in $\mathbb{F}_p$ without worrying about the calculation overflowing its capacity.
     \end{remark}
 
-\end{itemize}
+    The maximum bitwidth of  $\texttt{carry\_1}$ is
+$$\max(\texttt{a.overflow}, \texttt{b.overflow} + 2) + 1 = \max(\texttt{a.overflow} + 1, \texttt{b.overflow} + 3),$$
+which is less than or equal to the maximum bitwidths of $\texttt{carry\_2}, \texttt{carry\_3}$ that is given by $$\max(\texttt{a.overflow} + 2, \texttt{b.overflow} + 3).$$
+So the latter value is an upper bound on the maximum bitwidth of all carries in the limb-wise equality check. To check that the $\texttt{limb\_width}$ least significant bits in $e_i$ are all zeros, we will check that $e_i$ equals
+\begin{align*}
+\sum^{\texttt{limb\_width}+\max(\texttt{a.overflow} + 2, \texttt{b.overflow} + 3)}_{j=\texttt{limb\_width}} 2^j e_{i,j},
+\end{align*}
+where $e_{i,j}$ is the $j$th most significant bit of $e_i$.
 
 \subsection{Pseudocode}%
 \label{sec:pseudocode}
