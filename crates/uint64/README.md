@@ -1,6 +1,6 @@
 # bellpepper-uin64
 
-This library contains circuits for circuit representations of u64, created using [bellpepper](https://github.com/lurk-lab/bellpepper).
+This library contains circuits for circuit representations of u64, created using [bellpepper](https://github.com/argumentcomputer/bellpepper).
 
 ## License
 

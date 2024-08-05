@@ -1,5 +1,5 @@
 # bellpepper-sha1
-A [bellpepper](https://github.com/lurk-lab/bellpepper) gadget for the SHA-1 hash function
+A [bellpepper](https://github.com/argumentcomputer/bellpepper) gadget for the SHA-1 hash function
 
 ## License
 

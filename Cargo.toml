@@ -15,8 +15,8 @@ members = [
 
 [workspace.package]
 license = "MIT OR Apache-2.0"
-homepage = "https://github.com/lurk-lab/bellpepper-gadgets"
-repository = "https://github.com/lurk-lab/bellpepper-gadgets"
+homepage = "https://github.com/argumentcomputer/bellpepper-gadgets"
+repository = "https://github.com/argumentcomputer/bellpepper-gadgets"
 
 [workspace.dependencies]
 bellpepper-core = { version="0.4.0", default-features = false }
