@@ -1,5 +1,5 @@
 # bellpepper-ripemd160
-A [bellpepper](https://github.com/lurk-lab/bellpepper) gadget for the RIPEMD-160 hash function
+A [bellpepper](https://github.com/argumentcomputer/bellpepper) gadget for the RIPEMD-160 hash function
 
 ## License
 

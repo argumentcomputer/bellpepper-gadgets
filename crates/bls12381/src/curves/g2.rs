@@ -985,7 +985,7 @@ mod tests {
     fn test_random_mul_by_seed() {
         let mut rng = rand::thread_rng();
         let a = G2Projective::random(&mut rng);
-        let x0 = bls12_381::Scalar::from(15132376222941642752);
+        let x0 = Scalar::from(15132376222941642752);
         let c = a * x0;
         let c = -c;
         let a = G2Affine::from(a);
