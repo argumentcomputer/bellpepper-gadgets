@@ -1,6 +1,6 @@
 # bellpepper-keccak
 
-Keccal library using [bellpepper](https://github.com/lurk-lab/bellpepper) inspired by the [bellman-keccak256](https://github.com/zatoichi-labs/bellman-keccak256) project
+Keccal library using [bellpepper](https://github.com/argumentcomputer/bellpepper) inspired by the [bellman-keccak256](https://github.com/zatoichi-labs/bellman-keccak256) project
 
 ## License
 

@@ -348,6 +348,7 @@ impl SimpleMerkleTree {
 /// The path key is a vector of `Boolean` values, where each value indicates a direction at a node:
 /// - `Boolean::constant(false)` for a left turn.
 /// - `Boolean::constant(true)` for a right turn.
+///
 /// The path keys are long as specified by the referred Digest output size bits long, padded with `false` values.
 ///
 /// # Tree Structure

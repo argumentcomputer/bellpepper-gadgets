@@ -41,7 +41,7 @@ impl<F: PrimeField> ChunkStepCircuit<F> for ChunkStep<F> {
 
 // NIVC `StepCircuit`` implementation
 #[derive(Clone, Debug)]
-struct FoldStepWrapper<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
+pub struct FoldStepWrapper<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
     inner: FoldStep<F, C, N>,
 }
 
@@ -77,12 +77,12 @@ impl<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> StepCircuit<F>
 }
 
 // NIVC `NonUniformCircuit` implementation
-struct ChunkCircuit<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
+pub struct ChunkCircuit<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
     inner: InnerCircuit<F, C, N>,
 }
 
 #[derive(Clone, Debug)]
-enum ChunkCircuitSet<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
+pub enum ChunkCircuitSet<F: PrimeField, C: ChunkStepCircuit<F>, const N: usize> {
     IterStep(FoldStepWrapper<F, C, N>),
 }
 

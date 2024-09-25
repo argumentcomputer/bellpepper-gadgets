@@ -306,7 +306,7 @@ impl UInt64 {
 
         // Compute the maximum value of the sum so we allocate enough bits for
         // the result
-        let mut max_value = (operands.len() as u128) * (u128::from(u64::max_value()));
+        let mut max_value = (operands.len() as u128) * (u128::from(u64::MAX));
 
         // Keep track of the resulting value
         let mut result_value = Some(0u128);

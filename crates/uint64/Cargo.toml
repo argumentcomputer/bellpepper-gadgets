@@ -2,7 +2,7 @@
 name = "bellpepper-uint64"
 version = "0.1.0"
 edition = "2021"
-authors = ["Lurk Lab Engineering <engineering@lurk-lab.com>", "Zatoichi Labs <admin@zatoichi-labs.com>", "Varun Thakore <vrnthakore@gmail.com>"]
+authors = ["Argument Engineering <engineering@argument.xyz>", "Zatoichi Labs <admin@zatoichi-labs.com>", "Varun Thakore <vrnthakore@gmail.com>"]
 license.workspace=true
 description = "Uint64  using bellpepper"
 documentation = "https://docs.rs/bellpepper-uint64"
