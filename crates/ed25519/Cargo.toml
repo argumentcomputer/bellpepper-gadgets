@@ -25,3 +25,4 @@ getrandom = { version = "0.2.0", default-features = false, features = ["js"] }
 
 [dev-dependencies]
 pasta_curves = { workspace = true }
+bellpepper = { workspace = true }

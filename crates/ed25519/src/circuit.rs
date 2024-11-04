@@ -488,6 +488,7 @@ mod tests {
     use crate::curve::Ed25519Curve;
 
     use super::*;
+    use bellpepper::util_cs::metric_cs::MetricCS;
     use bellpepper_core::test_cs::TestConstraintSystem;
     use num_bigint::{BigUint, RandBigInt};
     use num_integer::Integer;
@@ -728,5 +729,46 @@ mod tests {
 
         assert!(cs.is_satisfied());
         cs.num_constraints()
+    }
+
+    #[test]
+    fn alloc_affine_scalar_multiplication_metric_cs() {
+        let b = Ed25519Curve::basepoint();
+        let mut rng = rand::thread_rng();
+
+        let mut scalar = rng.gen_biguint(256u64);
+        scalar >>= 3; // scalar now has 253 significant bits
+        let p = Ed25519Curve::scalar_multiplication(&b, &scalar);
+
+        let mut scalar_vec: Vec<Boolean> = vec![];
+        for _i in 0..253 {
+            if scalar.is_odd() {
+                scalar_vec.push(Boolean::constant(true))
+            } else {
+                scalar_vec.push(Boolean::constant(false))
+            };
+            scalar >>= 1;
+        }
+
+        let mut cs = MetricCS::<Fp>::new();
+
+        let b_alloc = AllocatedAffinePoint::alloc_affine_point(
+            &mut cs.namespace(|| "allocate base point"),
+            &b,
+        );
+        assert!(b_alloc.is_ok());
+        let b_al = b_alloc.unwrap();
+
+        let p_alloc = b_al.ed25519_scalar_multiplication(
+            &mut cs.namespace(|| "scalar multiplication"),
+            &scalar_vec,
+        );
+        assert!(p_alloc.is_ok());
+        let p_al = p_alloc.unwrap();
+
+        assert_eq!(p, p_al.value);
+
+        assert_eq!(cs.num_constraints(), 798_750);
+        assert_eq!(cs.num_inputs(), 1);
     }
 }

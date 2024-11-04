@@ -121,15 +121,19 @@ pub fn alloc_num_equals_constant<F: PrimeField, CS: ConstraintSystem<F>>(
 ) -> Result<AllocatedBit, SynthesisError> {
     // Allocate and constrain `r`: result boolean bit.
     // It equals `true` if `a` equals `b`, `false` otherwise
-    let a_value = a.get_value().ok_or(SynthesisError::AssignmentMissing)?;
-    let r = AllocatedBit::alloc(cs.namespace(|| "r"), Some(a_value == b))?;
-
     // Allocate t s.t. t=1 if a == b else 1/(a - b)
-    let t_value = if a_value == b {
-        F::ONE
+    let (r_value, t_value) = if let Some(a_value) = a.get_value() {
+        let t_value = if a_value == b {
+            F::ONE
+        } else {
+            (a_value - b).invert().unwrap()
+        };
+        (Some(a_value == b), t_value)
     } else {
-        (a_value - b).invert().unwrap()
+        (None, F::ONE)
     };
+
+    let r = AllocatedBit::alloc(cs.namespace(|| "r"), r_value)?;
     let t = AllocatedNum::alloc_infallible(cs.namespace(|| "t"), || t_value);
 
     cs.enforce(

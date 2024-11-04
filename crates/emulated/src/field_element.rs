@@ -627,29 +627,36 @@ where
         let res_overflow = a1.overflow.max(a0.overflow);
 
         let res_alloc_limbs = if let Some(cond) = condition.get_value() {
-            // If the condition has a value, then the limbs must also have a value, so we bubble
-            // the assignment missing error in this case
             let res_values = if cond {
                 match &a1.limbs {
                     EmulatedLimbs::Allocated(a1_var) => a1_var
                         .iter()
-                        .map(|v| v.get_value().ok_or(SynthesisError::AssignmentMissing))
-                        .collect::<Result<_, _>>()?,
-                    EmulatedLimbs::Constant(a1_const) => a1_const.clone(),
+                        .map(|v| v.get_value())
+                        .collect::<Option<Vec<_>>>(),
+                    EmulatedLimbs::Constant(a1_const) => Some(a1_const.clone()),
                 }
             } else {
                 match &a0.limbs {
                     EmulatedLimbs::Allocated(a0_var) => a0_var
                         .iter()
-                        .map(|v| v.get_value().ok_or(SynthesisError::AssignmentMissing))
-                        .collect::<Result<_, _>>()?,
-                    EmulatedLimbs::Constant(a0_const) => a0_const.clone(),
+                        .map(|v| v.get_value())
+                        .collect::<Option<Vec<_>>>(),
+                    EmulatedLimbs::Constant(a0_const) => Some(a0_const.clone()),
                 }
             };
-            EmulatedLimbs::allocate_limbs(
-                &mut cs.namespace(|| "allocate result limbs"),
-                &res_values,
-            )
+
+            if let Some(res_values) = res_values {
+                EmulatedLimbs::allocate_limbs(
+                    &mut cs.namespace(|| "allocate result limbs"),
+                    &res_values,
+                )
+            } else {
+                // Allocate "empty" limbs in case this is a MetricCS
+                EmulatedLimbs::allocate_empty_limbs(
+                    &mut cs.namespace(|| "allocate result limbs"),
+                    limb_count,
+                )?
+            }
         } else {
             // Otherwise, allocate "empty" limbs in case this is a MetricCS or TestCS
             EmulatedLimbs::allocate_empty_limbs(
