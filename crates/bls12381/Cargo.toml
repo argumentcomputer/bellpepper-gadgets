@@ -24,4 +24,4 @@ bls12_381 = { git = "https://github.com/argumentcomputer/bls12_381", features = 
 [dev-dependencies]
 bellpepper = { workspace = true }
 expect-test = "1.4.1"
-halo2curves = "0.6.1"
+halo2curves = "0.8.0"
